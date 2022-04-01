@@ -1,6 +1,6 @@
 --- # This is a comment and otherwise ignored.
 meta:
-  name         : pkg
+  name         : plantdis
   title        : A one line summary description of the MLHub package.
   keywords     : r, python, prediction, speech, visualisation, deep learning
   version      : 0.0.1
@@ -15,7 +15,7 @@ dependencies:
   python3:
     - opencv
   pip3:
-    - numpy==1.19.1
+    - tensorflow-cpu>=2.8.0
   cran:
     - rpart
     - randomForest
