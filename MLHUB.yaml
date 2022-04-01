@@ -1,0 +1,37 @@
+--- # This is a comment and otherwise ignored.
+meta:
+  name         : pkg
+  title        : A one line summary description of the MLHub package.
+  keywords     : r, python, prediction, speech, visualisation, deep learning
+  version      : 0.0.1
+  languages    : py, R
+  display      : gui
+  license      : gpl3
+  private      : 
+    Azure Speech: key*, location
+  author       : Graham.Williams@togaware.com
+  url          : https://github.com/gjwgit/pkg
+dependencies:
+  python3:
+    - opencv
+  pip3:
+    - numpy==1.19.1
+  cran:
+    - rpart
+    - randomForest
+    - magrittr
+    - rattle=5.2.0
+    - tibble
+  files:
+    - docs/README.md
+    - mlhub/simple.py: demo.py
+    - mlhub/graphical: gui.py
+    - mlhub/utils.py
+    - mlhub/configure.sh
+    - https://example.com/freds/files/pic.png: fred.png
+    - https://nextcloud.example.com/s/Xf27qo9zDyaBDGk/download: models/best.bin
+commands:
+  demo : Demonstrate the model capabilities in one easy session.
+  gui  : A simple graphical user interface to utilise the commands.
+
+  
