@@ -43,6 +43,7 @@ diseases=['Apple___Apple_scab','Apple___Black_rot','Apple___Cedar_apple_rust','A
 # print(len(diseases))
 
 # Read Images
+print("Example of a path:-   test/CornCommonRust1.JPG")
 user_input = input("Enter the path of your file: ")
 assert os.path.exists(user_input), "The file could not be found, "+str(user_input)
 img = mpimg.imread(str(user_input))
