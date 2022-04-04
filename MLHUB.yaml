@@ -11,7 +11,7 @@ meta:
   url          : https://github.com/spsaswat/plantdis
 dependencies:
   pip3:
-    - tensorflow==2.8.0
+    - tensorflow>=2.8.0
     - opencv-python
     - numpy
     - requests
