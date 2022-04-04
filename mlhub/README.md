@@ -1,4 +1,3 @@
-# Plant_Disease_Detector
-The objective of the project is to identify plant disease by using image of a plant leaf using deep learning model.
+# PlantDis - A Plant Disease Detector
+This ML-HUB package detects the disease of the plant by examining a leaf. If image of a leaf is provided then this package will identify what disease it has, if any.
 
-Dataset Source - https://github.com/spMohanty/PlantVillage-Dataset
