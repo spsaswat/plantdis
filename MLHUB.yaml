@@ -24,8 +24,8 @@ dependencies:
     - mlhub/detdis.py
     - test/
 commands:
-  demo : take a default image(Corn - Common Rust) and predicts the disease
-  detdis : take path input of image file and predicts the disease
+  demo : take a default image(Corn - Common Rust), and predict the disease
+  detdis : take path input of image file, and predicts the disease
 
 
   
