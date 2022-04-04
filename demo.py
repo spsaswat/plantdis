@@ -1,13 +1,16 @@
 import tensorflow as tf
 
 print(tf. __version__)
-import gdown
+
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-# from google.colab.patches import cv2_imshow
 
+import requests
+import gdown
+
+import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+
 from tensorflow import keras
 
 
@@ -37,5 +40,6 @@ img3 = cv2.resize(img,(256,256))
 img4 = np.reshape(img3,[1,256,256,3])
 img4 = img4/255
 plt.imshow(img3)
+model = keras.models.load_model('pd_densenet201_6.h5')
 disease = np.argmax(model.predict(img4),axis=1)
-print(diseases[disease[0]])
+print("The predicted plant and disease are ",diseases[disease[0]])
