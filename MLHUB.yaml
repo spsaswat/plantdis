@@ -21,11 +21,11 @@ dependencies:
   files:
     - mlhub/README.md
     - mlhub/demo.py
-    - mlhub/detdis.py
+    - mlhub/diagnose.py
     - test/
 commands:
   demo : take a default image(Corn - Common Rust), and predict the disease
-  detdis : take path input of image file, and predicts the disease
+  diagnose : take path input of image file, and predicts the disease
 
 
   
