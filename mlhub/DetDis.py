@@ -1,4 +1,7 @@
-# Demo file
+# DetDis file
+import sys
+import os
+
 import tensorflow as tf
 
 print('the tensorflow version is', tf. __version__)
@@ -40,13 +43,14 @@ diseases=['Apple___Apple_scab','Apple___Black_rot','Apple___Cedar_apple_rust','A
 # print(len(diseases))
 
 # Read Images
-img = mpimg.imread('test/CornCommonRust1.JPG')
+user_input = input("Enter the path of your file: ")
+assert os.path.exists(user_input), "The file could not be found, "+str(user_input)
+img = mpimg.imread(str(user_input))
 img3 = cv2.resize(img,(256,256))
 img4 = np.reshape(img3,[1,256,256,3])
 img4 = img4/255
 plt.imshow(img3)
 model = keras.models.load_model('pd_densenet201_6.h5')
 disease = np.argmax(model.predict(img4),axis=1)
-print('The file path is:- test/CornCommonRust1.JPG')
 print('')
 print("The predicted plant and disease are ",diseases[disease[0]])
