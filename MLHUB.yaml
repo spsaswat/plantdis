@@ -12,7 +12,7 @@ meta:
 dependencies:
   pip3:
     - tensorflow-cpu
-    - cv2
+    - opencv-python
     - numpy
     - requests
     - gdown
