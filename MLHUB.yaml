@@ -1,37 +1,28 @@
 --- # This is a comment and otherwise ignored.
 meta:
   name         : plantdis
-  title        : A one line summary description of the MLHub package.
-  keywords     : r, python, prediction, speech, visualisation, deep learning
+  title        : Provided image of a leaf, it detects if there is any disease.
+  keywords     : transfer learning, tensorflow, deep learning, plant disease, python
   version      : 0.0.1
-  languages    : py, R
+  languages    : py
   display      : gui
   license      : gpl3
-  private      : 
-    Azure Speech: key*, location
-  author       : Graham.Williams@togaware.com
-  url          : https://github.com/gjwgit/pkg
+  author       : u7156387@anu.edu.au
+  url          : https://github.com/spsaswat/plantdis
 dependencies:
-  python3:
-    - opencv
   pip3:
-    - tensorflow-cpu>=2.8.0
-  cran:
-    - rpart
-    - randomForest
-    - magrittr
-    - rattle=5.2.0
-    - tibble
+    - tensorflow-cpu
+    - cv2
+    - numpy
+    - requests
+    - gdown
+    - matplotlib
   files:
-    - docs/README.md
-    - mlhub/simple.py: demo.py
-    - mlhub/graphical: gui.py
-    - mlhub/utils.py
-    - mlhub/configure.sh
-    - https://example.com/freds/files/pic.png: fred.png
-    - https://nextcloud.example.com/s/Xf27qo9zDyaBDGk/download: models/best.bin
+    - demo.py
+    - about.py
+    - test/
 commands:
   demo : Demonstrate the model capabilities in one easy session.
-  gui  : A simple graphical user interface to utilise the commands.
+  about  : Give detailed information about the package.
 
   
