@@ -20,7 +20,6 @@ dependencies:
   files:
     - demo.py
     - about.py
-    - test/
 commands:
   demo : Demonstrate the model capabilities in one easy session.
   about  : Give detailed information about the package.
