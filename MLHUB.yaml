@@ -17,6 +17,7 @@ dependencies:
     - requests
     - gdown
     - matplotlib
+    - pathlib
   files:
     - demo.py
     - about.py
