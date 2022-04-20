@@ -4,3 +4,5 @@ The objective of the project is to identify plant disease by using image of a pl
 The Whole project has three components:- Deep Learning(Tensorflow), Command Line Interaction(ML-HUB), App Dev(Flutter)
 
 Dataset Source - https://github.com/spMohanty/PlantVillage-Dataset
+
+This project is being done as a requirement of the course COM4560(ANU), under the supervision of Prof. Graham Williams.
