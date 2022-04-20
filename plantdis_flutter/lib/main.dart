@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 void main() {
   runApp(
@@ -8,18 +11,91 @@ void main() {
           title: const Text('PlantDis'),
           backgroundColor: Colors.green[600],
         ),
-        body: Center(child: MyImagePicker()),
+        body: const Center(child: MyImagePicker()),
       ),
+      builder: EasyLoading.init(),
     ),
   );
 }
 
 class MyImagePicker extends StatefulWidget {
+  const MyImagePicker({Key? key}) : super(key: key);
+
   @override
   MyImagePickerState createState() => MyImagePickerState();
 }
 
 class MyImagePickerState extends State {
+  late PlatformFile fileUri;
+  String? path;
+  String fName = "";
+  int fSize = 0;
+
+  imageFromCamera() async {
+    EasyLoading.instance
+      ..displayDuration = const Duration(milliseconds: 2000)
+      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
+      ..userInteractions = false
+      ..dismissOnTap = true;
+    EasyLoading.showToast('Camera Not yet set');
+  }
+
+  imageFromGallery() async {
+    EasyLoading.instance
+      ..indicatorType = EasyLoadingIndicatorType.fadingCube
+      ..indicatorSize = 50.0
+      ..radius = 13.0
+      ..userInteractions = false
+      ..dismissOnTap = false;
+
+    EasyLoading.show(status: 'loading...');
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['jpg', 'png', 'jpeg']);
+
+    EasyLoading.dismiss();
+    if (result != null) {
+      fileUri = result.files.first;
+      // ignore: avoid_print
+      print(fileUri.path);
+
+      setState(() {
+        fName = fileUri.name;
+        fSize = fileUri.size;
+
+        // path = file.path;
+      });
+    } else {
+      // User canceled the picker
+    }
+  }
+
+  demoLeaf() async {
+    EasyLoading.instance
+      ..indicatorType = EasyLoadingIndicatorType.fadingGrid
+      ..indicatorSize = 50.0
+      ..radius = 13.0
+      ..userInteractions = false
+      ..dismissOnTap = false;
+
+    EasyLoading.show(status: 'loading... \n may take 4 mins');
+
+    // var result = await Process.run('ml', ['demo', 'plantdis']);
+
+    await Process.run('ml', ['demo', 'plantdis']);
+    // ignore: avoid_print
+    // print(result);
+    EasyLoading.dismiss();
+  }
+
+  diagnoseLeaf() async {
+    EasyLoading.instance
+      ..displayDuration = const Duration(milliseconds: 2000)
+      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
+      ..userInteractions = false
+      ..dismissOnTap = true;
+    EasyLoading.showToast('Diagnose Not yet set');
+  }
+
   @override
   Widget build(BuildContext context) {
     final ButtonStyle style = ElevatedButton.styleFrom(
@@ -34,7 +110,10 @@ class MyImagePickerState extends State {
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                const Text('No image has been selected.'),
+                if (fSize == 0)
+                  const Text('No image selected.')
+                else
+                  Text('Image is selected is ' + fName),
                 Container(
                     margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
                     child: Column(
@@ -56,20 +135,18 @@ class MyImagePickerState extends State {
                 Container(
                     margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
                     child: ElevatedButton(
+                      onPressed: () => demoLeaf(),
+                      child: const Text('Demo'),
+                      style: style,
+                    )),
+                Container(
+                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                    child: ElevatedButton(
                       onPressed: () => diagnoseLeaf(),
                       child: const Text('Diagnose'),
                       style: style,
-                      // textColor: const Color(0xff000000),
-                      // color: const Color(0xffF8DC27),
-                      // padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     )),
               ])),
         ));
   }
-
-  diagnoseLeaf() {}
-
-  imageFromCamera() {}
-
-  imageFromGallery() {}
 }

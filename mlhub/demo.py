@@ -73,9 +73,11 @@ print('')
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
-print("The predicted plant is",plant,"and disease is",dis)
+finalMsg = "Predicted plant is "+plant+" & disease is "+dis
+print(finalMsg)
 
 # Setting up plt and showing the image used for prediction
-plt.title("Predicted:- "+ diseases[disease[0]])
+fig = plt.figure("Disease Detection Demo")
+plt.title(finalMsg)
 plt.imshow(img3)
 plt.show()
