@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 void main() {
   runApp(
@@ -11,6 +13,7 @@ void main() {
         ),
         body: const Center(child: MyImagePicker()),
       ),
+      builder: EasyLoading.init(),
     ),
   );
 }
@@ -28,22 +31,30 @@ class MyImagePickerState extends State {
   String fName = "";
   int fSize = 0;
 
-  imageFromCamera() {}
+  imageFromCamera() async {
+    EasyLoading.instance
+      ..displayDuration = const Duration(milliseconds: 2000)
+      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
+      ..userInteractions = false
+      ..dismissOnTap = true;
+    EasyLoading.showToast('Camera Not yet set');
+  }
 
   imageFromGallery() async {
+    EasyLoading.instance
+      ..indicatorType = EasyLoadingIndicatorType.fadingCube
+      ..indicatorSize = 50.0
+      ..radius = 13.0
+      ..userInteractions = false
+      ..dismissOnTap = false;
+
+    EasyLoading.show(status: 'loading...');
     FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom, allowedExtensions: ['jpg', 'png', 'jpeg']);
 
+    EasyLoading.dismiss();
     if (result != null) {
       fileUri = result.files.first;
-      // // ignore: avoid_print
-      // print(file.name);
-      // // ignore: avoid_print
-      // print(file.bytes);
-      // // ignore: avoid_print
-      // print(file.size);
-      // // ignore: avoid_print
-      // print(file.extension);
       // ignore: avoid_print
       print(fileUri.path);
 
@@ -58,7 +69,32 @@ class MyImagePickerState extends State {
     }
   }
 
-  diagnoseLeaf() async {}
+  demoLeaf() async {
+    EasyLoading.instance
+      ..indicatorType = EasyLoadingIndicatorType.fadingGrid
+      ..indicatorSize = 50.0
+      ..radius = 13.0
+      ..userInteractions = false
+      ..dismissOnTap = false;
+
+    EasyLoading.show(status: 'loading... \n may take 4 mins');
+
+    // var result = await Process.run('ml', ['demo', 'plantdis']);
+
+    await Process.run('ml', ['demo', 'plantdis']);
+    // ignore: avoid_print
+    // print(result);
+    EasyLoading.dismiss();
+  }
+
+  diagnoseLeaf() async {
+    EasyLoading.instance
+      ..displayDuration = const Duration(milliseconds: 2000)
+      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
+      ..userInteractions = false
+      ..dismissOnTap = true;
+    EasyLoading.showToast('Diagnose Not yet set');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,12 +135,16 @@ class MyImagePickerState extends State {
                 Container(
                     margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
                     child: ElevatedButton(
+                      onPressed: () => demoLeaf(),
+                      child: const Text('Demo'),
+                      style: style,
+                    )),
+                Container(
+                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                    child: ElevatedButton(
                       onPressed: () => diagnoseLeaf(),
                       child: const Text('Diagnose'),
                       style: style,
-                      // textColor: const Color(0xff000000),
-                      // color: const Color(0xffF8DC27),
-                      // padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     )),
               ])),
         ));
