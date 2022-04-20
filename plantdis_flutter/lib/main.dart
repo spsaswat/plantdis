@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(
@@ -8,18 +9,57 @@ void main() {
           title: const Text('PlantDis'),
           backgroundColor: Colors.green[600],
         ),
-        body: Center(child: MyImagePicker()),
+        body: const Center(child: MyImagePicker()),
       ),
     ),
   );
 }
 
 class MyImagePicker extends StatefulWidget {
+  const MyImagePicker({Key? key}) : super(key: key);
+
   @override
   MyImagePickerState createState() => MyImagePickerState();
 }
 
 class MyImagePickerState extends State {
+  late PlatformFile fileUri;
+  String? path;
+  String fName = "";
+  int fSize = 0;
+
+  imageFromCamera() {}
+
+  imageFromGallery() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['jpg', 'png', 'jpeg']);
+
+    if (result != null) {
+      fileUri = result.files.first;
+      // // ignore: avoid_print
+      // print(file.name);
+      // // ignore: avoid_print
+      // print(file.bytes);
+      // // ignore: avoid_print
+      // print(file.size);
+      // // ignore: avoid_print
+      // print(file.extension);
+      // ignore: avoid_print
+      print(fileUri.path);
+
+      setState(() {
+        fName = fileUri.name;
+        fSize = fileUri.size;
+
+        // path = file.path;
+      });
+    } else {
+      // User canceled the picker
+    }
+  }
+
+  diagnoseLeaf() async {}
+
   @override
   Widget build(BuildContext context) {
     final ButtonStyle style = ElevatedButton.styleFrom(
@@ -34,7 +74,10 @@ class MyImagePickerState extends State {
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                const Text('No image has been selected.'),
+                if (fSize == 0)
+                  const Text('No image selected.')
+                else
+                  Text('Image is selected is ' + fName),
                 Container(
                     margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
                     child: Column(
@@ -66,10 +109,4 @@ class MyImagePickerState extends State {
               ])),
         ));
   }
-
-  diagnoseLeaf() {}
-
-  imageFromCamera() {}
-
-  imageFromGallery() {}
 }
