@@ -5,4 +5,4 @@ The Whole project has three components:- Deep Learning(Tensorflow), Command Line
 
 Dataset Source - https://github.com/spMohanty/PlantVillage-Dataset
 
-This project is being done as a requirement of the course COM4560(ANU), under the supervision of Prof. Graham Williams.
+This project is being done as a requirement of the course COM4560(ANU), under the supervision of Prof. <a href = "https://cecs.anu.edu.au/people/graham-williams">Graham Williams</a>.

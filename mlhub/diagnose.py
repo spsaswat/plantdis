@@ -50,8 +50,21 @@ img = mpimg.imread(str(user_input))
 img3 = cv2.resize(img,(256,256))
 img4 = np.reshape(img3,[1,256,256,3])
 img4 = img4/255
-plt.imshow(img3)
+# plt.imshow(img3)
 model = keras.models.load_model('pd_densenet201_6.h5')
+
+# using the model to predict disease
 disease = np.argmax(model.predict(img4),axis=1)
+# disease is a list and at 0th index is the disease with highest probability 
 print('')
-print("The predicted plant and disease are ",diseases[disease[0]])
+
+# Splitting the predicted class to plant and disease name.
+plant, dis = diseases[disease[0]].split('___')
+finalMsg = "Predicted plant is "+plant+" & disease is "+dis
+print(finalMsg)
+
+# Setting up plt and showing the image used for prediction
+fig = plt.figure("Leaf Diagnosed")
+plt.title(finalMsg)
+plt.imshow(img3)
+plt.show()
