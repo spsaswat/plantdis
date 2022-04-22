@@ -1,16 +1,16 @@
 --- # This is a comment and otherwise ignored.
 meta:
   name         : plantdis
-  title        : Provided image of a leaf, it detects if there is any disease.
+  title        : Detect plant disease from an image of a leaf.
   keywords     : transfer learning, tensorflow, deep learning, plant disease, python
   version      : 0.0.2
   languages    : py
   license      : gpl3
   author       : u7156387@anu.edu.au
-  url          : https://github.com/gjwgit/plantdis
+  url          : https://github.com/spsaswat/plantdis
 dependencies:
   python3:
-    - opencv-python
+    - opencv
     - numpy
     - requests
     - matplotlib
@@ -26,8 +26,8 @@ dependencies:
     - test/
     - https://drive.google.com/uc?id=1m0bU-NCqzfjO37HFBEm4-2YmTQwQzil6: pd_densenet201_6.h5
 commands:
-  demo : take a default image(Corn - Common Rust), and predict the disease
-  diagnose : take path input of image file, and predicts the disease
+  demo : Demonstrate disease classification for a default image
+  diagnose : Predict disease for a supplied image of a diseased leaf
 
 
   
