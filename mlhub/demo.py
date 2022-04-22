@@ -25,15 +25,13 @@ warnings.filterwarnings("ignore")
 print('the tensorflow version is', tf. __version__)
 
 path = Path('pd_densenet201_6.h5')
-if path.is_file():
-    print('Model downloaded already')
-else:
-    mlcat("plantdis", """\
-    plantdis is a mlhub package for detecting plant disease from image of a leaf.\n
-    This library is based on pretrained-model which is based on DenseNet201.\n
+mlcat("PlantDis", """\
+    PlantDis is a mlhub package for detecting plant disease from image of a leaf.\n
+    This library is based on pretrained-model which itself is based on DenseNet201.\n
     For Details you can visit:-\n
     \nhttps://github.com/spsaswat/plantdis/blob/main/ipynb/\n
     """)
+if (not path.is_file()):
     mlask(end='\n',
       prompt="Press Enter to download the model(248MB)")
     url = 'https://drive.google.com/uc?id=1m0bU-NCqzfjO37HFBEm4-2YmTQwQzil6'
@@ -68,16 +66,16 @@ model = keras.models.load_model('pd_densenet201_6.h5')
 # using the model to predict disease
 disease = np.argmax(model.predict(img4),axis=1)
 # disease is a list and at 0th index is the disease with highest probability 
-print('The file path is:- test/CornCommonRust1.JPG')
+# print('The file path is:- test/CornCommonRust1.JPG')
 print('')
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
 finalMsg = "Predicted plant is "+plant+" & disease is "+dis
-print(finalMsg)
+print(plant+','+dis)
 
 # Setting up plt and showing the image used for prediction
-fig = plt.figure("Disease Detection Demo")
+fig = plt.figure("PlantDis Demo")
 plt.title(finalMsg)
 plt.imshow(img3)
 plt.show()
