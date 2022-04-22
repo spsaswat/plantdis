@@ -18,6 +18,7 @@ dependencies:
     - gdown
     - matplotlib
     - pathlib
+    - argparse
   files:
     - mlhub/README.md
     - mlhub/demo.py
