@@ -28,6 +28,3 @@ dependencies:
 commands:
   demo : Demonstrate disease classification for a default image
   diagnose : Predict disease for a supplied image of a diseased leaf
-
-
-  
