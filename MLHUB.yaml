@@ -9,14 +9,15 @@ meta:
   author       : u7156387@anu.edu.au
   url          : https://github.com/gjwgit/plantdis
 dependencies:
-  pip3:
-    - tensorflow>=2.8.0
+  python3:
     - opencv-python
     - numpy
     - requests
-    - gdown
     - matplotlib
-    - pathlib
+    - pypathlib
+  pip3:
+    - tensorflow>=2.8.0
+    - gdown
     - argparse
   files:
     - mlhub/README.md
