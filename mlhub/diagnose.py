@@ -1,10 +1,32 @@
 # DetDis file
-import sys
+
+#taking the file path from command line
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("file_path")
+args = parser.parse_args()
+# storing the file path in a variable
+f_path = args.file_path
+if('/' not in f_path):
+    if('.JPG' not in f_path):
+        f_path = f_path + '.JPG'
+    f_path = 'test/' + f_path
+
 import os
+
+# checking if the file exists
+assert os.path.exists(f_path), "The file could not be found, "+str(f_path)
+
+
+
+
+import sys
+
 
 import tensorflow as tf
 
-print('the tensorflow version is', tf. __version__)
+# print('the tensorflow version is', tf. __version__)
 
 import cv2
 import numpy as np
@@ -17,6 +39,8 @@ import matplotlib.image as mpimg
 
 from tensorflow import keras
 from pathlib import Path
+
+
 
 path = Path('pd_densenet201_6.h5')
 if path.is_file():
@@ -42,11 +66,9 @@ diseases=['Apple___Apple_scab','Apple___Black_rot','Apple___Cedar_apple_rust','A
  'Tomato___healthy']
 # print(len(diseases))
 
-# Read Images
-print("Example of a path:-   test/CornCommonRust1.JPG")
-user_input = input("Enter the path of your file: ")
-assert os.path.exists(user_input), "The file could not be found, "+str(user_input)
-img = mpimg.imread(str(user_input))
+
+
+img = mpimg.imread(str(f_path))
 img3 = cv2.resize(img,(256,256))
 img4 = np.reshape(img3,[1,256,256,3])
 img4 = img4/255
@@ -62,6 +84,8 @@ print('')
 plant, dis = diseases[disease[0]].split('___')
 finalMsg = "Predicted plant is "+plant+" & disease is "+dis
 print(finalMsg)
+
+
 
 # Setting up plt and showing the image used for prediction
 fig = plt.figure("Leaf Diagnosed")
