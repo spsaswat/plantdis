@@ -14,11 +14,11 @@ dependencies:
     - numpy
     - requests
     - matplotlib
-    - pypathlib
   pip3:
     - tensorflow>=2.8.0
     - gdown
     - argparse
+    - pathlib
   files:
     - mlhub/README.md
     - mlhub/demo.py
