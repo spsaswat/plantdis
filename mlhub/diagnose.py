@@ -4,6 +4,7 @@
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument("-v","--view",action="store_true")
 parser.add_argument("file_path")
 args = parser.parse_args()
 # storing the file path in a variable
@@ -80,13 +81,13 @@ print('')
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
-finalMsg = "Predicted plant is "+plant+" & disease is "+dis
 print(plant+','+dis)
 
 
-
-# Setting up plt and showing the image used for prediction
-fig = plt.figure("Leaf Diagnosed")
-plt.title(finalMsg)
-plt.imshow(img3)
-plt.show()
+if args.view:
+    # Setting up plt and showing the image used for prediction
+    fig = plt.figure("Leaf Diagnosed")
+    finalMsg = "Predicted plant is "+plant+" & disease is "+dis
+    plt.title(finalMsg)
+    plt.imshow(img3)
+    plt.show()
