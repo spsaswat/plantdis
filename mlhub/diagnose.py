@@ -43,9 +43,7 @@ from pathlib import Path
 
 
 path = Path('pd_densenet201_6.h5')
-if path.is_file():
-    print('Model downloaded already')
-else:
+if (not path.is_file()):
     url = 'https://drive.google.com/uc?id=1m0bU-NCqzfjO37HFBEm4-2YmTQwQzil6'
     r = requests.get(url, allow_redirects=True)
     output = 'pd_densenet201_6.h5'
@@ -83,7 +81,7 @@ print('')
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
 finalMsg = "Predicted plant is "+plant+" & disease is "+dis
-print(finalMsg)
+print(plant+','+dis)
 
 
 
