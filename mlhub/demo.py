@@ -74,7 +74,7 @@ model = keras.models.load_model('pd_densenet201_6.h5')
 disease = np.argmax(model.predict(img4),axis=1)
 # disease is a list and at 0th index is the disease with highest probability 
 # print('The file path is:- test/CornCommonRust1.JPG')
-print('')
+# print('')
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
