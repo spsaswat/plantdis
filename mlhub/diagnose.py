@@ -2,16 +2,18 @@
 
 #taking the file path from command line
 import argparse
+import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-v","--view",action="store_true")
 parser.add_argument("file_path")
 args = parser.parse_args()
 # storing the file path in a variable
+pattern = "[^\\s]+(.*?)\\.(jpg|jpeg|png|gif|JPG|JPEG|PNG|GIF)$"
 f_path = args.file_path
 if('/' not in f_path):
-    if('.JPG' not in f_path):
-        f_path = f_path + '.JPG'
+    if(not re.search(pattern,f_path)):
+        raise Exception("Please add proper image extension")
     f_path = 'test/' + f_path
 
 import os
