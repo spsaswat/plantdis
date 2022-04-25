@@ -81,7 +81,7 @@ print('')
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
-print(plant+','+dis)
+print((plant+','+dis).lower())
 
 
 if args.view:
