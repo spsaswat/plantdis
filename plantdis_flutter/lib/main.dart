@@ -27,14 +27,13 @@ class MyImagePicker extends StatefulWidget {
 
 class MyImagePickerState extends State {
   late PlatformFile fileUri;
-  String? path;
+  String path = '';
   String fName = "";
   int fSize = 0;
 
   imageFromCamera() async {
     EasyLoading.instance
       ..displayDuration = const Duration(milliseconds: 2000)
-      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
       ..userInteractions = false
       ..dismissOnTap = true;
     EasyLoading.showToast('Camera Not yet set');
@@ -50,7 +49,8 @@ class MyImagePickerState extends State {
 
     EasyLoading.show(status: 'loading...');
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom, allowedExtensions: ['jpg', 'png', 'jpeg']);
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'png', 'jpeg', 'JPG', 'PNG', 'JPEG']);
 
     EasyLoading.dismiss();
     if (result != null) {
@@ -62,7 +62,7 @@ class MyImagePickerState extends State {
         fName = fileUri.name;
         fSize = fileUri.size;
 
-        // path = file.path;
+        path = fileUri.path.toString();
       });
     } else {
       // User canceled the picker
@@ -89,11 +89,27 @@ class MyImagePickerState extends State {
 
   diagnoseLeaf() async {
     EasyLoading.instance
-      ..displayDuration = const Duration(milliseconds: 2000)
-      ..indicatorType = EasyLoadingIndicatorType.fadingCircle
+      ..indicatorType = EasyLoadingIndicatorType.fadingGrid
+      ..indicatorSize = 50.0
+      ..radius = 13.0
       ..userInteractions = false
-      ..dismissOnTap = true;
-    EasyLoading.showToast('Diagnose Not yet set');
+      ..dismissOnTap = false;
+
+    if (path == '') {
+      EasyLoading.instance
+        ..displayDuration = const Duration(milliseconds: 2000)
+        ..userInteractions = false
+        ..dismissOnTap = true;
+      EasyLoading.showToast('Please select or capture image');
+    }
+    EasyLoading.show(status: 'loading... \n may take 4 mins');
+
+    // var result = await Process.run('ml', ['demo', 'plantdis']);
+
+    await Process.run('ml', ['diagnose', 'plantdis', '-v', path]);
+    // ignore: avoid_print
+    // print(result);
+    EasyLoading.dismiss();
   }
 
   @override
