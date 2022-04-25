@@ -38,12 +38,14 @@ if (not path.is_file()):
     r = requests.get(url, allow_redirects=True)
     output = 'pd_densenet201_6.h5'
     gdown.download(url, output, quiet=False)
-# if file size is less than 5MB then it means
-# the file is corrupted, so dowload again
-# elif ((os.path. getsize(path))/1000<5000):
-#   print("")
-#   print("")
-#   print(os.path. getsize(path))
+# if file size is less than 10MB then it means
+# the file is corrupted, so download again
+elif ((os.path. getsize(path))/1000<10000):
+    prompt="Press Enter to download the model(248MB)")
+    url = 'https://drive.google.com/uc?id=1m0bU-NCqzfjO37HFBEm4-2YmTQwQzil6'
+    r = requests.get(url, allow_redirects=True)
+    output = 'pd_densenet201_6.h5'
+    gdown.download(url, output, quiet=False)
 
 
 diseases=['Apple___Apple_scab','Apple___Black_rot','Apple___Cedar_apple_rust','Apple___healthy','Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot','Corn_(maize)___Common_rust','Corn_(maize)___Northern_Leaf_Blight','Corn_(maize)___healthy','Potato___Early_blight',
