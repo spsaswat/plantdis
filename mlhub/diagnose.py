@@ -9,12 +9,12 @@ parser.add_argument("-v","--view",action="store_true")
 parser.add_argument("file_path")
 args = parser.parse_args()
 # storing the file path in a variable
-pattern = "[^\\s]+(.*?)\\.(jpg|jpeg|png|gif|JPG|JPEG|PNG|GIF)$"
+pattern = "[^\\s]+(.*?)\\.(jpg|jpeg|png|gif)$"
 f_path = args.file_path
-if('/' not in f_path):
-    if(not re.search(pattern,f_path)):
-        raise Exception("Please add proper image extension")
-    f_path = 'test/' + f_path
+# if('/' not in f_path):
+if(not re.search(pattern,f_path.lower())):
+    raise Exception("Please add proper image extension")
+    # f_path = 'test/' + f_path
 
 import os
 

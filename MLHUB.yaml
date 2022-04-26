@@ -3,7 +3,7 @@ meta:
   name         : plantdis
   title        : Detect plant disease from an image of a leaf.
   keywords     : transfer learning, tensorflow, deep learning, plant disease, python
-  version      : 0.0.4
+  version      : 0.0.5
   languages    : py
   license      : gpl3
   author       : u7156387@anu.edu.au
