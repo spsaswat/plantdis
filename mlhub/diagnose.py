@@ -6,6 +6,12 @@ import warnings
 import argparse
 import re
 
+# Ensure paths are relative to the user's cwd.
+
+from mlhub.pkg import get_cmd_cwd
+os.chdir(get_cmd_cwd())
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-v","--view",action="store_true")
 parser.add_argument("file_path")
