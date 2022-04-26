@@ -1,4 +1,4 @@
-# DetDis file
+# Diagnose file
 
 #taking the file path from command line
 import argparse
@@ -101,7 +101,11 @@ print((plant+','+dis).lower())
 if args.view:
     # Setting up plt and showing the image used for prediction
     fig = plt.figure("Leaf Diagnosed")
-    finalMsg = "Predicted plant is "+plant+" & disease is "+dis
-    plt.title(finalMsg)
+    if(dis.lower()=='healthy'):
+      finalAnnot = "Predicted plant is "+plant+" & it is "+dis
+    else:
+      finalAnnot = "Predicted plant is "+plant+" & disease is "+dis
+    print((plant+','+dis).lower())
+    plt.title(finalAnnot)
     plt.imshow(img3)
     plt.show()
