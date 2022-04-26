@@ -86,7 +86,7 @@ if(dis.lower()=='healthy'):
   finalAnnot = "Predicted plant is "+plant+" & it is "+dis
 else:
   finalAnnot = "Predicted plant is "+plant+" & disease is "+dis
-print((plant+','+dis).lower())
+print(finalAnnot)
 
 # Setting up plt and showing the image used for prediction
 fig = plt.figure("PlantDis Demo")
