@@ -76,10 +76,11 @@ onlyfiles = [f for f in listdir(t_path) if isfile(join(t_path, f))]
 from os import walk
 t_img_names = next(walk(t_path), (None, None, []))[2]
 
-# generating 3 unique random numbers
-r_n = random.sample(range(0, 32), 3)
-
 n=3
+
+# generating n unique random numbers
+r_n = random.sample(range(0, 32), n)
+
 for i in range(n):
   # Read Image
   img = mpimg.imread('test/'+t_img_names[r_n[i]])
