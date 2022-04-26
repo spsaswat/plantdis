@@ -1,5 +1,7 @@
 # Diagnose file
 
+import warnings
+
 #taking the file path from command line
 import argparse
 import re
@@ -22,8 +24,6 @@ import os
 assert os.path.exists(f_path), "The file could not be found, "+str(f_path)
 
 
-
-
 import sys
 
 
@@ -43,6 +43,10 @@ import matplotlib.image as mpimg
 from tensorflow import keras
 from pathlib import Path
 from mlhub.pkg import mlask
+
+# for ignoring the warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.filterwarnings("ignore")
 
 
 

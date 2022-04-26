@@ -18,11 +18,12 @@ from pathlib import Path
 from mlhub.pkg import mlask, mlcat
 
 # for ignoring the warnings
-tf.get_logger().setLevel('ERROR')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings("ignore")
 
-print('the tensorflow version is', tf. __version__)
+# print('the tensorflow version is', tf. __version__)
+
+
 
 path = Path('pd_densenet201_6.h5')
 mlcat("PlantDis", """\
