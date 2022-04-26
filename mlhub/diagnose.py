@@ -105,7 +105,6 @@ if args.view:
       finalAnnot = "Predicted plant is "+plant+" & it is "+dis
     else:
       finalAnnot = "Predicted plant is "+plant+" & disease is "+dis
-    print((plant+','+dis).lower())
     plt.title(finalAnnot)
     plt.imshow(img3)
     plt.show()
