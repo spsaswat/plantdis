@@ -5,6 +5,7 @@ import warnings
 #taking the file path from command line
 import argparse
 import re
+import os
 
 # Ensure paths are relative to the user's cwd.
 
@@ -23,8 +24,6 @@ f_path = args.file_path
 if(not re.search(pattern,f_path.lower())):
     raise Exception("Please add proper image extension")
     # f_path = 'test/' + f_path
-
-import os
 
 # checking if the file exists
 assert os.path.exists(f_path), "The file could not be found, "+str(f_path)
