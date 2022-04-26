@@ -81,7 +81,10 @@ disease = np.argmax(model.predict(img4),axis=1)
 
 # Splitting the predicted class to plant and disease name.
 plant, dis = diseases[disease[0]].split('___')
-finalAnnot = "Predicted plant is "+plant+" & disease is "+dis
+if(dis.lower()=='healthy'):
+  finalAnnot = "Predicted plant is "+plant+" & it is "+dis
+else:
+  finalAnnot = "Predicted plant is "+plant+" & disease is "+dis
 print((plant+','+dis).lower())
 
 # Setting up plt and showing the image used for prediction
