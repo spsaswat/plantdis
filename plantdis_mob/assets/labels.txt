@@ -7,13 +7,13 @@
 6 Corn_(maize)___Northern_Leaf_Blight
 7 Corn_(maize)___healthy 
 8 Potato___Early_blight
-9 Potato___Late_blight,
-10 Potato___healthy,
-11 Tomato___Bacterial_spot,
-12 Tomato___Early_blight,
-13 Tomato___Late_blight,
-14 Tomato___Leaf_Mold,
-15 Tomato___Septoria_leaf_spot,
+9 Potato___Late_blight
+10 Potato___healthy
+11 Tomato___Bacterial_spot
+12 Tomato___Early_blight
+13 Tomato___Late_blight
+14 Tomato___Leaf_Mold
+15 Tomato___Septoria_leaf_spot
 16 Tomato___Spider_mites Two-spotted_spider_mite
 17 Tomato___Target_Spot
 18 Tomato___Tomato_Yellow_Leaf_Curl_Virus

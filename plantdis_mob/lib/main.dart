@@ -58,13 +58,17 @@ class MyImagePickerState extends State {
   }
 
   Future diagnoseLeaf() async {
-    await Tflite.loadModel(
-        model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
-    var output = await Tflite.runModelOnImage(path: path_1);
+    if (path_1 != null) {
+      await Tflite.loadModel(
+          model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
+      var output = await Tflite.runModelOnImage(path: path_1);
 
-    setState(() {
-      result = output.toString();
-    });
+      setState(() {
+        if (output != null) {
+          result = output.toString();
+        }
+      });
+    }
   }
 
   @override
@@ -76,40 +80,42 @@ class MyImagePickerState extends State {
         primary: const Color(0xffF8DC27));
     return Scaffold(
         backgroundColor: Colors.lightGreenAccent,
-        body: Center(
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-              _image == null
-                  ? const Text('No image selected.')
-                  : Image.file(_image,
-                      width: 300, height: 200, fit: BoxFit.cover),
-              Container(
-                  margin: EdgeInsets.fromLTRB(0, 30, 0, 20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: <Widget>[
-                      IconButton(
-                        icon: const Icon(Icons.camera_alt),
-                        color: const Color(0xffF8DC27),
-                        onPressed: () => imageFromCamera(),
-                      ),
-                      const SizedBox(height: 20),
-                      IconButton(
-                        icon: const Icon(Icons.collections),
-                        color: const Color(0xffF8DC27),
-                        onPressed: () => imageFromGallery(),
-                      ),
-                    ],
-                  )),
-                  Container(
-                      margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
-                      child: ElevatedButton(
-                        onPressed: () => diagnoseLeaf(),
-                        child: const Text('Diagnose'),
-                        style: style,
-                      )),
-              result == null ? Text('Result') : Text(result)
-            ])));
+        body: SafeArea(
+          child: Center(
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                _image == null
+                    ? const Text('No image selected.')
+                    : Image.file(_image,
+                        width: 300, height: 200, fit: BoxFit.cover),
+                Container(
+                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: <Widget>[
+                        IconButton(
+                          icon: const Icon(Icons.camera_alt),
+                          color: const Color(0xffF8DC27),
+                          onPressed: () => imageFromCamera(),
+                        ),
+                        const SizedBox(height: 20),
+                        IconButton(
+                          icon: const Icon(Icons.collections),
+                          color: const Color(0xffF8DC27),
+                          onPressed: () => imageFromGallery(),
+                        ),
+                      ],
+                    )),
+                Container(
+                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                    child: ElevatedButton(
+                      onPressed: () => diagnoseLeaf(),
+                      child: const Text('Diagnose'),
+                      style: style,
+                    )),
+                result == null ? const Text('Result') : Text(result)
+              ])),
+        ));
   }
 }
