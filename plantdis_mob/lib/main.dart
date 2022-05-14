@@ -65,7 +65,9 @@ class MyImagePickerState extends State {
 
       setState(() {
         if (output != null) {
-          result = output.toString();
+          result = output[0]['label'].toString();
+        } else {
+          result = "Model did not work";
         }
       });
     }
