@@ -79,6 +79,21 @@ class MyImagePickerState extends State {
     return convertedBytes.buffer.asUint8List();
   }
 
+  // Uint8List imageToByteListUint8(img.Image image, int inputSize) {
+  //   var convertedBytes = Uint8List(1 * inputSize * inputSize * 3);
+  //   var buffer = Uint8List.view(convertedBytes.buffer);
+  //   int pixelIndex = 0;
+  //   for (var i = 0; i < inputSize; i++) {
+  //     for (var j = 0; j < inputSize; j++) {
+  //       var pixel = image.getPixel(j, i);
+  //       buffer[pixelIndex++] = img.getRed(pixel) ~/ 255;
+  //       buffer[pixelIndex++] = img.getGreen(pixel) ~/ 255;
+  //       buffer[pixelIndex++] = img.getBlue(pixel) ~/ 255;
+  //     }
+  //   }
+  //   return convertedBytes.buffer.asUint8List();
+  // }
+
   Future diagnoseLeaf() async {
     if (path_1 != null) {
       EasyLoading.instance
@@ -90,11 +105,10 @@ class MyImagePickerState extends State {
 
       EasyLoading.show(status: 'loading...');
 
-      img.Image? ori_image = img.decodeImage(_image.readAsBytesSync());
-      // Uint8List bytesImg = _image.readAsBytesSync();
-      // img.Image ori_image = _image.decodeImageJpg(bytesImg);
+      img.Image? oriImage = img.decodeImage(_image.readAsBytesSync());
+
       img.Image resizedImage =
-          img.copyResize(ori_image!, height: 256, width: 256);
+          img.copyResize(oriImage!, height: 256, width: 256);
 
       await Tflite.loadModel(
           model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
