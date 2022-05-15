@@ -106,7 +106,7 @@ class MyImagePickerState extends State {
       var output = await Tflite.runModelOnImage(
         path: path_1,
         numResults: 1,
-        threshold: 0.5,
+        threshold: 0.90,
         imageMean: 0,
         imageStd: 255,
       );
@@ -114,10 +114,12 @@ class MyImagePickerState extends State {
       EasyLoading.dismiss();
 
       setState(() {
-        if (output != null) {
+        if (output != null && output.isNotEmpty) {
           result = output[0]['label'].toString();
+        } else if (output != null && output.isEmpty) {
+          result = 'Sorry! I could not identify anything';
         } else {
-          result = "Model did not work";
+          result = "Sorry! My Model Failed";
         }
       });
     } else {
