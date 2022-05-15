@@ -62,33 +62,19 @@ class MyImagePickerState extends State {
     });
   }
 
-  Uint8List imageToByteListFloat32(img.Image image, int inputSize) {
-    var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
-    var buffer = Float32List.view(convertedBytes.buffer);
-    int pixelIndex = 0;
-    for (var i = 0; i < inputSize; i++) {
-      for (var j = 0; j < inputSize; j++) {
-        var pixel = image.getPixel(j, i);
-        if (pixelIndex < (inputSize * inputSize - 1)) {
-          buffer[pixelIndex++] = img.getRed(pixel) / 255.0;
-          buffer[pixelIndex++] = img.getGreen(pixel) / 255.0;
-          buffer[pixelIndex++] = img.getBlue(pixel) / 255.0;
-        }
-      }
-    }
-    return convertedBytes.buffer.asUint8List();
-  }
-
-  // Uint8List imageToByteListUint8(img.Image image, int inputSize) {
-  //   var convertedBytes = Uint8List(1 * inputSize * inputSize * 3);
-  //   var buffer = Uint8List.view(convertedBytes.buffer);
+  // Uint8List imageToByteListFloat32(img.Image image, int inputSize) {
+  //   var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
+  //   var buffer = Float32List.view(convertedBytes.buffer);
   //   int pixelIndex = 0;
   //   for (var i = 0; i < inputSize; i++) {
   //     for (var j = 0; j < inputSize; j++) {
   //       var pixel = image.getPixel(j, i);
-  //       buffer[pixelIndex++] = img.getRed(pixel) ~/ 255;
-  //       buffer[pixelIndex++] = img.getGreen(pixel) ~/ 255;
-  //       buffer[pixelIndex++] = img.getBlue(pixel) ~/ 255;
+  //       if (pixelIndex < (inputSize * inputSize - 1)) {
+  //         // rescaling the pixels to be in range 0 to 1
+  //         buffer[pixelIndex++] = img.getRed(pixel) / 255.0;
+  //         buffer[pixelIndex++] = img.getGreen(pixel) / 255.0;
+  //         buffer[pixelIndex++] = img.getBlue(pixel) / 255.0;
+  //       }
   //     }
   //   }
   //   return convertedBytes.buffer.asUint8List();
@@ -105,16 +91,25 @@ class MyImagePickerState extends State {
 
       EasyLoading.show(status: 'loading...');
 
-      img.Image? oriImage = img.decodeImage(_image.readAsBytesSync());
+      //converting the to Image format from the file format
+      // img.Image? oriImage = img.decodeImage(_image.readAsBytesSync());
 
-      img.Image resizedImage =
-          img.copyResize(oriImage!, height: 256, width: 256);
+      // img.Image resizedImage =
+      //     img.copyResize(oriImage!, height: 256, width: 256);
 
       await Tflite.loadModel(
           model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
 
-      var output = await Tflite.runModelOnBinary(
-          binary: imageToByteListFloat32(resizedImage, 256));
+      // var output = await Tflite.runModelOnBinary(
+      //     binary: imageToByteListFloat32(resizedImage, 256));
+
+      var output = await Tflite.runModelOnImage(
+        path: path_1,
+        numResults: 1,
+        threshold: 0.5,
+        imageMean: 0,
+        imageStd: 255,
+      );
 
       EasyLoading.dismiss();
 
