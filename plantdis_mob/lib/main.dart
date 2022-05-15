@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
+import 'package:flutter_native_image/flutter_native_image.dart';
 
 void main() {
   runApp(
@@ -29,9 +30,6 @@ class MyImagePicker extends StatefulWidget {
 }
 
 class MyImagePickerState extends State {
-  // File imageURI=File('src');
-  // String result='src';
-  // String path='src';
   var _image;
   var path_1;
   var result;
@@ -51,9 +49,7 @@ class MyImagePickerState extends State {
   Future imageFromGallery() async {
     final ImagePicker _picker = ImagePicker();
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    // if (image != null) {
-    //   imageBytes_ = (await rootBundle.load(image.path)).buffer;
-    // }
+
     setState(() {
       if (image != null) {
         _image = File(image.path);
@@ -62,23 +58,21 @@ class MyImagePickerState extends State {
     });
   }
 
-  // Uint8List imageToByteListFloat32(img.Image image, int inputSize) {
-  //   var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
-  //   var buffer = Float32List.view(convertedBytes.buffer);
-  //   int pixelIndex = 0;
-  //   for (var i = 0; i < inputSize; i++) {
-  //     for (var j = 0; j < inputSize; j++) {
-  //       var pixel = image.getPixel(j, i);
-  //       if (pixelIndex < (inputSize * inputSize - 1)) {
-  //         // rescaling the pixels to be in range 0 to 1
-  //         buffer[pixelIndex++] = img.getRed(pixel) / 255.0;
-  //         buffer[pixelIndex++] = img.getGreen(pixel) / 255.0;
-  //         buffer[pixelIndex++] = img.getBlue(pixel) / 255.0;
-  //       }
-  //     }
-  //   }
-  //   return convertedBytes.buffer.asUint8List();
-  // }
+  Uint8List imageToByteListFloat32(
+      img.Image image, int inputSize, double mean, double std) {
+    var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
+    var buffer = Float32List.view(convertedBytes.buffer);
+    int pixelIndex = 0;
+    for (var i = 0; i < inputSize; i++) {
+      for (var j = 0; j < inputSize; j++) {
+        var pixel = image.getPixel(j, i);
+        buffer[pixelIndex++] = (img.getRed(pixel) - mean) / std;
+        buffer[pixelIndex++] = (img.getGreen(pixel) - mean) / std;
+        buffer[pixelIndex++] = (img.getBlue(pixel) - mean) / std;
+      }
+    }
+    return convertedBytes.buffer.asUint8List();
+  }
 
   Future diagnoseLeaf() async {
     if (path_1 != null) {
@@ -91,22 +85,36 @@ class MyImagePickerState extends State {
 
       EasyLoading.show(status: 'loading...');
 
-      //converting the to Image format from the file format
+      // // converting the to Image format from the file format(for model on bin)
       // img.Image? oriImage = img.decodeImage(_image.readAsBytesSync());
-
       // img.Image resizedImage =
       //     img.copyResize(oriImage!, height: 256, width: 256);
+
+      // // if required try integrating cropping
+      // ImageProperties properties =
+      //     await FlutterNativeImage.getImageProperties(_image.path);
+      // File compressedFile;
+      // if (properties.height != 256 || properties.width != 256) {
+      //   compressedFile = await FlutterNativeImage.compressImage(
+      //       _image.path,
+      //       quality: 95,
+      //       targetWidth: 256,
+      //       targetHeight: 256);
+      // }
 
       await Tflite.loadModel(
           model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
 
+      // // good for using after proccessing the image but slows down if image is of high resolution
       // var output = await Tflite.runModelOnBinary(
-      //     binary: imageToByteListFloat32(resizedImage, 256));
+      //     binary: imageToByteListFloat32(resizedImage, 256, 0.0, 255.0),
+      //     numResults: 1,
+      //     threshold: 0.80);
 
       var output = await Tflite.runModelOnImage(
         path: path_1,
         numResults: 1,
-        threshold: 0.90,
+        threshold: 0.89,
         imageMean: 0,
         imageStd: 255,
       );
