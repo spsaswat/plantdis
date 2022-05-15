@@ -1,24 +1,26 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tflite/tflite.dart';
 import 'package:image_picker/image_picker.dart';
-
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:image/image.dart' as img;
 import 'dart:io';
 
-void main() => runApp(MyApp());
-
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-        home: Scaffold(
-            appBar: AppBar(
-              title: Text('PlantDis'),
-              backgroundColor: Colors.green[600],
-            ),
-            body: Center(child: MyImagePicker())));
-  }
+void main() {
+  runApp(
+    MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('PlantDis'),
+          backgroundColor: Colors.green[600],
+        ),
+        body: Center(child: MyImagePicker()),
+      ),
+      builder: EasyLoading.init(),
+    ),
+  );
 }
 
 class MyImagePicker extends StatefulWidget {
@@ -41,6 +43,7 @@ class MyImagePickerState extends State {
     setState(() {
       if (image != null) {
         _image = File(image.path);
+        path_1 = image.path;
       }
     });
   }
@@ -48,7 +51,9 @@ class MyImagePickerState extends State {
   Future imageFromGallery() async {
     final ImagePicker _picker = ImagePicker();
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-
+    // if (image != null) {
+    //   imageBytes_ = (await rootBundle.load(image.path)).buffer;
+    // }
     setState(() {
       if (image != null) {
         _image = File(image.path);
@@ -57,11 +62,47 @@ class MyImagePickerState extends State {
     });
   }
 
+  Uint8List imageToByteListFloat32(img.Image image, int inputSize) {
+    var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
+    var buffer = Float32List.view(convertedBytes.buffer);
+    int pixelIndex = 0;
+    for (var i = 0; i < inputSize; i++) {
+      for (var j = 0; j < inputSize; j++) {
+        var pixel = image.getPixel(j, i);
+        if (pixelIndex < (inputSize * inputSize - 1)) {
+          buffer[pixelIndex++] = img.getRed(pixel) / 255.0;
+          buffer[pixelIndex++] = img.getGreen(pixel) / 255.0;
+          buffer[pixelIndex++] = img.getBlue(pixel) / 255.0;
+        }
+      }
+    }
+    return convertedBytes.buffer.asUint8List();
+  }
+
   Future diagnoseLeaf() async {
     if (path_1 != null) {
+      EasyLoading.instance
+        ..indicatorType = EasyLoadingIndicatorType.fadingGrid
+        ..indicatorSize = 35.0
+        ..radius = 6.0
+        ..userInteractions = false
+        ..dismissOnTap = false;
+
+      EasyLoading.show(status: 'loading...');
+
+      img.Image? ori_image = img.decodeImage(_image.readAsBytesSync());
+      // Uint8List bytesImg = _image.readAsBytesSync();
+      // img.Image ori_image = _image.decodeImageJpg(bytesImg);
+      img.Image resizedImage =
+          img.copyResize(ori_image!, height: 256, width: 256);
+
       await Tflite.loadModel(
           model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
-      var output = await Tflite.runModelOnImage(path: path_1);
+
+      var output = await Tflite.runModelOnBinary(
+          binary: imageToByteListFloat32(resizedImage, 256));
+
+      EasyLoading.dismiss();
 
       setState(() {
         if (output != null) {
@@ -70,6 +111,12 @@ class MyImagePickerState extends State {
           result = "Model did not work";
         }
       });
+    } else {
+      EasyLoading.instance
+        ..displayDuration = const Duration(milliseconds: 2000)
+        ..userInteractions = false
+        ..dismissOnTap = true;
+      EasyLoading.showToast('Please select or capture image');
     }
   }
 
