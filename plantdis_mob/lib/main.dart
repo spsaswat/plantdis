@@ -7,11 +7,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
-import 'package:flutter_native_image/flutter_native_image.dart';
+// import 'package:flutter_native_image/flutter_native_image.dart';
 
 void main() {
   runApp(
     MaterialApp(
+      debugShowCheckedModeBanner: false,
       home: Scaffold(
         appBar: AppBar(
           title: const Text('PlantDis'),
