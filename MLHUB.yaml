@@ -24,7 +24,10 @@ dependencies:
     - mlhub/demo.py
     - mlhub/diagnose.py
     - test/
-    - https://drive.google.com/uc?id=1m0bU-NCqzfjO37HFBEm4-2YmTQwQzil6: pd_densenet201_6.h5
+    # right click on drive file to getlink(view only)
+    # on that link there will be a id that needs to be 
+    # replaced instead of below id
+    - https://drive.google.com/uc?id=1mAxgMNJZ2c_5c16YdAaQWZ5H06BuBAF9: pdorft_efficientnetb2_3.h5
 commands:
   demo : Demonstrate disease classification for a default image
   diagnose : Predict disease for a supplied image of a diseased leaf
