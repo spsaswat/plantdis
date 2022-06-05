@@ -15,3 +15,7 @@ This project is being done as a requirement of the course COM4560(ANU), under th
 ## Desktop App Demo
 <br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/DestopApp_connector.jpg" alt="Desktop App Demo">
 
+## Results on test images
+
+<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/test_img_22_eff_or.jpg" alt="Desktop App Demo">
+
