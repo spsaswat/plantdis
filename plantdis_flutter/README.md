@@ -10,7 +10,7 @@ ii) Install the plantdis package.
 ```
 ml install spsaswat/plantdis
 ```
-iii) configure plantdis, i.e, install all required packages in plantdis.
+iii) Configure plantdis, i.e, install all required packages in plantdis.
 ```
 ml configure plantdis
 ```
@@ -19,15 +19,15 @@ i) Clone the repository.
 ```
 git clone https://github.com/spsaswat/plantdis.git
 ```
-ii)go to the folder location
+ii) Go to the folder location
 ```
 pushd [folder location]/plantdis
 ```
-iii)navigate to plantdis_flutter foler
+iii) Navigate to plantdis_flutter foler
 ```
 cd plantdis_flutter
 ```
-iv) run the app.
+iv) Run the app.
 ```
 flutter run -d linux
 ```
