@@ -1,7 +1,7 @@
 # A Plant Disease Detector App based on Nested Transfer Learning
 The objective of the project is to identify plant disease by using image of a plant leaf using deep learning model.
 
-The Whole project has four components:- Deep Learning(Using Tensorflow), Command Line Interaction(Using ML-HUB), Linux Desktop App(MLHUB backend), Android App(Tflite backend).
+The Whole project has four components:- <a href = "https://github.com/spsaswat/plantdis/tree/main/ipynb">Deep Learning</a>(MLHUB backend)(Using Tensorflow), <a href = "https://github.com/spsaswat/plantdis/tree/main/mlhub">Command Line Interaction</a>(Using ML-HUB), <a href = "https://github.com/spsaswat/plantdis/tree/main/plantdis_flutter">Linux Desktop App</a>(MLHUB backend), and <a href = "https://github.com/spsaswat/plantdis/tree/main/plantdis_mob">Android App</a>(Tflite backend).
 
 ## Datastet Sources
 Dataset Source - https://data.mendeley.com/datasets/tywbtsjrjv/1
