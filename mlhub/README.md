@@ -1,5 +1,5 @@
 # PlantDis Mlhub package
-This ML-HUB package detects the disease of the plant by examining a leaf. If image of a leaf is provided then this package will identify what disease it has, if any.
+This ML-HUB package detects the disease of the plant by examining a leaf. If image of a leaf is provided then this package will identify what disease it has, if any. MlHub <a href="https://github.com/spsaswat/plantdis/blob/main/MLHUB.yaml">YAML</a> file contains details about the packages and files used.
 
 ## i) Install mlhub.
 ```
