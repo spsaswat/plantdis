@@ -2,6 +2,9 @@
 
 Mobile Support for Plantdis.
 
-1) Before trying to run the app please download <a href="https://drive.google.com/file/d/1zVVmBqXAZqW4pURX2pOU23mThogVBxIM/view?usp=sharing">tflite</a> and place in the <a href="https://github.com/spsaswat/plantdis/tree/main/plantdis_mob/assets">assets</a> folder. 
+## 1) Before trying to run the app please download <a href="https://drive.google.com/file/d/1zVVmBqXAZqW4pURX2pOU23mThogVBxIM/view?usp=sharing">tflite</a> and place in the <a href="https://github.com/spsaswat/plantdis/tree/main/plantdis_mob/assets">assets</a> folder. 
+## 2) <a href="https://github.com/spsaswat/plantdis/blob/main/plantdis_mob/lib/main.dart">This</a> file contains code for functionality of the app. 
+## 3) How to use the app?
+### Using Image from Camera
+<img src="https://github.com/spsaswat/plantdis/blob/main/plantdis_mob/op_mobile/MobileApp_connector.jpg" alt="Image from camera">
 
-2) How to use the app?
