@@ -1,4 +1,4 @@
-# A Plant Disease Detector App based on Nested Transfer Learning.
+# A Plant Disease Detector App based on Nested Transfer Learning
 The objective of the project is to identify plant disease by using image of a plant leaf using deep learning model.
 
 The Whole project has four components:- Deep Learning(Using Tensorflow), Command Line Interaction(Using ML-HUB), Linux Desktop App(MLHUB backend), Android App(Tflite backend).
