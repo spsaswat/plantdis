@@ -1,7 +1,7 @@
 # plantdis_flutter
 
-1) This folder contains all the files for the <b>Linux Desktop App</b> (Using Flutter) of plant disease detector.
-2) Before runing the app. Please run the commands below.
+This folder contains all the files for the <b>Linux Desktop App</b> (Using Flutter) of plant disease detector.
+## 1) Before runing the app. Please run the commands below.
 i) Install mlhub.
 ```
 pip install mlhub
@@ -14,7 +14,7 @@ iii) Configure plantdis, i.e, install all required packages in plantdis.
 ```
 ml configure plantdis
 ```
-3) How to run the app?
+## 2) How to run the app?
 i) Clone the repository.
 ```
 git clone https://github.com/spsaswat/plantdis.git
@@ -31,4 +31,4 @@ iv) Run the app.
 ```
 flutter run -d linux
 ```
-4) How to use the app?
+## 3) How to use the app?
