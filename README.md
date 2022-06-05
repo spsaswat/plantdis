@@ -3,6 +3,7 @@ The objective of the project is to identify plant disease by using image of a pl
 
 The Whole project has four components:- Deep Learning(Using Tensorflow), Command Line Interaction(Using ML-HUB), Linux Desktop App(MLHUB backend), Android App(Tflite backend).
 
+## Datastet Sources
 Dataset Source - https://data.mendeley.com/datasets/tywbtsjrjv/1
 <br>Banana Leaf images - https://github.com/godliver/source-code-BBW-BBS/
 
