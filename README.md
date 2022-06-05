@@ -8,3 +8,10 @@ Dataset Source - https://data.mendeley.com/datasets/tywbtsjrjv/1
 <br>Banana Leaf images - https://github.com/godliver/source-code-BBW-BBS/
 
 This project is being done as a requirement of the course COM4560(ANU), under the supervision of Prof. <a href = "https://cecs.anu.edu.au/people/graham-williams">Graham Williams</a>.
+
+## Mobile App Demo
+<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/tomato_lb_fin.gif" alt="Mob App Demo">
+
+## Desktop App Demo
+<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/DestopApp_connector.jpg" alt="Desktop App Demo">
+
