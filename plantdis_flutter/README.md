@@ -33,7 +33,7 @@ flutter run -d linux
 ```
 ## 3) How to use the app?
 ### Using Demo
-after clicking diagnose you need to press x on the first image to move on to the next image.
+after clicking demo you need to press <b>x</b> on the first image to move on to the next image.
 <img src="https://github.com/spsaswat/plantdis/blob/main/plantdis_flutter/op_desk/demo_desktop_fin.png" alt="using demo">
 ### Using Diagnose
 <img src="https://github.com/spsaswat/plantdis/blob/main/plantdis_flutter/op_desk/DestopApp_connector.jpg" alt="using diagnose">
