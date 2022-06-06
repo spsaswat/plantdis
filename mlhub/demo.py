@@ -149,7 +149,7 @@ for i in range(n):
             + ' & disease is ' + dis
     print(finalAnnot)
     if i != n - 1:
-        print ''
+        print('')
 
   # Setting up plt and showing the image used for prediction
 
