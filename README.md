@@ -10,7 +10,7 @@ The objective of the project is to identify plant disease by using image of a pl
 </p>
   
 <h2 align="center"> Desktop App Demo </h2>
-<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/DestopApp_connector.jpg" alt="Desktop App Demo">
+<br><p align="center"> <img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/desk_demo.gif" alt="Desktop App Demo"> </p>
 
 <h2 align="center"> Results on test images </h2>
 <br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/test_img_22_eff_or.jpg" alt="Desktop App Demo">
