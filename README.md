@@ -19,6 +19,6 @@ This project is being done as a requirement of the course COM4560(ANU), under th
 1) <a href = "https://drive.google.com/file/d/11nEATbNc65LhLRJx1TvST9V9dh_ZG59j/view?usp=sharing">Tansfer Learning Based EfficientB2 - 21 Classes</a>
 2) <a href = "https://drive.google.com/file/d/1mAxgMNJZ2c_5c16YdAaQWZ5H06BuBAF9/view?usp=sharing">Nested Tansfer Learning Based EfficientB2 - 22 Classes</a>
 
-## Datastet Sources
+## Dataset Sources
 Dataset Source - https://data.mendeley.com/datasets/tywbtsjrjv/1
 <br>Banana Leaf images - https://github.com/godliver/source-code-BBW-BBS/
