@@ -28,7 +28,7 @@ ml demo plantdis
 
 ## iv) Run the diagnose command
 ```
-ml ml diagnose plantdis leaf.png -v
+ml diagnose plantdis leaf.png -v
 ```
 ### output
 <img src="https://github.com/spsaswat/plantdis/blob/main/mlhub/op_mlhub/mldiag_op1.jpg" alt="diag ouput">
