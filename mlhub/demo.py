@@ -147,7 +147,7 @@ for i in range(n):
     else:
         finalAnnot = actual + '\n' + 'Predicted plant is ' + plant \
             + ' & disease is ' + dis
-    print finalAnnot
+    print(finalAnnot)
     if i != n - 1:
         print ''
 
