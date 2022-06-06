@@ -16,8 +16,8 @@ The objective of the project is to identify plant disease by using image of a pl
 <br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/test_img_22_eff_or.jpg" alt="Desktop App Demo">
 
 <h2 align="center"> Nested Transfer Learning Concept Map </h2>
-The weights in model layers will be nested.
-<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/test_img_22_eff_or.jpg" alt="Nested Transfer Learning Concept Map">
+<br><img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/nested%20transfer%20learning_f_github.png" alt="Nested Transfer Learning Concept Map">
+The knowledge in the diagram refers to weights. The weights in model layers will be nested.
 
 <h2 align="center"> Trained Models with weights(h5) </h2>
 <p align="center">
