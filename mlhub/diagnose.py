@@ -78,13 +78,13 @@ elif os.path.getsize(path) / 1000 < 10000:
 # if file size is less than 10MB then it means
 # the file is corrupted, so download again
 
-    print 'Model file corrupted, Downloading again..'
+    print ('Model file corrupted, Downloading again..')
     url = \
         'https://drive.google.com/uc?id=1mAxgMNJZ2c_5c16YdAaQWZ5H06BuBAF9'
     r = requests.get(url, allow_redirects=True)
     output = model_name
     gdown.download(url, output, quiet=False)
-    print ''
+    print ('')
 
 # all the disease classes
 
