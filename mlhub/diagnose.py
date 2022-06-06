@@ -134,7 +134,7 @@ disease = np.argmax(model.predict(img4), axis=1)
 # Splitting the predicted class to plant and disease name.
 
 (plant, dis) = diseases[disease[0]].split('___')
-print (plant + ',' + dis).lower()
+print ((plant + ',' + dis).lower())
 
 if args.view:
 
