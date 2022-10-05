@@ -32,3 +32,14 @@ Plant Village Dataset - https://data.mendeley.com/datasets/tywbtsjrjv/1
 <br>Banana Leaf images - https://github.com/godliver/source-code-BBW-BBS/
 </p>
 
+## Citation
+If this repository is useful for your research, please cite as below:
+```
+@article{panda2022PlantDis,
+  title={PlantDis: A Plant Disease Detector App 
+  based on Nested Transfer Learning},
+  author={Panda, Saswat and Williams, Graham},
+  year={2022},
+  repository-link="https://github.com/spsaswat/plantdis"
+}
+```
