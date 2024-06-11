@@ -144,9 +144,7 @@ class MyImagePickerState extends State {
   Widget build(BuildContext context) {
     final ButtonStyle style = ElevatedButton.styleFrom(
         // textStyle: const TextStyle(color: Color(0xff000000)),
-        shadowColor: const Color(0xffF8DC27).withOpacity(0.4),
-        onPrimary: const Color(0xff000000),
-        primary: const Color(0xffF8DC27));
+        foregroundColor: const Color(0xff000000), backgroundColor: const Color(0xffF8DC27), shadowColor: const Color(0xffF8DC27).withOpacity(0.4));
     return Scaffold(
         backgroundColor: Colors.lightGreenAccent,
         body: SafeArea(
