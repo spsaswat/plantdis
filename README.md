@@ -43,3 +43,9 @@ If this repository is useful for your research, please cite as below:
   repository-link="https://github.com/spsaswat/plantdis"
 }
 ```
+
+<h3 align="center"> Funding </h3>
+Starting from 11/06/2024, the project is supported by APPN (https://www.plantphenomics.org.au/).
+
+
+
