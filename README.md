@@ -43,3 +43,10 @@ If this repository is useful for your research, please cite as below:
   repository-link="https://github.com/spsaswat/plantdis"
 }
 ```
+
+<h3 align="center"> Funding </h3>
+Starting from 11/06/2024, the project is supported by APPN.
+![image](https://github.com/spsaswat/plantdis/assets/45821961/9b36396f-09ff-497e-b675-f7e61db9a87d)
+
+
+
