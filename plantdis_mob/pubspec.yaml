@@ -48,6 +48,7 @@ dependencies:
   image: ^3.0.1
   fluttertoast: ^8.2.6
   flutter_tts: ^4.0.2
+  palette_generator: ^0.3.0
 
 
 

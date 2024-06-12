@@ -1,5 +1,7 @@
+// import 'dart:js';
 import 'dart:typed_data';
 
+import 'package:PlantDis/setting_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite/tflite.dart';
@@ -8,6 +10,8 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
 // import 'package:flutter_native_image/flutter_native_image.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'setting_page.dart';
 
 void main() {
   runApp(
@@ -17,6 +21,26 @@ void main() {
         appBar: AppBar(
           title: const Text('PlantDis'),
           backgroundColor: Colors.green[600],
+          actions: [
+            Builder(
+              builder: (context) => IconButton(
+                icon: Icon(Icons.settings),
+                onPressed: () async {
+                  final newIsTtsOn = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      // navigate to the setting page to set the tts mode
+                      builder: (context) => SettingsPage(isTtsOn: _MyImagePickerState.isTtsOn, result: '',),
+                    ),
+                  );
+                  if (newIsTtsOn != null) {
+                    //check the boolean func
+                    _MyImagePickerState.isTtsOn = newIsTtsOn;
+                  }
+                },
+              ),
+            ),
+          ],
         ),
         body: Center(child: MyImagePicker()),
       ),
@@ -30,7 +54,7 @@ class MyImagePicker extends StatefulWidget {
   MyImagePickerState createState() => MyImagePickerState();
 }
 
-class MyImagePickerState extends State {
+class MyImagePickerState extends State<MyImagePicker> {
   var _image;
   var path_1;
   var result;
@@ -130,6 +154,7 @@ class MyImagePickerState extends State {
         } else {
           result = "Sorry! My Model Failed";
         }
+        _MyImagePickerState.updateResult(result); // upgrade the result that let tts works
       });
     } else {
       EasyLoading.instance
@@ -143,46 +168,64 @@ class MyImagePickerState extends State {
   @override
   Widget build(BuildContext context) {
     final ButtonStyle style = ElevatedButton.styleFrom(
-        // textStyle: const TextStyle(color: Color(0xff000000)),
-        foregroundColor: const Color(0xff000000), backgroundColor: const Color(0xffF8DC27), shadowColor: const Color(0xffF8DC27).withOpacity(0.4));
+      foregroundColor: const Color(0xff000000),
+      backgroundColor: const Color(0xffF8DC27),
+      shadowColor: const Color(0xffF8DC27).withOpacity(0.4),
+    );
     return Scaffold(
-        backgroundColor: Colors.lightGreenAccent,
-        body: SafeArea(
-          child: Center(
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: Colors.lightGreenAccent,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              _image == null
+                  ? const Text('No image selected.')
+                  : Image.file(_image,
+                  width: 300, height: 200, fit: BoxFit.cover),
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: <Widget>[
-                _image == null
-                    ? const Text('No image selected.')
-                    : Image.file(_image,
-                        width: 300, height: 200, fit: BoxFit.cover),
-                Container(
-                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: <Widget>[
-                        IconButton(
-                          icon: const Icon(Icons.camera_alt),
-                          color: const Color(0xffF8DC27),
-                          onPressed: () => imageFromCamera(),
-                        ),
-                        const SizedBox(height: 20),
-                        IconButton(
-                          icon: const Icon(Icons.collections),
-                          color: const Color(0xffF8DC27),
-                          onPressed: () => imageFromGallery(),
-                        ),
-                      ],
-                    )),
-                Container(
-                    margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
-                    child: ElevatedButton(
-                      onPressed: () => diagnoseLeaf(),
-                      child: const Text('Diagnose'),
-                      style: style,
-                    )),
-                result == null ? const Text('Result') : Text(result)
-              ])),
-        ));
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt),
+                      color: const Color(0xffF8DC27),
+                      onPressed: () => imageFromCamera(),
+                    ),
+                    const SizedBox(height: 20),
+                    IconButton(
+                      icon: const Icon(Icons.collections),
+                      color: const Color(0xffF8DC27),
+                      onPressed: () => imageFromGallery(),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                child: ElevatedButton(
+                  onPressed: () => diagnoseLeaf(),
+                  child: const Text('Diagnose'),
+                  style: style,
+                ),
+              ),
+              result == null ? const Text('Result') : Text(result),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MyImagePickerState {
+  static bool isTtsOn = false;
+  static final FlutterTts flutterTts = FlutterTts();
+
+  static void updateResult(String result) {
+    if (isTtsOn) {
+      flutterTts.speak(result);
+    }
   }
 }
