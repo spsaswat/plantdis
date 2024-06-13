@@ -1,6 +1,5 @@
 // import 'dart:js';
 import 'dart:typed_data';
-
 import 'package:PlantDis/setting_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,12 +10,39 @@ import 'package:image/image.dart' as img;
 import 'dart:io';
 // import 'package:flutter_native_image/flutter_native_image.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'setting_page.dart';
+
 
 void main() {
-  runApp(
-    MaterialApp(
+  runApp(MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool isDarkMode = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.light,
+        primaryColor: Colors.green[600],
+        scaffoldBackgroundColor: Colors.lightGreenAccent,
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: Colors.green[600],
+        scaffoldBackgroundColor: Colors.black,
+        textTheme: TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
+        ),
+      ),
+      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: Scaffold(
         appBar: AppBar(
           title: const Text('PlantDis'),
@@ -26,16 +52,20 @@ void main() {
               builder: (context) => IconButton(
                 icon: Icon(Icons.settings),
                 onPressed: () async {
-                  final newIsTtsOn = await Navigator.push(
+                  final settings = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      // navigate to the setting page to set the tts mode
-                      builder: (context) => SettingsPage(isTtsOn: _MyImagePickerState.isTtsOn, result: '',),
+                      builder: (context) => SettingsPage(
+                        isTtsOn: _MyImagePickerState.isTtsOn,
+                        isDarkMode: isDarkMode,
+                      ),
                     ),
                   );
-                  if (newIsTtsOn != null) {
-                    //check the boolean func
-                    _MyImagePickerState.isTtsOn = newIsTtsOn;
+                  if (settings != null) {
+                    setState(() {
+                      _MyImagePickerState.isTtsOn = settings['isTtsOn'];
+                      isDarkMode = settings['isDarkMode'];
+                    });
                   }
                 },
               ),
@@ -45,9 +75,10 @@ void main() {
         body: Center(child: MyImagePicker()),
       ),
       builder: EasyLoading.init(),
-    ),
-  );
+    );
+  }
 }
+
 
 class MyImagePicker extends StatefulWidget {
   @override
@@ -173,7 +204,7 @@ class MyImagePickerState extends State<MyImagePicker> {
       shadowColor: const Color(0xffF8DC27).withOpacity(0.4),
     );
     return Scaffold(
-      backgroundColor: Colors.lightGreenAccent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: Column(
