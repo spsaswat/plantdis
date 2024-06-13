@@ -179,13 +179,17 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       setState(() {
         if (output != null && output.isNotEmpty) {
-          result = output[0]['label'].toString();
+          // replace the 'label' text to reformat result description
+          String rawResult = output[0]['label'].toString();
+          result = _reformatResult(rawResult);
+          //result = output[0]['label'].toString();
         } else if (output != null && output.isEmpty) {
           result = 'Sorry! I could not identify anything';
         } else {
           result = "Sorry! My Model Failed";
         }
         _MyImagePickerState.updateResult(result); // upgrade the result that let tts works
+        _showResultDialog(result); // upgrade the description of dialog
       });
     } else {
       EasyLoading.instance
@@ -194,6 +198,43 @@ class MyImagePickerState extends State<MyImagePicker> {
         ..dismissOnTap = true;
       EasyLoading.showToast('Please select or capture image');
     }
+  }
+  /// String function reformat the result from the label,
+  String _reformatResult(String rawResult) {
+    List<String> parts = rawResult.split('___');
+    if (parts.length == 2) {
+      String plant = parts[0];
+      String disease = parts[1].replaceAll('_', ' ');
+      if (disease == 'healthy'){
+        return 'The plant is $plant, and it is healthy.';
+      }else{
+      return 'The plant is $plant, and the disease is $disease.';
+    }}
+      else {
+      return rawResult; // return raw result if format is unexpected
+    }
+  }
+
+/// the void func control the dialog of the result
+  void _showResultDialog(String result) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Result', style: TextStyle(color: Colors.black)),
+          content: Text(result, style: TextStyle(color: Colors.black)),
+          backgroundColor: const Color(0xffF8DC27),
+          actions: [
+            TextButton(
+              child: Text('OK', style: TextStyle(color: Colors.black)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -241,7 +282,15 @@ class MyImagePickerState extends State<MyImagePicker> {
                   style: style,
                 ),
               ),
-              result == null ? const Text('Result') : Text(result),
+              /// replace the 'result' text to the alert dialog
+              // result == null ?
+              //     Container()
+              //     : Container(
+              //   color: Theme.of(context).scaffoldBackgroundColor,
+              //   child: Text(result, style: TextStyle(color: Theme.of(context).scaffoldBackgroundColor)),
+              // )
+              // const Text('Result') : Text(result)
+
             ],
           ),
         ),
@@ -260,3 +309,5 @@ class _MyImagePickerState {
     }
   }
 }
+
+
