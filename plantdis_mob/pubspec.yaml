@@ -49,6 +49,9 @@ dependencies:
   fluttertoast: ^8.2.6
   flutter_tts: ^4.0.2
   palette_generator: ^0.3.0
+  segment_anything: ^1.0.0+1
+  tflite_flutter_helper: ^0.2.0
+  path_provider: ^2.0.7
 
 
 
@@ -89,6 +92,7 @@ flutter:
     - assets/images/icon2.png
     - assets/images/icon5.png
     - assets/images/icon10241.png
+    - assets/sam_model.tflite
 
 
   # An image asset can refer to one or more resolution-specific "variants", see
