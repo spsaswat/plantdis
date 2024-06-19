@@ -1,4 +1,5 @@
 // import 'dart:js';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:PlantDis/setting_page.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,11 @@ import 'package:image/image.dart' as img;
 import 'dart:io';
 // import 'package:flutter_native_image/flutter_native_image.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:segment_anything/segment_anything.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
+import 'package:path_provider/path_provider.dart';
+
 
 
 void main() {
@@ -23,6 +29,15 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   bool isDarkMode = false;
+
+
+
+  /// integrate the sam model into flutter
+  ///
+
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +104,25 @@ class MyImagePickerState extends State<MyImagePicker> {
   var _image;
   var path_1;
   var result;
+  var segmentedResult;
+  var segmentedMask;
+  List<List<double>> inputPoints = [];
+  Interpreter? interpreter;
+
+  @override
+  void initState(){
+    super.initState();
+    loadModel();
+  }
+
+  Future<void> loadModel() async{
+    try {
+      interpreter = await Interpreter.fromAsset('assets/sam_model.tflite');
+      print('SAM Model loaded successfully');
+    } catch (e) {
+      print('Error loading SAM model: $e');
+    }
+  }
 
   Future imageFromCamera() async {
     final ImagePicker _picker = ImagePicker();
@@ -113,6 +147,42 @@ class MyImagePickerState extends State<MyImagePicker> {
       }
     });
   }
+
+
+  void showImageDialog(File image) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Segment Image', style: TextStyle(color: Colors.black)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.file(image, width: 300, height: 200, fit: BoxFit.cover),
+              ElevatedButton(
+                onPressed: () async {
+
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Segment'),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xffF8DC27),
+          actions: [
+            TextButton(
+              child: Text('Close', style: TextStyle(color: Colors.black)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
 
   Uint8List imageToByteListFloat32(
       img.Image image, int inputSize, double mean, double std) {
@@ -215,6 +285,74 @@ class MyImagePickerState extends State<MyImagePicker> {
     }
   }
 
+// call the sam model to segment img
+  Future<void> segmentImage() async {
+    if (_image == null) {
+      EasyLoading.showToast('Please select or capture image');
+      return;
+    }
+
+
+    var imageEmbedding = await Tflite.runModelOnImage(
+      path: path_1,
+      numResults: 1,
+      threshold: 0.89,
+      imageMean: 0,
+      imageStd: 255,
+    );
+
+    // set the input point
+    List<double> inputLabels = List.filled(inputPoints.length, 1.0);
+
+    // add input points
+    inputPoints.add([0.0, 0.0]);
+    inputLabels.add(-1.0);
+
+    // prepare the input infos
+    var inputs = {
+      "image_embeddings": imageEmbedding,
+      "point_coords": [inputPoints],
+      "point_labels": [inputLabels],
+      "mask_input": List.filled(256 * 256, 0.0),
+      "has_mask_input": [1.0],
+      "orig_im_size": [256.0, 256.0]
+    };
+
+    // run the model
+    List<double> outputMasks = List.filled(256 * 256, 0.0);
+    interpreter!.run(inputs, outputMasks);
+
+    // output mask
+    var maskImage = await maskToImage(outputMasks);
+
+    // save the img
+    final directory = await getApplicationDocumentsDirectory();
+    final imagePath = '${directory.path}/segmented_image.png';
+    File(imagePath).writeAsBytesSync(maskImage);
+    setState(() {
+      path_1 = imagePath;
+    });
+    EasyLoading.showToast('Image segmented successfully');
+  }
+
+
+  Future<Uint8List> maskToImage(List<double> mask) async {
+   // set the init UI
+    final int width = 256;
+    final int height = 256;
+    final img.Image image = img.Image(width, height);
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        final int index = y * width + x;
+        final int color = mask[index] > 0.5 ? 0xFFFFFFFF : 0xFF000000;
+        image.setPixel(x, y, color);
+      }
+    }
+
+    return Uint8List.fromList(img.encodePng(image));
+  }
+
 /// the void func control the dialog of the result
   void _showResultDialog(String result) {
     showDialog(
@@ -236,6 +374,8 @@ class MyImagePickerState extends State<MyImagePicker> {
       },
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +422,17 @@ class MyImagePickerState extends State<MyImagePicker> {
                   style: style,
                 ),
               ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                child: ElevatedButton(
+                  onPressed: () => segmentImage(),
+                  child: const Text('Segment Image'),
+                  style: style,
+                ),
+              ),
+
+
+
               /// replace the 'result' text to the alert dialog
               // result == null ?
               //     Container()
