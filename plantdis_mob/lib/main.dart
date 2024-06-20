@@ -2,6 +2,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:PlantDis/setting_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite/tflite.dart';
@@ -13,29 +15,87 @@ import 'dart:io';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:segment_anything/segment_anything.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
+
 import 'package:path_provider/path_provider.dart';
+import 'firebase_options.dart';
+import 'login_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(MyApp());
 }
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: AuthWrapper(),  // use authwrapper to check the email
 
-class MyApp extends StatefulWidget {
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator();
+        } else if (snapshot.hasData) {
+          return MyAppHome();
+        } else {
+          return LoginPage();
+        }
+      },
+    );
+  }
+}
+class MyAppHome extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyAppHome> {
   bool isDarkMode = false;
 
 
 
-  /// integrate the sam model into flutter
+  /// function with checking email code
   ///
+@override
+void initState(){
+  super.initState();
+  _checkEmailLink();
+}
+Future<void> _checkEmailLink() async{
+  final _auth = FirebaseAuth.instance;
+  final Uri uri = Uri.base;
 
+  if ( _auth.isSignInWithEmailLink(uri.toString())){
+    final email = await _getEmailFromStorage();
+    if(email != null){
+      try{
+        await _auth.signInWithEmailLink(email: email, emailLink: uri.toString());
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
+      }catch (e){
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+      }
+    }
+  }
+}
+Future<String?> _getEmailFromStorage() async{
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getString('email');
 
+}
 
 
 
