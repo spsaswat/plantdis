@@ -50,8 +50,17 @@ dependencies:
   flutter_tts: ^4.0.2
   palette_generator: ^0.3.0
   segment_anything: ^1.0.0+1
-  tflite_flutter_helper: ^0.2.0
+
   path_provider: ^2.0.7
+  firebase_auth: ^4.9.0
+  firebase_core: ^2.9.0
+  provider: ^6.1.2
+  email_validator: ^2.0.1
+  cloud_firestore: 4.5.1
+  shared_preferences: ^2.0.8
+  firebase_core_platform_interface: 4.8.0
+  google_api_availability: ^3.0.0
+
 
 
 
