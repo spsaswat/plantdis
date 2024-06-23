@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,47 @@ class _LoginPageState extends State<LoginPage> {
   final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkDynamicLinks();
+  }
+
+  void _checkDynamicLinks() async {
+    final PendingDynamicLinkData? data = await FirebaseDynamicLinks.instance.getInitialLink();
+    _handleDynamicLink(data);
+
+    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData dynamicLinkData) {
+      _handleDynamicLink(dynamicLinkData);
+    }).onError((error) {
+      print('onLink error');
+      print(error.message);
+    });
+  }
+
+  void _handleDynamicLink(PendingDynamicLinkData? data) async {
+    final Uri? deepLink = data?.link;
+
+    if (deepLink != null) {
+      if (_auth.isSignInWithEmailLink(deepLink.toString())) {
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        final String? email = prefs.getString('email');
+        if (email != null) {
+          try {
+            UserCredential userCredential = await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in!')));
+            print('Successfully signed in with email link!');
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+            print('Error signing in with email link: $e');
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No email found for sign in')));
+        }
+      }
+    }
+  }
+
   void _sendVerificationCode() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -21,19 +63,20 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       try {
+        print('Attempting to send email to: ${_emailController.text}');
         await _auth.sendSignInLinkToEmail(
           email: _emailController.text,
           actionCodeSettings: ActionCodeSettings(
-            url: 'https://yourapp.page.link/verify',
+            url: 'https://plantdis.page.link/mVFa', // use dynamic id
             handleCodeInApp: true,
             iOSBundleId: 'com.example.ios',
-            androidPackageName: 'com.example.android',
+            androidPackageName: 'com.spsaswat.plantdis.plantdis_mob',
             androidInstallApp: true,
             androidMinimumVersion: '12',
           ),
         );
 
-        // 保存电子邮件地址
+        //save the email add
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('email', _emailController.text);
 
@@ -42,12 +85,14 @@ class _LoginPageState extends State<LoginPage> {
             content: Text('Verification email has been sent!'),
           ),
         );
+        print('Email sent successfully.');
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send verification email: $e'),
           ),
         );
+        print('Failed to send email: $e');
       }
 
       setState(() {

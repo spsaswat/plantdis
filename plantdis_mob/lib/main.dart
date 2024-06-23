@@ -15,11 +15,11 @@ import 'dart:io';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:segment_anything/segment_anything.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-
 import 'package:path_provider/path_provider.dart';
 import 'firebase_options.dart';
 import 'login_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 
 
 
@@ -70,32 +70,59 @@ class _MyAppState extends State<MyAppHome> {
 
   /// function with checking email code
   ///
-@override
-void initState(){
-  super.initState();
-  _checkEmailLink();
-}
-Future<void> _checkEmailLink() async{
-  final _auth = FirebaseAuth.instance;
-  final Uri uri = Uri.base;
+  @override
+  void initState() {
+    super.initState();
+    _checkEmailLink();
+  }
 
-  if ( _auth.isSignInWithEmailLink(uri.toString())){
-    final email = await _getEmailFromStorage();
-    if(email != null){
-      try{
-        await _auth.signInWithEmailLink(email: email, emailLink: uri.toString());
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
-      }catch (e){
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+  Future<void> _checkEmailLink() async {
+    final _auth = FirebaseAuth.instance;
+
+    // get the dynamic link state
+    final PendingDynamicLinkData? data = await FirebaseDynamicLinks.instance.getInitialLink();
+    final Uri? deepLink = data?.link;
+
+    if (deepLink != null && _auth.isSignInWithEmailLink(deepLink.toString())) {
+      final email = await _getEmailFromStorage();
+      if (email != null) {
+        try {
+          await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
+          // navigate to the homepage after verify the email link
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+        }
       }
     }
-  }
-}
-Future<String?> _getEmailFromStorage() async{
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  return prefs.getString('email');
 
-}
+    // listen the dynamic link
+    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData? dynamicLinkData) async {
+      final Uri? deepLink = dynamicLinkData?.link;
+      if (deepLink != null && _auth.isSignInWithEmailLink(deepLink.toString())) {
+        final email = await _getEmailFromStorage();
+        if (email != null) {
+          try {
+            await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+          }
+        }
+      }
+    }, onError: (Exception e) async {
+      print('onLinkError: ${e.toString()}');
+    });
+  }
+
+  Future<String?> _getEmailFromStorage() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('email');
+  }
+
+
 
 
 
@@ -153,6 +180,8 @@ Future<String?> _getEmailFromStorage() async{
     );
   }
 }
+
+
 
 
 class MyImagePicker extends StatefulWidget {
