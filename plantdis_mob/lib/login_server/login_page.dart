@@ -3,6 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get/get.dart';
+
+import '../main.dart';
+import '../register_page.dart';
+import 'auth_service.dart';
+
 
 class LoginPage extends StatefulWidget {
   @override
@@ -12,7 +18,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _auth = FirebaseAuth.instance;
+  final _auth = AuthService();
   bool _isLoading = false;
 
   @override
@@ -22,38 +28,13 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _checkDynamicLinks() async {
-    final PendingDynamicLinkData? data = await FirebaseDynamicLinks.instance.getInitialLink();
-    _handleDynamicLink(data);
-
-    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData dynamicLinkData) {
-      _handleDynamicLink(dynamicLinkData);
+    await _auth.retrieveDynamicLinkAndSignIn(fromColdState: true);
+    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData? dynamicLinkData) {
+      _auth.retrieveDynamicLinkAndSignIn(fromColdState: false);
     }).onError((error) {
       print('onLink error');
       print(error.message);
     });
-  }
-
-  void _handleDynamicLink(PendingDynamicLinkData? data) async {
-    final Uri? deepLink = data?.link;
-
-    if (deepLink != null) {
-      if (_auth.isSignInWithEmailLink(deepLink.toString())) {
-        final SharedPreferences prefs = await SharedPreferences.getInstance();
-        final String? email = prefs.getString('email');
-        if (email != null) {
-          try {
-            UserCredential userCredential = await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in!')));
-            print('Successfully signed in with email link!');
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
-            print('Error signing in with email link: $e');
-          }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No email found for sign in')));
-        }
-      }
-    }
   }
 
   void _sendVerificationCode() async {
@@ -63,42 +44,57 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       try {
-        print('Attempting to send email to: ${_emailController.text}');
-        await _auth.sendSignInLinkToEmail(
-          email: _emailController.text,
-          actionCodeSettings: ActionCodeSettings(
-            url: 'https://plantdis.page.link/mVFa', // use dynamic id
-            handleCodeInApp: true,
-            iOSBundleId: 'com.example.ios',
-            androidPackageName: 'com.spsaswat.plantdis.plantdis_mob',
-            androidInstallApp: true,
-            androidMinimumVersion: '12',
-          ),
-        );
-
-        //save the email add
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('email', _emailController.text);
-
+        await _auth.sendEmailLink(email: _emailController.text);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Verification email has been sent!'),
           ),
         );
-        print('Email sent successfully.');
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send verification email: $e'),
           ),
         );
-        print('Failed to send email: $e');
       }
 
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  void _login() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = await FirebaseAuth.instance.fetchSignInMethodsForEmail(_emailController.text);
+      if (user.isNotEmpty) {
+        // User exists, navigate to main page
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
+      } else {
+        // New user, send verification email
+        _sendVerificationCode();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+        ),
+      );
+    }
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void _signInAsGuest() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => RegisterPage()),
+    );
   }
 
   @override
@@ -132,8 +128,15 @@ class _LoginPageState extends State<LoginPage> {
                   ? CircularProgressIndicator()
                   : ElevatedButton(
                 onPressed: _sendVerificationCode,
-                child: Text('Send Verification Code'),
+                child: Text('Send verify link'),
               ),
+              SizedBox(height: 20,),
+              ElevatedButton(
+                onPressed: _signInAsGuest,
+                child: Text('Sign in as Guest'),
+              ),
+              SizedBox(height: 20,),
+              ElevatedButton(onPressed: _login, child: Text('login'))
             ],
           ),
         ),

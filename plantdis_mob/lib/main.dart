@@ -1,47 +1,49 @@
-// import 'dart:js';
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:PlantDis/register_page.dart';
 import 'package:PlantDis/setting_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'package:tflite/tflite.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
-// import 'package:flutter_native_image/flutter_native_image.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:segment_anything/segment_anything.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:path_provider/path_provider.dart';
-import 'firebase_options.dart';
-import 'login_page.dart';
+import 'login_server/Auth_service.dart';
+import 'login_server/firebase_options.dart';
+import 'login_server/login_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
-
+import 'package:firebase_storage/firebase_storage.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp();
+
+  await Get.put(AuthService());
   runApp(MyApp());
 }
+
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: AuthWrapper(),  // use authwrapper to check the email
-
+      home: LoginPage(),  // use authwrapper to check the email
     );
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -57,7 +59,8 @@ class AuthWrapper extends StatelessWidget {
       },
     );
   }
-}
+
+
 class MyAppHome extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
@@ -66,63 +69,67 @@ class MyAppHome extends StatefulWidget {
 class _MyAppState extends State<MyAppHome> {
   bool isDarkMode = false;
 
+  Future<void> _saveResultToFirestore(File imageFile, String result) async {
+    final user = FirebaseAuth.instance.currentUser;
+    String userId = user?.uid ?? "guest_user";
+    try {
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('images/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final uploadTask = storageRef.putFile(imageFile);
 
-
-  /// function with checking email code
-  ///
-  @override
-  void initState() {
-    super.initState();
-    _checkEmailLink();
-  }
-
-  Future<void> _checkEmailLink() async {
-    final _auth = FirebaseAuth.instance;
-
-    // get the dynamic link state
-    final PendingDynamicLinkData? data = await FirebaseDynamicLinks.instance.getInitialLink();
-    final Uri? deepLink = data?.link;
-
-    if (deepLink != null && _auth.isSignInWithEmailLink(deepLink.toString())) {
-      final email = await _getEmailFromStorage();
-      if (email != null) {
-        try {
-          await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
-          // navigate to the homepage after verify the email link
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
+      // Observe the state
+      uploadTask.snapshotEvents.listen((TaskSnapshot taskSnapshot) {
+        switch (taskSnapshot.state) {
+          case TaskState.running:
+            final progress = 100.0 * (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
+            print("Upload is $progress% complete.");
+            break;
+          case TaskState.paused:
+            print("Upload is paused.");
+            break;
+          case TaskState.canceled:
+            print("Upload was canceled");
+            break;
+          case TaskState.error:
+            print("Upload failed with error.");
+            break;
+          case TaskState.success:
+            print("Upload completed successfully.");
+            break;
         }
+      });
+
+      await uploadTask;
+
+      final imageUrl = await storageRef.getDownloadURL();
+      final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
+
+      // Check the doc
+      final docSnapshot = await userDocRef.get();
+      if (!docSnapshot.exists) {
+        // Initiate doc if not exist
+        await userDocRef.set({
+          'results': [],
+        });
       }
+
+      // Create the new result entry
+      Map<String, dynamic> newResult = {
+        'imageUrl': imageUrl,
+        'result': result,
+      };
+
+      // Update Firestore doc
+      await userDocRef.update({
+        'results': FieldValue.arrayUnion([newResult]),
+      });
+
+      print('Result and image saved to Firestore successfully');
+    } catch (e) {
+      print('Failed to save result and image to Firestore: $e');
     }
-
-    // listen the dynamic link
-    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData? dynamicLinkData) async {
-      final Uri? deepLink = dynamicLinkData?.link;
-      if (deepLink != null && _auth.isSignInWithEmailLink(deepLink.toString())) {
-        final email = await _getEmailFromStorage();
-        if (email != null) {
-          try {
-            await _auth.signInWithEmailLink(email: email, emailLink: deepLink.toString());
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully signed in')));
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error signing in with email link: $e')));
-          }
-        }
-      }
-    }, onError: (Exception e) async {
-      print('onLinkError: ${e.toString()}');
-    });
   }
-
-  Future<String?> _getEmailFromStorage() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('email');
-  }
-
-
 
 
 
@@ -174,17 +181,20 @@ class _MyAppState extends State<MyAppHome> {
             ),
           ],
         ),
-        body: Center(child: MyImagePicker()),
+        body: Center(child: MyImagePicker(
+          diagnoseLeafAndSave: _saveResultToFirestore,
+        )),
       ),
       builder: EasyLoading.init(),
     );
   }
 }
 
-
-
-
 class MyImagePicker extends StatefulWidget {
+  final Future<void> Function(File, String) diagnoseLeafAndSave;
+
+  MyImagePicker({required this.diagnoseLeafAndSave});
+
   @override
   MyImagePickerState createState() => MyImagePickerState();
 }
@@ -237,7 +247,6 @@ class MyImagePickerState extends State<MyImagePicker> {
     });
   }
 
-
   void showImageDialog(File image) {
     showDialog(
       context: context,
@@ -250,7 +259,6 @@ class MyImagePickerState extends State<MyImagePicker> {
               Image.file(image, width: 300, height: 200, fit: BoxFit.cover),
               ElevatedButton(
                 onPressed: () async {
-
                   Navigator.of(context).pop();
                 },
                 child: const Text('Segment'),
@@ -271,8 +279,6 @@ class MyImagePickerState extends State<MyImagePicker> {
     );
   }
 
-
-
   Uint8List imageToByteListFloat32(
       img.Image image, int inputSize, double mean, double std) {
     var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
@@ -289,7 +295,9 @@ class MyImagePickerState extends State<MyImagePicker> {
     return convertedBytes.buffer.asUint8List();
   }
 
-  Future diagnoseLeaf() async {
+  Future<String> diagnoseLeaf() async {
+    String diagnosisResult = "";
+
     if (path_1 != null) {
       EasyLoading.instance
         ..indicatorType = EasyLoadingIndicatorType.fadingGrid
@@ -300,31 +308,8 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       EasyLoading.show(status: 'loading...');
 
-      // // converting the to Image format from the file format(for model on bin)
-      // img.Image? oriImage = img.decodeImage(_image.readAsBytesSync());
-      // img.Image resizedImage =
-      //     img.copyResize(oriImage!, height: 256, width: 256);
-
-      // // if required try integrating cropping
-      // ImageProperties properties =
-      //     await FlutterNativeImage.getImageProperties(_image.path);
-      // File compressedFile;
-      // if (properties.height != 256 || properties.width != 256) {
-      //   compressedFile = await FlutterNativeImage.compressImage(
-      //       _image.path,
-      //       quality: 95,
-      //       targetWidth: 256,
-      //       targetHeight: 256);
-      // }
-
       await Tflite.loadModel(
           model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
-
-      // // good for using after proccessing the image but slows down if image is of high resolution
-      // var output = await Tflite.runModelOnBinary(
-      //     binary: imageToByteListFloat32(resizedImage, 256, 0.0, 255.0),
-      //     numResults: 1,
-      //     threshold: 0.80);
 
       var output = await Tflite.runModelOnImage(
         path: path_1,
@@ -338,17 +323,18 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       setState(() {
         if (output != null && output.isNotEmpty) {
-          // replace the 'label' text to reformat result description
           String rawResult = output[0]['label'].toString();
           result = _reformatResult(rawResult);
-          //result = output[0]['label'].toString();
+          diagnosisResult = result;
         } else if (output != null && output.isEmpty) {
           result = 'Sorry! I could not identify anything';
+          diagnosisResult = result;
         } else {
           result = "Sorry! My Model Failed";
+          diagnosisResult = result;
         }
-        _MyImagePickerState.updateResult(result); // upgrade the result that let tts works
-        _showResultDialog(result); // upgrade the description of dialog
+        _MyImagePickerState.updateResult(result);
+        _showResultDialog(result);
       });
     } else {
       EasyLoading.instance
@@ -357,8 +343,10 @@ class MyImagePickerState extends State<MyImagePicker> {
         ..dismissOnTap = true;
       EasyLoading.showToast('Please select or capture image');
     }
+
+    return diagnosisResult; // return the result
   }
-  /// String function reformat the result from the label,
+
   String _reformatResult(String rawResult) {
     List<String> parts = rawResult.split('___');
     if (parts.length == 2) {
@@ -367,20 +355,18 @@ class MyImagePickerState extends State<MyImagePicker> {
       if (disease == 'healthy'){
         return 'The plant is $plant, and it is healthy.';
       }else{
-      return 'The plant is $plant, and the disease is $disease.';
-    }}
-      else {
+        return 'The plant is $plant, and the disease is $disease.';
+      }}
+    else {
       return rawResult; // return raw result if format is unexpected
     }
   }
 
-// call the sam model to segment img
   Future<void> segmentImage() async {
     if (_image == null) {
       EasyLoading.showToast('Please select or capture image');
       return;
     }
-
 
     var imageEmbedding = await Tflite.runModelOnImage(
       path: path_1,
@@ -424,9 +410,7 @@ class MyImagePickerState extends State<MyImagePicker> {
     EasyLoading.showToast('Image segmented successfully');
   }
 
-
   Future<Uint8List> maskToImage(List<double> mask) async {
-   // set the init UI
     final int width = 256;
     final int height = 256;
     final img.Image image = img.Image(width, height);
@@ -442,7 +426,6 @@ class MyImagePickerState extends State<MyImagePicker> {
     return Uint8List.fromList(img.encodePng(image));
   }
 
-/// the void func control the dialog of the result
   void _showResultDialog(String result) {
     showDialog(
       context: context,
@@ -463,8 +446,6 @@ class MyImagePickerState extends State<MyImagePicker> {
       },
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +487,11 @@ class MyImagePickerState extends State<MyImagePicker> {
               Container(
                 margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
                 child: ElevatedButton(
-                  onPressed: () => diagnoseLeaf(),
+                  onPressed: () async {
+                    String result = await diagnoseLeaf(); // call the diagnose func to get the result string
+                    await widget.diagnoseLeafAndSave(_image, result);
+
+                  },
                   child: const Text('Diagnose'),
                   style: style,
                 ),
@@ -519,18 +504,6 @@ class MyImagePickerState extends State<MyImagePicker> {
                   style: style,
                 ),
               ),
-
-
-
-              /// replace the 'result' text to the alert dialog
-              // result == null ?
-              //     Container()
-              //     : Container(
-              //   color: Theme.of(context).scaffoldBackgroundColor,
-              //   child: Text(result, style: TextStyle(color: Theme.of(context).scaffoldBackgroundColor)),
-              // )
-              // const Text('Result') : Text(result)
-
             ],
           ),
         ),
@@ -549,5 +522,3 @@ class _MyImagePickerState {
     }
   }
 }
-
-
