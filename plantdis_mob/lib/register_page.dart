@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -25,8 +24,10 @@ class _RegisterPageState extends State<RegisterPage> {
 
   void _checkLoggedInUser() async {
     User? user = _auth.currentUser;
-    if (user != null) {
-      _emailController.text = user.email ?? '';
+    if (user != null && user.email != null) {
+      _emailController.text = user.email!;
+    } else {
+      _emailController.clear();
     }
     print('Current user: ${user?.email}');
   }
@@ -34,23 +35,24 @@ class _RegisterPageState extends State<RegisterPage> {
   void _register() async {
     if (_formKey.currentState!.validate()) {
       try {
-        final user = _auth.currentUser;
-        final docRef = await FirebaseFirestore.instance.collection('users').add({
+        UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+          email: _emailController.text,
+          password: 'some_default_password', // This can be a fixed value if you're using email link sign-in
+        );
+
+        String userId = userCredential.user!.uid;
+
+        await FirebaseFirestore.instance.collection('users').doc(userId).set({
           'name': _nameController.text,
           'email': _emailController.text,
           'educationLevel': _educationLevel,
           'industrialArea': _industrialArea,
           'results': [], // initialize results field as an empty array
-
+          'images': []
         });
 
-        // Save the generated document ID to SharedPreferences
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('guestUserId', docRef.id);
-
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registration successful!')));
-
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome()));
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome(userId: '',)));
       } catch (e) {
         print('Error registering: $e');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error registering: $e')));
@@ -93,7 +95,7 @@ class _RegisterPageState extends State<RegisterPage> {
               DropdownButtonFormField<String>(
                 value: _educationLevel,
                 decoration: InputDecoration(labelText: 'Education Level'),
-                items: ['High School', 'Undergraduate', 'Postgraduate', 'Others','not selected'].map((level) {
+                items: ['High School', 'Undergraduate', 'Postgraduate', 'Others', 'not selected'].map((level) {
                   return DropdownMenuItem(value: level, child: Text(level));
                 }).toList(),
                 onChanged: (value) {
@@ -105,7 +107,7 @@ class _RegisterPageState extends State<RegisterPage> {
               DropdownButtonFormField<String>(
                 value: _industrialArea,
                 decoration: InputDecoration(labelText: 'Industrial Area'),
-                items: ['Finance', 'IT', 'Consulting', 'Others','not selected'].map((area) {
+                items: ['Finance', 'IT', 'Consulting', 'Others', 'not selected'].map((area) {
                   return DropdownMenuItem(value: area, child: Text(area));
                 }).toList(),
                 onChanged: (value) {
