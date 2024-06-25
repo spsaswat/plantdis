@@ -7,8 +7,8 @@ import 'package:get/get.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 
-import '../main.dart';
-import '../register_page.dart';
+import 'main.dart';
+import 'register_page.dart';
 
 class AuthService {
   final _firebaseAuth = firebase_auth.FirebaseAuth.instance;
@@ -75,7 +75,7 @@ class AuthService {
           // Check if user is registered and navigate accordingly
           final isRegistered = await _checkUserRegistered(userCredential.user!.uid);
           if (isRegistered) {
-            Get.offAll(() => MyAppHome());
+            Get.offAll(() => MyAppHome(userId: '',));
           } else {
             Get.offAll(() => RegisterPage());
           }
