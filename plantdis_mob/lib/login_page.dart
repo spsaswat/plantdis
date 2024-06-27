@@ -186,10 +186,11 @@ class _LoginPageState extends State<LoginPage> {
                       ? CircularProgressIndicator()
                       : Column(
                     children: [
-                      ElevatedButton(
-                        onPressed: _sendVerificationCode,
-                        child: Text('Send Verification Link'),
-                      ),
+                      ///for now just use guest mode
+                      // ElevatedButton(
+                      //   onPressed: _sendVerificationCode,
+                      //   child: Text('Send Verification Link'),
+                      // ),
                       SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: _signInAsGuest,
