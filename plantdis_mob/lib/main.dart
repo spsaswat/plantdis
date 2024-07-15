@@ -17,7 +17,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:segment_anything/segment_anything.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:path_provider/path_provider.dart';
-import 'Auth_service.dart';
 import 'CropCassavaModel.dart';
 import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -26,8 +25,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-
-  await Get.put(AuthService());
   runApp(MyApp());
 }
 
@@ -36,7 +33,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: MyAppHome(userId: '',),  // use authwrapper to check the email
+      home: MyAppHome(userId: '',),  // use AutoMapper to check the email
     );
   }
 }
@@ -202,28 +199,41 @@ class MyImagePickerState extends State<MyImagePicker> {
   var _image;
   var path_1;
   var result;
-  var segmentedResult;
-  var segmentedMask;
-  List<List<double>> inputPoints = [];
-  Interpreter? interpreter;
+  String selectedPlant = 'Cassava';
+  List<String> plants = ['Cassava', 'Apple', 'Corn', 'Orange', 'Potato', 'Tomato'];
+  CropCassavaModel? cropCassavaModel;
+  bool isCropModelLoaded = false;
+  bool isDN6ModelLoaded = false;
+
+
 
   @override
   void initState(){
     super.initState();
     loadModel();
-  }
 
+  }
+  // load specific model while the user answering the question
   Future<void> loadModel() async {
     try {
-      await Tflite.loadModel(
-        model: 'assets/cropnet_mobilev2.tflite',
-        labels: 'assets/cassava_labels.txt',
-      );
-      print('Crop Model loaded successfully');
+      if (selectedPlant == 'Cassava') {
+        cropCassavaModel = CropCassavaModel();
+        await cropCassavaModel!.loadModel();
+        print('Crop Model loaded successfully');
+        isCropModelLoaded = true;
+      } else {
+        await Tflite.loadModel(
+          model: 'assets/pd_tfl_dn_6.tflite',
+          labels: 'assets/labels.txt',
+        );
+        print('DN6 Model loaded successfully');
+        isDN6ModelLoaded = true;
+      }
     } catch (e) {
-      print('Error loading Crop model: $e');
+      print('Error loading model: $e');
     }
   }
+
 
   Future imageFromCamera() async {
     final ImagePicker _picker = ImagePicker();
@@ -310,6 +320,7 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       EasyLoading.show(status: 'loading...');
 
+
       // // load dn6 model
       // await Tflite.loadModel(
       //   model: "assets/pd_tfl_dn_6.tflite",
@@ -317,10 +328,6 @@ class MyImagePickerState extends State<MyImagePicker> {
       // );
 
       // // load crop model
-      CropCassavaModel cropCassavaModel = CropCassavaModel();
-      await cropCassavaModel.loadModel();
-      var cropOutput = await cropCassavaModel.runModelOnImage(path_1);
-
 
 
       // // good for using after proccessing the image but slows down if image is of high resolution
@@ -328,7 +335,6 @@ class MyImagePickerState extends State<MyImagePicker> {
       //     binary: imageToByteListFloat32(resizedImage, 256, 0.0, 255.0),
       //     numResults: 1,
       //     threshold: 0.80);
-
 
       // var output = await Tflite.runModelOnImage(
       //   path: path_1,
@@ -340,17 +346,40 @@ class MyImagePickerState extends State<MyImagePicker> {
       // //
       // var cropOutput = await cropCassavaModel.runModelOnImage(path_1);
 
+      String rawResult;
+
+      if (selectedPlant == 'Cassava') {
+        if (!isCropModelLoaded) {
+          await loadModel();
+        }
+        var cropOutput = await cropCassavaModel!.runModelOnImage(path_1);
+        rawResult = cropOutput![0].toString();
+        result = cropCassavaModel!.reformatResult(rawResult);
+      } else {
+        if (!isDN6ModelLoaded) {
+          await loadModel();
+        }
+        var output = await Tflite.runModelOnImage(
+          path: path_1,
+          numResults: 1,
+          threshold: 0.89,
+          imageMean: 0,
+          imageStd: 255,
+        );
+
+        if (output == null || output.isEmpty) {
+          EasyLoading.dismiss();
+          return 'Sorry! I could not identify anything';
+        }
+
+        rawResult = output[0]['label'].toString();
+        result = _reformatResult(rawResult);
+      }
+
       EasyLoading.dismiss();
 
       setState(() {
-        if (cropOutput != null && cropOutput.isNotEmpty) {
-          String rawResult = cropOutput[0].toString();
-          result = cropCassavaModel.reformatResult(rawResult);
-          diagnosisResult = result;
-        } else {
-          result = 'Sorry! I could not identify anything';
-          diagnosisResult = result;
-        }
+        diagnosisResult = result;
         _MyImagePickerState.updateResult(result);
         _showResultDialog(result);
       });
@@ -362,96 +391,92 @@ class MyImagePickerState extends State<MyImagePicker> {
       EasyLoading.showToast('Please select or capture image');
     }
 
-    return diagnosisResult; // return the result
+    return diagnosisResult; // 返回结果
   }
 
-
-  //
-  //
-  // String _reformatResult(String rawResult) {
-  //   // dn_6 model output
-  //   List<String> parts = rawResult.split('___');
-  //   if (parts.length == 2) {
-  //     String plant = parts[0];
-  //     String disease = parts[1].replaceAll('_', ' ');
-  //     if (disease == 'healthy') {
-  //       return 'The plant is $plant, and it is healthy.';
-  //     } else {
-  //       return 'The plant is $plant, and the disease is $disease.';
-  //     }
-  //   } else {
-  //     return rawResult; // return raw result if format is unexpected
-  //   }
-  // }
-
-
-
-
-
-
-  Future<void> segmentImage() async {
-    if (_image == null) {
-      EasyLoading.showToast('Please select or capture image');
-      return;
-    }
-
-    var imageEmbedding = await Tflite.runModelOnImage(
-      path: path_1,
-      numResults: 1,
-      threshold: 0.89,
-      imageMean: 0,
-      imageStd: 255,
-    );
-
-    // set the input point
-    List<double> inputLabels = List.filled(inputPoints.length, 1.0);
-
-    // add input points
-    inputPoints.add([0.0, 0.0]);
-    inputLabels.add(-1.0);
-
-    // prepare the input infos
-    var inputs = {
-      "image_embeddings": imageEmbedding,
-      "point_coords": [inputPoints],
-      "point_labels": [inputLabels],
-      "mask_input": List.filled(256 * 256, 0.0),
-      "has_mask_input": [1.0],
-      "orig_im_size": [256.0, 256.0]
-    };
-
-    // run the model
-    List<double> outputMasks = List.filled(256 * 256, 0.0);
-    interpreter!.run(inputs, outputMasks);
-
-    // output mask
-    var maskImage = await maskToImage(outputMasks);
-
-    // save the img
-    final directory = await getApplicationDocumentsDirectory();
-    final imagePath = '${directory.path}/segmented_image.png';
-    File(imagePath).writeAsBytesSync(maskImage);
-    setState(() {
-      path_1 = imagePath;
-    });
-    EasyLoading.showToast('Image segmented successfully');
-  }
-
-  Future<Uint8List> maskToImage(List<double> mask) async {
-    final int width = 256;
-    final int height = 256;
-    final img.Image image = img.Image(width, height);
-
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        final int index = y * width + x;
-        final int color = mask[index] > 0.5 ? 0xFFFFFFFF : 0xFF000000;
-        image.setPixel(x, y, color);
+  String _reformatResult(String rawResult) {
+    List<String> parts = rawResult.split('___');
+    if (parts.length == 2) {
+      String plant = parts[0];
+      String disease = parts[1].replaceAll('_', ' ');
+      if (disease == 'healthy') {
+        return 'The plant is $plant, and it is healthy.';
+      } else {
+        return 'The plant is $plant, and the disease is $disease.';
       }
+    } else {
+      return rawResult; // return raw result if format is unexpected
     }
-
-    return Uint8List.fromList(img.encodePng(image));
   }
+
+
+
+
+
+
+  // Future<void> segmentImage() async {
+  //   if (_image == null) {
+  //     EasyLoading.showToast('Please select or capture image');
+  //     return;
+  //   }
+  //
+  //   var imageEmbedding = await Tflite.runModelOnImage(
+  //     path: path_1,
+  //     numResults: 1,
+  //     threshold: 0.89,
+  //     imageMean: 0,
+  //     imageStd: 255,
+  //   );
+  //
+  //   // set the input point
+  //   List<double> inputLabels = List.filled(inputPoints.length, 1.0);
+  //
+  //   // add input points
+  //   inputPoints.add([0.0, 0.0]);
+  //   inputLabels.add(-1.0);
+  //
+  //   // prepare the input infos
+  //   var inputs = {
+  //     "image_embeddings": imageEmbedding,
+  //     "point_coords": [inputPoints],
+  //     "point_labels": [inputLabels],
+  //     "mask_input": List.filled(256 * 256, 0.0),
+  //     "has_mask_input": [1.0],
+  //     "orig_im_size": [256.0, 256.0]
+  //   };
+  //
+  //   // run the model
+  //   List<double> outputMasks = List.filled(256 * 256, 0.0);
+  //   interpreter!.run(inputs, outputMasks);
+  //
+  //   // output mask
+  //   var maskImage = await maskToImage(outputMasks);
+  //
+  //   // save the img
+  //   final directory = await getApplicationDocumentsDirectory();
+  //   final imagePath = '${directory.path}/segmented_image.png';
+  //   File(imagePath).writeAsBytesSync(maskImage);
+  //   setState(() {
+  //     path_1 = imagePath;
+  //   });
+  //   EasyLoading.showToast('Image segmented successfully');
+  // }
+  //
+  // Future<Uint8List> maskToImage(List<double> mask) async {
+  //   final int width = 256;
+  //   final int height = 256;
+  //   final img.Image image = img.Image(width, height);
+  //
+  //   for (int y = 0; y < height; y++) {
+  //     for (int x = 0; x < width; x++) {
+  //       final int index = y * width + x;
+  //       final int color = mask[index] > 0.5 ? 0xFFFFFFFF : 0xFF000000;
+  //       image.setPixel(x, y, color);
+  //     }
+  //   }
+  //
+  //   return Uint8List.fromList(img.encodePng(image));
+  // }
 
   void _showResultDialog(String result) {
     showDialog(
@@ -517,7 +542,6 @@ class MyImagePickerState extends State<MyImagePicker> {
                   onPressed: () async {
                     String result = await diagnoseLeaf(); // call the diagnose func to get the result string
                     await widget.diagnoseLeafAndSave(_image, result);
-
                   },
                   child: const Text('Diagnose'),
                   style: style,
@@ -525,10 +549,22 @@ class MyImagePickerState extends State<MyImagePicker> {
               ),
               Container(
                 margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
-                child: ElevatedButton(
-                  onPressed: () => segmentImage(),
-                  child: const Text('Segment Image'),
-                  style: style,
+                child: DropdownButton<String>(
+                  value: selectedPlant,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      selectedPlant = newValue!;
+                      isCropModelLoaded = false;
+                      isDN6ModelLoaded = false;
+                      loadModel();
+                    });
+                  },
+                  items: plants.map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
                 ),
               ),
             ],
@@ -538,6 +574,8 @@ class MyImagePickerState extends State<MyImagePicker> {
     );
   }
 }
+
+
 
 class _MyImagePickerState {
   static bool isTtsOn = false;

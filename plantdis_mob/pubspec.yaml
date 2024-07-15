@@ -61,7 +61,7 @@ dependencies:
   google_api_availability: ^5.0.0
   firebase_dynamic_links: ^6.0.1
   firebase_storage: ^12.0.1
-  get: ^4.6.6
+  get: ^4.6.5
   flutter_native_image: ^0.0.6
 
 
@@ -104,8 +104,6 @@ flutter:
     - assets/images/icon2.png
     - assets/images/icon5.png
     - assets/images/icon10241.png
-    - assets/sam_model.tflite
-    - assets/pd_village.tflite
     - assets/labels_village.txt
     - assets/cropnet_mobilev2.tflite
     - assets/cassava_labels.txt
