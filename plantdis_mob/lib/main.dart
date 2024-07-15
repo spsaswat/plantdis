@@ -199,7 +199,7 @@ class MyImagePickerState extends State<MyImagePicker> {
   var _image;
   var path_1;
   var result;
-  String selectedPlant = 'Cassava';
+  String selectedPlant = 'Apple';
   List<String> plants = ['Cassava', 'Apple', 'Corn', 'Orange', 'Potato', 'Tomato'];
   CropCassavaModel? cropCassavaModel;
   bool isCropModelLoaded = false;
@@ -391,7 +391,7 @@ class MyImagePickerState extends State<MyImagePicker> {
       EasyLoading.showToast('Please select or capture image');
     }
 
-    return diagnosisResult; // 返回结果
+    return diagnosisResult;
   }
 
   String _reformatResult(String rawResult) {
@@ -513,6 +513,33 @@ class MyImagePickerState extends State<MyImagePicker> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 20, 0, 10),
+                child: const Text(
+                  'Please choose the plant you want to analyse first',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 10, 0, 20),
+                child: DropdownButton<String>(
+                  value: selectedPlant,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      selectedPlant = newValue!;
+                      isCropModelLoaded = false;
+                      isDN6ModelLoaded = false;
+                      loadModel();
+                    });
+                  },
+                  items: plants.map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value, style: TextStyle(fontSize: 16)),
+                    );
+                  }).toList(),
+                ),
+              ),
               _image == null
                   ? const Text('No image selected.')
                   : Image.file(_image,
@@ -545,26 +572,6 @@ class MyImagePickerState extends State<MyImagePicker> {
                   },
                   child: const Text('Diagnose'),
                   style: style,
-                ),
-              ),
-              Container(
-                margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
-                child: DropdownButton<String>(
-                  value: selectedPlant,
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      selectedPlant = newValue!;
-                      isCropModelLoaded = false;
-                      isDN6ModelLoaded = false;
-                      loadModel();
-                    });
-                  },
-                  items: plants.map<DropdownMenuItem<String>>((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
                 ),
               ),
             ],
