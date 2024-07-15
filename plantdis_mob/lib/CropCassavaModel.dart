@@ -29,10 +29,12 @@ class CropCassavaModel {
     var imageBytes = imageToByteListFloat32(resizedImage, inputSize);
 
     // 分类
-    var output = await Tflite.runModelOnBinary(
-      binary: imageBytes,
+    var output = await Tflite.runModelOnImage(
+      path: path,
       numResults: 1,
       threshold: 0.8,
+      imageMean: 0,
+      imageStd: 255,
     );
 
     if (output != null && output.isNotEmpty) {
@@ -72,13 +74,11 @@ class CropCassavaModel {
       String? readableName = nameMap[rawResult];
       if (readableName == 'Healthy') {
         return 'The plant is cassava, and it is healthy.';
-      } else if (readableName == 'Unknown'){
-        return 'Unknown';
-      }else{
+      } else {
         return 'The plant is cassava, and the disease is $readableName.';
       }
     } else {
-      return 'can not analyse';
+      return 'The plant is cassava, and the disease is unknown.';
     }
   }
 }
