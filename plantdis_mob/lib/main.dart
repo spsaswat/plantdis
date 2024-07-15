@@ -18,6 +18,7 @@ import 'package:segment_anything/segment_anything.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'Auth_service.dart';
+import 'CropCassavaModel.dart';
 import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginPage(),  // use authwrapper to check the email
+      home: MyAppHome(userId: '',),  // use authwrapper to check the email
     );
   }
 }
@@ -212,12 +213,15 @@ class MyImagePickerState extends State<MyImagePicker> {
     loadModel();
   }
 
-  Future<void> loadModel() async{
+  Future<void> loadModel() async {
     try {
-      interpreter = await Interpreter.fromAsset('assets/sam_model.tflite');
-      print('SAM Model loaded successfully');
+      await Tflite.loadModel(
+        model: 'assets/cropnet_mobilev2.tflite',
+        labels: 'assets/cassava_labels.txt',
+      );
+      print('Crop Model loaded successfully');
     } catch (e) {
-      print('Error loading SAM model: $e');
+      print('Error loading Crop model: $e');
     }
   }
 
@@ -306,29 +310,45 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       EasyLoading.show(status: 'loading...');
 
-      await Tflite.loadModel(
-          model: "assets/pd_tfl_dn_6.tflite", labels: "assets/labels.txt");
+      // // load dn6 model
+      // await Tflite.loadModel(
+      //   model: "assets/pd_tfl_dn_6.tflite",
+      //   labels: "assets/labels.txt",
+      // );
 
-      var output = await Tflite.runModelOnImage(
-        path: path_1,
-        numResults: 1,
-        threshold: 0.89,
-        imageMean: 0,
-        imageStd: 255,
-      );
+      // // load crop model
+      CropCassavaModel cropCassavaModel = CropCassavaModel();
+      await cropCassavaModel.loadModel();
+      var cropOutput = await cropCassavaModel.runModelOnImage(path_1);
+
+
+
+      // // good for using after proccessing the image but slows down if image is of high resolution
+      // var output = await Tflite.runModelOnBinary(
+      //     binary: imageToByteListFloat32(resizedImage, 256, 0.0, 255.0),
+      //     numResults: 1,
+      //     threshold: 0.80);
+
+
+      // var output = await Tflite.runModelOnImage(
+      //   path: path_1,
+      //   numResults: 1,
+      //   threshold: 0.89,
+      //   imageMean: 0,
+      //   imageStd: 255,
+      // );
+      // //
+      // var cropOutput = await cropCassavaModel.runModelOnImage(path_1);
 
       EasyLoading.dismiss();
 
       setState(() {
-        if (output != null && output.isNotEmpty) {
-          String rawResult = output[0]['label'].toString();
-          result = _reformatResult(rawResult);
-          diagnosisResult = result;
-        } else if (output != null && output.isEmpty) {
-          result = 'Sorry! I could not identify anything';
+        if (cropOutput != null && cropOutput.isNotEmpty) {
+          String rawResult = cropOutput[0].toString();
+          result = cropCassavaModel.reformatResult(rawResult);
           diagnosisResult = result;
         } else {
-          result = "Sorry! My Model Failed";
+          result = 'Sorry! I could not identify anything';
           diagnosisResult = result;
         }
         _MyImagePickerState.updateResult(result);
@@ -345,20 +365,29 @@ class MyImagePickerState extends State<MyImagePicker> {
     return diagnosisResult; // return the result
   }
 
-  String _reformatResult(String rawResult) {
-    List<String> parts = rawResult.split('___');
-    if (parts.length == 2) {
-      String plant = parts[0];
-      String disease = parts[1].replaceAll('_', ' ');
-      if (disease == 'healthy'){
-        return 'The plant is $plant, and it is healthy.';
-      }else{
-        return 'The plant is $plant, and the disease is $disease.';
-      }}
-    else {
-      return rawResult; // return raw result if format is unexpected
-    }
-  }
+
+  //
+  //
+  // String _reformatResult(String rawResult) {
+  //   // dn_6 model output
+  //   List<String> parts = rawResult.split('___');
+  //   if (parts.length == 2) {
+  //     String plant = parts[0];
+  //     String disease = parts[1].replaceAll('_', ' ');
+  //     if (disease == 'healthy') {
+  //       return 'The plant is $plant, and it is healthy.';
+  //     } else {
+  //       return 'The plant is $plant, and the disease is $disease.';
+  //     }
+  //   } else {
+  //     return rawResult; // return raw result if format is unexpected
+  //   }
+  // }
+
+
+
+
+
 
   Future<void> segmentImage() async {
     if (_image == null) {
