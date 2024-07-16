@@ -107,7 +107,7 @@ flutter:
     - assets/labels_village.txt
     - assets/cropnet_mobilev2.tflite
     - assets/cassava_labels.txt
-
+    - assets/plant_disease_model.tflite
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
