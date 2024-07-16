@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 import 'CropCassavaModel.dart';
 import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'plant_village.dart';
 
 
 void main() async {
@@ -202,8 +203,9 @@ class MyImagePickerState extends State<MyImagePicker> {
   String selectedPlant = 'Apple';
   List<String> plants = ['Cassava', 'Apple', 'Corn', 'Orange', 'Potato', 'Tomato'];
   CropCassavaModel? cropCassavaModel;
+  PlantVillageModel? plantVillageModel;
   bool isCropModelLoaded = false;
-  bool isDN6ModelLoaded = false;
+  bool isPlantModelLoaded = false;
 
 
 
@@ -213,7 +215,7 @@ class MyImagePickerState extends State<MyImagePicker> {
     loadModel();
 
   }
-  // load specific model while the user answering the question
+  // Load specific model based on the selected plant
   Future<void> loadModel() async {
     try {
       if (selectedPlant == 'Cassava') {
@@ -222,12 +224,10 @@ class MyImagePickerState extends State<MyImagePicker> {
         print('Crop Model loaded successfully');
         isCropModelLoaded = true;
       } else {
-        await Tflite.loadModel(
-          model: 'assets/pd_tfl_dn_6.tflite',
-          labels: 'assets/labels.txt',
-        );
-        print('DN6 Model loaded successfully');
-        isDN6ModelLoaded = true;
+        plantVillageModel = PlantVillageModel();
+        await plantVillageModel!.loadModel();
+        print('Plant Village Model loaded successfully');
+        isPlantModelLoaded = true;
       }
     } catch (e) {
       print('Error loading model: $e');
@@ -356,24 +356,18 @@ class MyImagePickerState extends State<MyImagePicker> {
         rawResult = cropOutput![0].toString();
         result = cropCassavaModel!.reformatResult(rawResult);
       } else {
-        if (!isDN6ModelLoaded) {
+        if (!isPlantModelLoaded) {
           await loadModel();
         }
-        var output = await Tflite.runModelOnImage(
-          path: path_1,
-          numResults: 1,
-          threshold: 0.89,
-          imageMean: 0,
-          imageStd: 255,
-        );
+        var output = await plantVillageModel!.runModelOnImage(path_1);
 
         if (output == null || output.isEmpty) {
           EasyLoading.dismiss();
           return 'Sorry! I could not identify anything';
         }
 
-        rawResult = output[0]['label'].toString();
-        result = _reformatResult(rawResult);
+        rawResult = output[0].toString();
+        result = plantVillageModel!.reformatResult(rawResult);
       }
 
       EasyLoading.dismiss();
@@ -528,7 +522,7 @@ class MyImagePickerState extends State<MyImagePicker> {
                     setState(() {
                       selectedPlant = newValue!;
                       isCropModelLoaded = false;
-                      isDN6ModelLoaded = false;
+                      isPlantModelLoaded = false;
                       loadModel();
                     });
                   },
