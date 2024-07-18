@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:email_validator/email_validator.dart';
-import 'package:image/image.dart' as img;
-import 'package:shared_preferences/shared_preferences.dart';
+
 
 import 'main.dart';
 
@@ -16,6 +15,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController(text: 'some_default_password');
   final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
@@ -23,8 +23,6 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {
       _isLoading = true;
     });
-
-    bool userFound = false;
 
     try {
       final QuerySnapshot result = await FirebaseFirestore.instance
@@ -35,10 +33,21 @@ class _LoginPageState extends State<LoginPage> {
       final List<DocumentSnapshot> documents = result.docs;
 
       if (documents.isNotEmpty) {
-        userFound = true;
-        // User exists, navigate to main page
+        // Sign in the user
+        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+          email: _emailController.text,
+          password: _passwordController.text, // This should match the password used during registration
+        );
+
+        // User exists, navigate to main page with user ID
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (context) => MyAppHome(userId: documents.first.id,)));
+          context,
+          MaterialPageRoute(builder: (context) => MyAppHome(userId: userCredential.user!.uid)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No user found with this email')),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -48,72 +57,9 @@ class _LoginPageState extends State<LoginPage> {
       }
     }
 
-    // Delay for 1 second before showing no user found message if user not found
-    Future.delayed(Duration(seconds: 1), () {
-      if (!userFound) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No user found with this email')),
-          );
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
+    setState(() {
+      _isLoading = false;
     });
-
-    if (userFound) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-
-
-  void _sendVerificationCode() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        print('Attempting to send email to: ${_emailController.text}');
-        await _auth.sendSignInLinkToEmail(
-          email: _emailController.text,
-          actionCodeSettings: ActionCodeSettings(
-            url: 'https://plantdis.page.link/mVFa', // use dynamic id
-            handleCodeInApp: true,
-            iOSBundleId: 'com.example.ios',
-            androidPackageName: 'com.spsaswat.plantdis.plantdis_mob',
-            androidInstallApp: true,
-            androidMinimumVersion: '12',
-          ),
-        );
-
-        //save the email add
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('email', _emailController.text);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Verification email has been sent!'),
-          ),
-        );
-        print('Email sent successfully.');
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send verification email: $e'),
-          ),
-        );
-        print('Failed to send email: $e');
-      }
-
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
   void _signInAsGuest() {
@@ -154,21 +100,20 @@ class _LoginPageState extends State<LoginPage> {
                   TextFormField(
                     controller: _emailController,
                     decoration: InputDecoration(
-                        labelText: 'Email',
+                      labelText: 'Email',
                       labelStyle: TextStyle(color: Colors.grey,),
                       enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.white,
+                            width: 2.0,
+                          )
+                      ),
+                      focusedBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
                           color: Colors.white,
                           width: 2.0,
-                        )
+                        ),
                       ),
-                      focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                    color: Colors.white,
-                      width: 2.0,
-                    ),
-                  ),
-
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {

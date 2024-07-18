@@ -1,22 +1,16 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:PlantDis/register_page.dart';
 import 'package:PlantDis/setting_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
-import 'package:tflite/tflite.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:segment_anything/segment_anything.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import 'CropCassavaModel.dart';
 import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -34,7 +28,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: MyAppHome(userId: '',),  // use AutoMapper to check the email
+      home:LoginPage(),  // use AutoMapper to check the email
     );
   }
 }
@@ -213,7 +207,6 @@ class MyImagePickerState extends State<MyImagePicker> {
   void initState(){
     super.initState();
     loadModel();
-
   }
   // Load specific model based on the selected plant
   Future<void> loadModel() async {
@@ -387,25 +380,6 @@ class MyImagePickerState extends State<MyImagePicker> {
 
     return diagnosisResult;
   }
-
-  String _reformatResult(String rawResult) {
-    List<String> parts = rawResult.split('___');
-    if (parts.length == 2) {
-      String plant = parts[0];
-      String disease = parts[1].replaceAll('_', ' ');
-      if (disease == 'healthy') {
-        return 'The plant is $plant, and it is healthy.';
-      } else {
-        return 'The plant is $plant, and the disease is $disease.';
-      }
-    } else {
-      return rawResult; // return raw result if format is unexpected
-    }
-  }
-
-
-
-
 
 
   // Future<void> segmentImage() async {
