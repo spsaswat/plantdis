@@ -88,6 +88,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your email';
+                  } else if (!value.endsWith('@anu.edu.au')) {
+                    return 'Only ANU email addresses are allowed';
                   }
                   return null;
                 },
