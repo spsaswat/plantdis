@@ -15,6 +15,7 @@ import 'CropCassavaModel.dart';
 import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'plant_village.dart';
+import 'result_page.dart';
 
 
 void main() async {
@@ -62,7 +63,7 @@ class MyAppHome extends StatefulWidget {
 class _MyAppState extends State<MyAppHome> {
   bool isDarkMode = false;
 
-  Future<void> _saveResultToFirestore(File imageFile, String result) async {
+  Future<void> _saveResultToFirestore(File imageFile, String result, String feedback) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       String userId = user.uid;
@@ -70,7 +71,7 @@ class _MyAppState extends State<MyAppHome> {
         final storageRef = FirebaseStorage.instance.ref().child('images/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg');
         final uploadTask = storageRef.putFile(imageFile);
 
-        // Observer the state
+        // Observe the state
         uploadTask.snapshotEvents.listen((TaskSnapshot taskSnapshot) {
           switch (taskSnapshot.state) {
             case TaskState.running:
@@ -111,13 +112,14 @@ class _MyAppState extends State<MyAppHome> {
         await userDocRef.update({
           'results': FieldValue.arrayUnion([{
             'result': result,
+            'feedback': feedback,
             'image': imageUrl,
           }]),
         });
 
-        print('Result and image saved to Firestore successfully');
+        print('Result, feedback, and image saved to Firestore successfully');
       } catch (e) {
-        print('Failed to save result and image to Firestore: $e');
+        print('Failed to save result, feedback, and image to Firestore: $e');
       }
     } else {
       print('No user signed in.');
@@ -182,7 +184,7 @@ class _MyAppState extends State<MyAppHome> {
 }
 
 class MyImagePicker extends StatefulWidget {
-  final Future<void> Function(File, String) diagnoseLeafAndSave;
+  final Future<void> Function(File, String, String) diagnoseLeafAndSave;
 
   MyImagePicker({required this.diagnoseLeafAndSave});
 
@@ -194,8 +196,8 @@ class MyImagePickerState extends State<MyImagePicker> {
   var _image;
   var path_1;
   var result;
-  String selectedPlant = 'Apple';
-  List<String> plants = ['Cassava', 'Apple', 'Corn', 'Orange', 'Potato', 'Tomato'];
+  String selectedPlant = 'Cassava';
+  List<String> plants = ['Cassava', 'Other plants'];
   CropCassavaModel? cropCassavaModel;
   PlantVillageModel? plantVillageModel;
   bool isCropModelLoaded = false;
@@ -252,37 +254,6 @@ class MyImagePickerState extends State<MyImagePicker> {
     });
   }
 
-  void showImageDialog(File image) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Segment Image', style: TextStyle(color: Colors.black)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.file(image, width: 300, height: 200, fit: BoxFit.cover),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Segment'),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xffF8DC27),
-          actions: [
-            TextButton(
-              child: Text('Close', style: TextStyle(color: Colors.black)),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   Uint8List imageToByteListFloat32(
       img.Image image, int inputSize, double mean, double std) {
@@ -367,8 +338,16 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       setState(() {
         diagnosisResult = result;
-        _MyImagePickerState.updateResult(result);
-        _showResultDialog(result);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResultPage(
+              image: _image,
+              result: diagnosisResult,
+              saveResultToFirestore: widget.diagnoseLeafAndSave,
+            ),
+          ),
+        );
       });
     } else {
       EasyLoading.instance
@@ -382,69 +361,8 @@ class MyImagePickerState extends State<MyImagePicker> {
   }
 
 
-  // Future<void> segmentImage() async {
-  //   if (_image == null) {
-  //     EasyLoading.showToast('Please select or capture image');
-  //     return;
-  //   }
-  //
-  //   var imageEmbedding = await Tflite.runModelOnImage(
-  //     path: path_1,
-  //     numResults: 1,
-  //     threshold: 0.89,
-  //     imageMean: 0,
-  //     imageStd: 255,
-  //   );
-  //
-  //   // set the input point
-  //   List<double> inputLabels = List.filled(inputPoints.length, 1.0);
-  //
-  //   // add input points
-  //   inputPoints.add([0.0, 0.0]);
-  //   inputLabels.add(-1.0);
-  //
-  //   // prepare the input infos
-  //   var inputs = {
-  //     "image_embeddings": imageEmbedding,
-  //     "point_coords": [inputPoints],
-  //     "point_labels": [inputLabels],
-  //     "mask_input": List.filled(256 * 256, 0.0),
-  //     "has_mask_input": [1.0],
-  //     "orig_im_size": [256.0, 256.0]
-  //   };
-  //
-  //   // run the model
-  //   List<double> outputMasks = List.filled(256 * 256, 0.0);
-  //   interpreter!.run(inputs, outputMasks);
-  //
-  //   // output mask
-  //   var maskImage = await maskToImage(outputMasks);
-  //
-  //   // save the img
-  //   final directory = await getApplicationDocumentsDirectory();
-  //   final imagePath = '${directory.path}/segmented_image.png';
-  //   File(imagePath).writeAsBytesSync(maskImage);
-  //   setState(() {
-  //     path_1 = imagePath;
-  //   });
-  //   EasyLoading.showToast('Image segmented successfully');
-  // }
-  //
-  // Future<Uint8List> maskToImage(List<double> mask) async {
-  //   final int width = 256;
-  //   final int height = 256;
-  //   final img.Image image = img.Image(width, height);
-  //
-  //   for (int y = 0; y < height; y++) {
-  //     for (int x = 0; x < width; x++) {
-  //       final int index = y * width + x;
-  //       final int color = mask[index] > 0.5 ? 0xFFFFFFFF : 0xFF000000;
-  //       image.setPixel(x, y, color);
-  //     }
-  //   }
-  //
-  //   return Uint8List.fromList(img.encodePng(image));
-  // }
+
+
 
   void _showResultDialog(String result) {
     showDialog(
@@ -536,7 +454,7 @@ class MyImagePickerState extends State<MyImagePicker> {
                 child: ElevatedButton(
                   onPressed: () async {
                     String result = await diagnoseLeaf(); // call the diagnose func to get the result string
-                    await widget.diagnoseLeafAndSave(_image, result);
+                    // Pass empty feedback initially
                   },
                   child: const Text('Diagnose'),
                   style: style,
@@ -551,7 +469,7 @@ class MyImagePickerState extends State<MyImagePicker> {
 }
 
 
-
+/// boolean to identify is the tts mode on
 class _MyImagePickerState {
   static bool isTtsOn = false;
   static final FlutterTts flutterTts = FlutterTts();
