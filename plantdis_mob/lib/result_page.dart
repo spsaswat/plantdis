@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // Import Firebase Storage
-import 'main.dart'; // Import MyAppHome
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'main.dart';
 
 class ResultPage extends StatefulWidget {
   final File image;
   final String result;
-  final Future<void> Function(File, String, String) saveResultToFirestore; // Add this
+  final Future<void> Function(File, String, String) saveResultToFirestore;
 
   ResultPage({required this.image, required this.result, required this.saveResultToFirestore});
 
@@ -18,24 +19,42 @@ class ResultPage extends StatefulWidget {
 
 class _ResultPageState extends State<ResultPage> {
   final _feedbackController = TextEditingController();
+  bool _isLoading = false;
 
   Future<void> _submitFeedback() async {
+    setState(() {
+      _isLoading = true;
+    });
     try {
+      Fluttertoast.showToast(msg: 'Submitting feedback...');
       await widget.saveResultToFirestore(widget.image, widget.result, _feedbackController.text);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Feedback submitted successfully')));
+      Fluttertoast.showToast(msg: 'Feedback submitted successfully');
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome(userId: '',)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit feedback: $e')));
+      Fluttertoast.showToast(msg: 'Failed to submit feedback: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _goBack() async {
+    setState(() {
+      _isLoading = true;
+    });
     try {
+      Fluttertoast.showToast(msg: 'Saving result...');
       await widget.saveResultToFirestore(widget.image, widget.result, _feedbackController.text);
+      Fluttertoast.showToast(msg: 'Result saved successfully');
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome(userId: '',)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save result: $e')));
+      Fluttertoast.showToast(msg: 'Failed to save result: $e');
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MyAppHome(userId: '',)));
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -83,8 +102,7 @@ class _ResultPageState extends State<ResultPage> {
                           hintText: 'Write your feedback here...',
                           hintStyle: TextStyle(color: Colors.black54),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide.none,
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                         style: TextStyle(color: Colors.black),
@@ -92,10 +110,12 @@ class _ResultPageState extends State<ResultPage> {
                     ),
                   ],
                 ),
-                SizedBox(height: 20), // Add some space
+                SizedBox(height: 20),
                 Column(
                   children: [
-                    FloatingActionButton.extended(
+                    _isLoading
+                        ? CircularProgressIndicator()
+                        : FloatingActionButton.extended(
                       onPressed: _submitFeedback,
                       backgroundColor: const Color(0xffF8DC27),
                       label: Text(
@@ -104,7 +124,9 @@ class _ResultPageState extends State<ResultPage> {
                       ),
                     ),
                     SizedBox(height: 10),
-                    FloatingActionButton(
+                    _isLoading
+                        ? SizedBox.shrink()
+                        : FloatingActionButton(
                       onPressed: _goBack,
                       child: Icon(Icons.arrow_back),
                       backgroundColor: Colors.green,
