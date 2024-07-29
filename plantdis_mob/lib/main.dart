@@ -17,7 +17,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'plant_village.dart';
 import 'result_page.dart';
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -27,34 +26,25 @@ void main() async {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home:LoginPage(),  // use AutoMapper to check the email
-    );
-  }
-}
-
-
-  @override
-  Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return CircularProgressIndicator();
         } else if (snapshot.hasData) {
+          print('User is signed in');
           return MyAppHome(userId: '');
+
         } else {
           return LoginPage();
         }
       },
     );
   }
-
+}
 
 class MyAppHome extends StatefulWidget {
-
-  late final String userId;
+  final String userId;
   MyAppHome({required this.userId});
   @override
   _MyAppState createState() => _MyAppState();
@@ -71,44 +61,19 @@ class _MyAppState extends State<MyAppHome> {
         final storageRef = FirebaseStorage.instance.ref().child('images/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg');
         final uploadTask = storageRef.putFile(imageFile);
 
-        // Observe the state
-        uploadTask.snapshotEvents.listen((TaskSnapshot taskSnapshot) {
-          switch (taskSnapshot.state) {
-            case TaskState.running:
-              final progress = 100.0 * (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
-              print("Upload is $progress% complete.");
-              break;
-            case TaskState.paused:
-              print("Upload is paused.");
-              break;
-            case TaskState.canceled:
-              print("Upload was canceled");
-              break;
-            case TaskState.error:
-              print("Upload failed with error.");
-              break;
-            case TaskState.success:
-              print("Upload completed successfully.");
-              break;
-          }
-        });
-
         await uploadTask;
 
         final imageUrl = await storageRef.getDownloadURL();
         final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
 
-        // Check if the doc exists
         final docSnapshot = await userDocRef.get();
         if (!docSnapshot.exists) {
-          // Initialize the doc if it doesn't exist
           await userDocRef.set({
             'results': [],
             'images': []
           });
         }
 
-        // Update Firestore doc
         await userDocRef.update({
           'results': FieldValue.arrayUnion([{
             'result': result,
@@ -158,14 +123,14 @@ class _MyAppState extends State<MyAppHome> {
                     context,
                     MaterialPageRoute(
                       builder: (context) => SettingsPage(
-                        isTtsOn: _MyImagePickerState.isTtsOn,
+                        isTtsOn: MyImagePickerStateTTS.isTtsOn,
                         isDarkMode: isDarkMode,
                       ),
                     ),
                   );
                   if (settings != null) {
                     setState(() {
-                      _MyImagePickerState.isTtsOn = settings['isTtsOn'];
+                      MyImagePickerStateTTS.isTtsOn = settings['isTtsOn'];
                       isDarkMode = settings['isDarkMode'];
                     });
                   }
@@ -203,14 +168,12 @@ class MyImagePickerState extends State<MyImagePicker> {
   bool isCropModelLoaded = false;
   bool isPlantModelLoaded = false;
 
-
-
   @override
   void initState(){
     super.initState();
     loadModel();
   }
-  // Load specific model based on the selected plant
+
   Future<void> loadModel() async {
     try {
       if (selectedPlant == 'Cassava') {
@@ -228,7 +191,6 @@ class MyImagePickerState extends State<MyImagePicker> {
       print('Error loading model: $e');
     }
   }
-
 
   Future imageFromCamera() async {
     final ImagePicker _picker = ImagePicker();
@@ -253,7 +215,6 @@ class MyImagePickerState extends State<MyImagePicker> {
       }
     });
   }
-
 
   Uint8List imageToByteListFloat32(
       img.Image image, int inputSize, double mean, double std) {
@@ -284,32 +245,6 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       EasyLoading.show(status: 'loading...');
 
-
-      // // load dn6 model
-      // await Tflite.loadModel(
-      //   model: "assets/pd_tfl_dn_6.tflite",
-      //   labels: "assets/labels.txt",
-      // );
-
-      // // load crop model
-
-
-      // // good for using after proccessing the image but slows down if image is of high resolution
-      // var output = await Tflite.runModelOnBinary(
-      //     binary: imageToByteListFloat32(resizedImage, 256, 0.0, 255.0),
-      //     numResults: 1,
-      //     threshold: 0.80);
-
-      // var output = await Tflite.runModelOnImage(
-      //   path: path_1,
-      //   numResults: 1,
-      //   threshold: 0.89,
-      //   imageMean: 0,
-      //   imageStd: 255,
-      // );
-      // //
-      // var cropOutput = await cropCassavaModel.runModelOnImage(path_1);
-
       String rawResult;
 
       if (selectedPlant == 'Cassava') {
@@ -338,17 +273,18 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       setState(() {
         diagnosisResult = result;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResultPage(
-              image: _image,
-              result: diagnosisResult,
-              saveResultToFirestore: widget.diagnoseLeafAndSave,
-            ),
-          ),
-        );
       });
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResultPage(
+            image: _image,
+            result: diagnosisResult,
+            saveResultToFirestore: widget.diagnoseLeafAndSave,
+          ),
+        ),
+      );
     } else {
       EasyLoading.instance
         ..displayDuration = const Duration(milliseconds: 2000)
@@ -359,10 +295,6 @@ class MyImagePickerState extends State<MyImagePicker> {
 
     return diagnosisResult;
   }
-
-
-
-
 
   void _showResultDialog(String result) {
     showDialog(
@@ -468,9 +400,7 @@ class MyImagePickerState extends State<MyImagePicker> {
   }
 }
 
-
-/// boolean to identify is the tts mode on
-class _MyImagePickerState {
+class MyImagePickerStateTTS extends State<MyImagePicker> {
   static bool isTtsOn = false;
   static final FlutterTts flutterTts = FlutterTts();
 
@@ -478,5 +408,10 @@ class _MyImagePickerState {
     if (isTtsOn) {
       flutterTts.speak(result);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(); // Implement your widget tree here
   }
 }
