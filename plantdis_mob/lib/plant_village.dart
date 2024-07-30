@@ -23,7 +23,6 @@ class PlantVillageModel {
     }
   }
 
-  // Function to run the model on an image
   Future<List?> runModelOnImage(String path) async {
     // Reading the image file
     File imageFile = File(path);
@@ -38,21 +37,20 @@ class PlantVillageModel {
     var output = await Tflite.runModelOnImage(
       path: path,
       numResults: 1, // Getting the top result
-      threshold: 0.8, // Minimum confidence threshold
       imageMean: 0, // Mean normalization value
       imageStd: 255, // Standard deviation normalization value
     );
 
-    // Checking the output and returning the predicted label
+    // Checking the output and returning the predicted label with confidence
     if (output != null && output.isNotEmpty) {
       String predictedLabel = output[0]['label'];
-      return [predictedLabel];
+      double confidence = output[0]['confidence'] * 100; // Convert to percentage
+      return ['$predictedLabel (${confidence.toStringAsFixed(2)}%)'];
     } else {
-      return ['unknown'];
+      return ['un_known'];
     }
   }
 
-  // Function to convert the image to a byte list of Float32
   Uint8List imageToByteListFloat32(img.Image image, int inputSize) {
     var convertedBytes = Float32List(1 * inputSize * inputSize * 3);
     var buffer = Float32List.view(convertedBytes.buffer);
@@ -81,9 +79,9 @@ class PlantVillageModel {
     String plant = rawResult.substring(0, firstUnderscore);
     String remaining = rawResult.substring(firstUnderscore + 1);
 
-    // Handle the case for Background
-    if (plant == 'Background') {
-      return 'Sorry, please try another plant photo.';
+    // Handle the case for Background_without_leaves
+    if (rawResult == 'Background_without_leaves') {
+      return 'Sorry, the photo does not contain leaves. Please try another plant photo.';
     }
 
     // Handle the healthy case
