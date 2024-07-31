@@ -16,6 +16,7 @@ import 'login_page.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'plant_village.dart';
 import 'result_page.dart';
+import 'sam_model/sam_model_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -234,6 +235,7 @@ class MyImagePickerState extends State<MyImagePicker> {
 
   Future<String> diagnoseLeaf() async {
     String diagnosisResult = "";
+    double confidence = 0.0; // Initialize confidence with a default value
 
     if (path_1 != null) {
       EasyLoading.instance
@@ -247,13 +249,15 @@ class MyImagePickerState extends State<MyImagePicker> {
 
       String rawResult;
 
+
       if (selectedPlant == 'Cassava') {
         if (!isCropModelLoaded) {
           await loadModel();
         }
         var cropOutput = await cropCassavaModel!.runModelOnImage(path_1);
         rawResult = cropOutput![0].toString();
-        result = cropCassavaModel!.reformatResult(rawResult);
+        confidence = cropOutput[1];
+        result = cropCassavaModel!.reformatResult(rawResult, confidence);
       } else {
         if (!isPlantModelLoaded) {
           await loadModel();
@@ -392,6 +396,19 @@ class MyImagePickerState extends State<MyImagePicker> {
                   style: style,
                 ),
               ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(0, 30, 0, 20),
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                    context,
+                      MaterialPageRoute(builder: (context) => SamModelPage()), // Navigate to the new page
+              );
+            },
+                  child: const Text('SAM Model'),
+                  style: style,
+          ),
+        ),
             ],
           ),
         ),
