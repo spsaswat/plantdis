@@ -64,6 +64,10 @@ dependencies:
   get: ^4.6.5
   flutter_native_image: ^0.0.6
   onnxruntime: ^1.4.1
+  flutter_vision: ^1.1.4
+  images_picker: ^1.2.11
+  camera: ^0.11.0+2
+  tflite_flutter: ^0.9.5
 
 
 
@@ -109,6 +113,8 @@ flutter:
     - assets/cassava_labels.txt
     - assets/plant_disease_model.tflite
     - assets/sam_model_v12.onnx
+    - assets/segyolov8_1.tflite
+    - assets/seglabel.txt
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

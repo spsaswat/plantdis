@@ -40,7 +40,7 @@ android {
 
         applicationId "com.spsaswat.plantdis.plantdis_mob"
 
-        minSdkVersion 23
+        minSdkVersion 24
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
