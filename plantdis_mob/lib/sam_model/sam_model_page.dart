@@ -1,11 +1,9 @@
 import 'dart:typed_data';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:onnxruntime/onnxruntime.dart';
-import 'sam_model.dart'; // Import the SamModel class
+import 'package:flutter_vision/flutter_vision.dart';
 import 'package:image/image.dart' as img;
+
 
 class SamModelPage extends StatefulWidget {
   @override
@@ -13,13 +11,14 @@ class SamModelPage extends StatefulWidget {
 }
 
 class _SamModelPageState extends State<SamModelPage> {
-  SamModel _samModel = SamModel();
+  FlutterVision _vision = FlutterVision();
   Uint8List? _imageData;
-  List<Offset> _points = [];
-  final _pointLabels = <int>[];
-  int? _imageWidth;
-  int? _imageHeight;
+  Uint8List? _maskImage;  // Store the mask image for display
+  int _imageWidth = 640;  // Set to 640 as the target size for input
+  int _imageHeight = 640;
   bool _isModelLoaded = false;
+  List<Map<String, dynamic>>? _segmentationResult;
+  int _currentMaskIndex = 0;  // Index for the mask currently being displayed
 
   @override
   void initState() {
@@ -29,81 +28,154 @@ class _SamModelPageState extends State<SamModelPage> {
 
   Future<void> _loadModel() async {
     try {
-      await _samModel.loadModel();
+      print('Loading YOLOv8 Segmentation model...');
+
+      // Load the TFLite YOLOv8 segmentation model
+      await _vision.loadYoloModel(
+        labels: 'assets/seglabel.txt',  // Label file path
+        modelPath: 'assets/segyolov8_1.tflite',  // TFLite model path
+        modelVersion: 'yolov8',  // Version of YOLO model (v8)
+        quantization: false,  // Set to false if the model is not quantized
+        numThreads: 1,  // Number of threads to use
+        useGpu: false,  // Set to true to use GPU acceleration
+      );
+
       setState(() {
         _isModelLoaded = true;
       });
-      print('SAM Model loaded successfully');
+
+      print('Model loaded successfully');
     } catch (e) {
-      print('Error loading SAM Model: $e');
+      print('Error loading model: $e');
     }
   }
 
+  // Select an image from the gallery
   Future<void> _pickImage() async {
     final ImagePicker _picker = ImagePicker();
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
 
     if (image != null) {
-      final imageData = await image.readAsBytes();
+      final Uint8List imageData = await image.readAsBytes();
       final img.Image? decodedImage = img.decodeImage(imageData);
-      setState(() {
-        _imageData = imageData;
-        _imageWidth = decodedImage?.width;
-        _imageHeight = decodedImage?.height;
-      });
+
+      if (decodedImage != null) {
+        // Resize the image to 640x640
+        final img.Image resizedImage = img.copyResize(decodedImage, width: 640, height: 640);
+
+        // Convert image to Float32List
+        final Float32List normalizedImage = _convertImageToFloat32List(resizedImage);
+
+        setState(() {
+          _imageData = Uint8List.fromList(img.encodePng(resizedImage));  // Display the resized image
+          _imageWidth = resizedImage.width;
+          _imageHeight = resizedImage.height;
+        });
+
+        print('Image picked and resized to 640x640');
+      }
     }
   }
 
+  // Convert image to Float32List
+  Float32List _convertImageToFloat32List(img.Image image) {
+    final Float32List float32List = Float32List(image.width * image.height * 3);
+    int index = 0;
+
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final pixel = image.getPixel(x, y);
+        float32List[index++] = img.getRed(pixel) / 255.0;    // Normalize to [0,1]
+        float32List[index++] = img.getGreen(pixel) / 255.0;
+        float32List[index++] = img.getBlue(pixel) / 255.0;
+      }
+    }
+    return float32List;
+  }
+
+  // Run segmentation model
   Future<void> _runModel() async {
     if (!_isModelLoaded) {
       print('Model is not loaded');
       return;
     }
 
-    if (_imageData == null || _points.isEmpty || _imageWidth == null || _imageHeight == null) {
-      print('No image selected or no points selected');
+    if (_imageData == null) {
+      print('No image selected');
       return;
     }
 
-    // Prepare dummy data for other inputs, replace these with actual data as needed
-    final imageEmbedding = Float32List.fromList(List.filled(256 * 64 * 64, 0.0)); // Replace with actual embedding data
-    final pointCoords = Float32List(_points.length * 2);
-    for (int i = 0; i < _points.length; i++) {
-      pointCoords[i * 2] = _points[i].dx;
-      pointCoords[i * 2 + 1] = _points[i].dy;
+    try {
+      print('Running segmentation model...');
+
+      // Run segmentation using the model with Float32 input
+      final result = await _vision.yoloOnImage(
+        bytesList: _convertImageToUint8List(_imageData!),  // Convert to Uint8List
+        imageHeight: _imageHeight,
+        imageWidth: _imageWidth,
+        iouThreshold: 0,  // Set the IoU threshold
+        confThreshold: 0,  // Set confidence threshold
+        classThreshold: 0,  // Set class threshold
+      );
+
+      setState(() {
+        _segmentationResult = result;
+        _currentMaskIndex = 0;  // Reset mask index
+      });
+
+      // Display first mask
+      _displayMask(0);
+      print('Segmentation result: $result');
+    } catch (e) {
+      print('Error during segmentation: $e');
     }
+  }
 
-    final pointLabels = Float32List.fromList(_pointLabels.map((e) => e.toDouble()).toList());
-    final maskInput = Float32List.fromList(List.filled(1 * 256 * 256, 0.0)); // Replace with actual mask input data
-    final hasMaskInput = Float32List.fromList([1.0]); // Replace with actual has mask input data
-    final origImSize = Float32List.fromList([_imageWidth!.toDouble(), _imageHeight!.toDouble()]); // Use actual image width and height
+  void _displayMask(int index) {
+    if (_segmentationResult != null && _segmentationResult!.isNotEmpty && index < _segmentationResult!.length) {
+      final mask = _segmentationResult![index]['mask'];
 
-    final results = await _samModel.runModel(_imageData!, pointCoords, pointLabels, maskInput, hasMaskInput, origImSize);
-    print('Model run successfully, results: $results');
-    // Process and display the results as needed
+      if (mask != null && mask is List<int>) {
+        // Convert mask to Uint8List and display
+        _maskImage = Uint8List.fromList(mask);
+        setState(() {});
+        print('Mask displayed for object $index');
+      } else {
+        print('Invalid mask data for object $index');
+      }
+    } else {
+      print('No mask to display for index $index');
+    }
+  }
+
+
+  // Show the next segmentation mask
+  void _showNextMask() {
+    if (_segmentationResult != null && _segmentationResult!.isNotEmpty) {
+      _currentMaskIndex = (_currentMaskIndex + 1) % _segmentationResult!.length;
+      _displayMask(_currentMaskIndex);
+    }
+  }
+
+  @override
+  void dispose() {
+    _vision.closeYoloModel();  // Release resources
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('SAM Model Page'),
+        title: Text('YoloV8 Segmentation with TFLite'),
       ),
       body: Column(
         children: [
           _imageData == null
               ? Text('No image selected.')
-              : GestureDetector(
-            onTapDown: (details) {
-              setState(() {
-                _points.add(details.localPosition);
-                _pointLabels.add(1); // Assume all points are foreground points
-              });
-            },
-            child: Image.memory(
-              _imageData!,
-              fit: BoxFit.cover,
-            ),
+              : Image.memory(
+            _imageData!,
+            fit: BoxFit.cover,
           ),
           ElevatedButton(
             onPressed: _pickImage,
@@ -111,10 +183,23 @@ class _SamModelPageState extends State<SamModelPage> {
           ),
           ElevatedButton(
             onPressed: _isModelLoaded ? _runModel : null,
-            child: Text('Run Model'),
+            child: Text('Run Segmentation'),
+          ),
+          _maskImage != null
+              ? Image.memory(_maskImage!)  // Display segmentation mask
+              : Text('No mask to display.'),
+          ElevatedButton(
+            onPressed: _showNextMask,
+            child: Text('Show Next Mask'),  // Show next mask
           ),
         ],
       ),
     );
+  }
+
+  // Convert Float32List to Uint8List
+  Uint8List _convertImageToUint8List(Uint8List imageData) {
+    // Assuming the image is already normalized and resized to 640x640, we return the same data here.
+    return imageData;
   }
 }
