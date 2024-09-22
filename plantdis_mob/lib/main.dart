@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
           return MyAppHome(userId: '');
 
         } else {
-          return LoginPage();
+          return MyAppHome(userId: '');
         }
       },
     );
