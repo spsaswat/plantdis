@@ -68,6 +68,7 @@ dependencies:
   images_picker: ^1.2.11
   camera: ^0.11.0+2
   tflite_flutter: ^0.9.5
+  http: ^0.13.3
 
 
 
@@ -115,6 +116,7 @@ flutter:
     - assets/sam_model_v12.onnx
     - assets/segyolov8_1.tflite
     - assets/seglabel.txt
+    - assets/plantdis.tflite
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
