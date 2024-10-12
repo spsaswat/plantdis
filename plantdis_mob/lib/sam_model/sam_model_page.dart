@@ -6,32 +6,37 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:http_parser/http_parser.dart'; // 添加此包以支持 contentType
+import 'package:http_parser/http_parser.dart'; // Import for supporting contentType
 
+/// This is a Flutter StatefulWidget that implements a page for
+/// selecting an image from the gallery, preprocessing it, sending it
+/// to a Flask server for segmentation, and displaying the result.
 class SamModelPage extends StatefulWidget {
   @override
   _SamModelPageState createState() => _SamModelPageState();
 }
 
 class _SamModelPageState extends State<SamModelPage> {
-  Uint8List? _imageData;
-  Uint8List? _maskImage;
-  bool _isModelLoaded = true;
+  Uint8List? _imageData; // Stores the selected or processed image data
+  Uint8List? _maskImage; // Stores the result of the segmented image
+  bool _isModelLoaded = true; // Tracks the model's loading state
 
-  // 更新服务器URL为您的Docker IP和端口
+  // URL to your Flask server for image segmentation
   String serverUrl = 'http://192.168.10.216:5000/predict';
 
   @override
   void initState() {
     super.initState();
-    // 初始化 EasyLoading 配置
+    // Initialize EasyLoading configuration
     EasyLoading.instance
       ..indicatorType = EasyLoadingIndicatorType.fadingCircle
       ..maskType = EasyLoadingMaskType.black
-      ..userInteractions = false;
+      ..userInteractions = false; // Disables user interaction during loading
   }
 
-  // 从图库选择图片并进行预处理
+  /// This method allows the user to select an image from the gallery.
+  /// After an image is selected, it is resized to 640x640 pixels before
+  /// being displayed and used for segmentation.
   Future<void> _pickImage() async {
     final ImagePicker _picker = ImagePicker();
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -39,82 +44,99 @@ class _SamModelPageState extends State<SamModelPage> {
     if (image != null) {
       final Uint8List imageData = await image.readAsBytes();
 
-      // 预处理图片 (调整大小为 640x640)
+      // Preprocess the image: resize to 640x640
       final Uint8List resizedImageData = _preprocessImage(imageData);
 
       setState(() {
-        _imageData = resizedImageData; // 显示调整后的图片
-        _maskImage = null; // 重置分割图片
+        _imageData = resizedImageData; // Update the UI with the resized image
+        _maskImage = null; // Reset the mask image
       });
 
       print('Image picked and resized');
     }
   }
 
-  // 预处理图片（调整大小为 640x640）
+  /// Preprocesses the selected image by resizing it to 640x640 pixels.
+  /// It uses the `image` package to decode and resize the image, then
+  /// encodes it back into a Uint8List format.
+  ///
+  /// - [imageData]: The original image data from the gallery.
+  /// - Returns a Uint8List of the resized image.
   Uint8List _preprocessImage(Uint8List imageData) {
-    // 将图片数据解码为 img.Image
+    // Decode the image data into an img.Image object
     img.Image? image = img.decodeImage(imageData);
 
-    // 调整大小为 640x640
+    // Resize the image to 640x640 pixels
     img.Image resizedImage = img.copyResize(image!, width: 640, height: 640);
 
-    // 将调整大小后的图像编码为 PNG 格式
+    // Encode the resized image into a PNG format and return as Uint8List
     return Uint8List.fromList(img.encodePng(resizedImage));
   }
 
-  // 发送图片到服务器进行分割
+  /// Sends the preprocessed image to the server for segmentation.
+  /// This method sends an HTTP POST request with the image data to the
+  /// Flask server. It also handles showing the loading indicator and
+  /// displaying any error or success messages using `Fluttertoast`.
   Future<void> _runModel() async {
     if (_imageData == null) {
+      // Show a message if no image is selected
       Fluttertoast.showToast(msg: 'Please select an image first.');
       return;
     }
 
     try {
-      // 显示加载指示器
+      // Show the EasyLoading indicator while the request is being processed
       EasyLoading.show(status: 'Processing...');
 
       print('Sending image for segmentation...');
 
-      // 准备图片数据
+      // Prepare the image data for the POST request
       var request = http.MultipartRequest('POST', Uri.parse(serverUrl));
       request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        _imageData!,
-        filename: 'image.jpg',
-        contentType: MediaType('image', 'jpeg'),
+        'file', // Field name in the request
+        _imageData!, // Image data to be sent
+        filename: 'image.jpg', // Filename to identify the image
+        contentType: MediaType('image', 'jpeg'), // Set the content type to JPEG
       ));
 
-      // 发送请求到服务器
+      // Send the POST request to the server
       var response = await request.send();
 
+      // Check if the response from the server is successful
       if (response.statusCode == 200) {
+        // Parse the response data
         var responseData = await http.Response.fromStream(response);
         var jsonResponse = jsonDecode(responseData.body);
 
-        // 服务器返回的分割图像为base64字符串
+        // The server returns the segmented image as a base64 string
         String base64Image = jsonResponse['image'];
         setState(() {
-          _maskImage = base64Decode(base64Image); // 解码并显示分割图像
+          // Decode the base64 string into an image and update the UI
+          _maskImage = base64Decode(base64Image);
         });
 
         print('Segmentation completed and image received');
 
-        // 显示完成的Toast
+        // Show a success message using Fluttertoast
         Fluttertoast.showToast(msg: 'Segmentation Complete');
       } else {
+        // Handle unsuccessful response
         print('Failed to get response from the server');
         Fluttertoast.showToast(msg: 'Segmentation Failed');
       }
     } catch (e) {
+      // Handle any errors that occur during the request
       print('Error running model: $e');
       Fluttertoast.showToast(msg: 'Error: ${e.toString()}');
     } finally {
-      // 隐藏加载指示器
+      // Hide the EasyLoading indicator when the request is complete
       EasyLoading.dismiss();
     }
   }
 
+  /// Builds the UI for the SamModelPage. It includes a layout for selecting
+  /// an image, running segmentation, and displaying both the original and
+  /// segmented images.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,7 +146,7 @@ class _SamModelPageState extends State<SamModelPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 显示分割后的图片（子窗口）
+            // If segmentation is complete, display the segmented image
             _maskImage != null
                 ? Container(
               margin: const EdgeInsets.all(20.0),
@@ -143,6 +165,7 @@ class _SamModelPageState extends State<SamModelPage> {
                     ),
                   ),
                   SizedBox(height: 10),
+                  // Display the segmented image
                   Image.memory(
                     _maskImage!,
                     fit: BoxFit.cover,
@@ -151,7 +174,8 @@ class _SamModelPageState extends State<SamModelPage> {
               ),
             )
                 : Container(),
-            // 提示文本，确保居中显示
+
+            // Instruction to choose the plant to analyze
             Container(
               margin: const EdgeInsets.fromLTRB(0, 20, 0, 10),
               child: const Center(
@@ -162,7 +186,8 @@ class _SamModelPageState extends State<SamModelPage> {
                 ),
               ),
             ),
-            // 显示选中的图片
+
+            // Display the selected image (if available)
             _imageData == null
                 ? Text('No image selected.')
                 : Container(
@@ -173,13 +198,15 @@ class _SamModelPageState extends State<SamModelPage> {
               ),
             ),
             SizedBox(height: 20),
-            // 选择图片按钮
+
+            // Button to pick an image from the gallery
             ElevatedButton(
               onPressed: _pickImage,
               child: Text('Pick Image'),
             ),
             SizedBox(height: 10),
-            // 运行分割按钮
+
+            // Button to run segmentation on the selected image
             ElevatedButton(
               onPressed: _isModelLoaded ? _runModel : null,
               child: Text('Run Segmentation'),
