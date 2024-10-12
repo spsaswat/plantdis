@@ -337,11 +337,15 @@ class MyImagePickerState extends State<MyImagePicker> {
             children: <Widget>[
               Container(
                 margin: const EdgeInsets.fromLTRB(0, 20, 0, 10),
-                child: const Text(
-                  'Please choose the plant you want to analyse first',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                child: const Center(  // 使用 Center 小部件确保居中
+                  child: Text(
+                    'Please choose the plant you want to analyse first',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,  // 确保文本在容器内部居中对齐
+                  ),
                 ),
               ),
+
               Container(
                 margin: const EdgeInsets.fromLTRB(0, 10, 0, 20),
                 child: DropdownButton<String>(
