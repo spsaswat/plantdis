@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:http_parser/http_parser.dart'; // Import for supporting contentType
+import 'package:http_parser/http_parser.dart';
 
 /// This is a Flutter StatefulWidget that implements a page for
-/// selecting an image from the gallery, preprocessing it, sending it
-/// to a Flask server for segmentation, and displaying the result.
+/// selecting an image from the gallery, drawing a bounding box,
+/// sending it to a Flask server for segmentation, and displaying the result.
 class SamModelPage extends StatefulWidget {
   @override
   _SamModelPageState createState() => _SamModelPageState();
@@ -20,6 +21,11 @@ class _SamModelPageState extends State<SamModelPage> {
   Uint8List? _imageData; // Stores the selected or processed image data
   Uint8List? _maskImage; // Stores the result of the segmented image
   bool _isModelLoaded = true; // Tracks the model's loading state
+
+  // Bounding Box coordinates
+  Offset? _startPoint;
+  Offset? _endPoint;
+  bool _isDrawing = false;
 
   // URL to your Flask server for image segmentation
   String serverUrl = 'http://192.168.10.216:5000/predict';
@@ -50,6 +56,8 @@ class _SamModelPageState extends State<SamModelPage> {
       setState(() {
         _imageData = resizedImageData; // Update the UI with the resized image
         _maskImage = null; // Reset the mask image
+        _startPoint = null; // Clear previous bounding box
+        _endPoint = null;
       });
 
       print('Image picked and resized');
@@ -73,14 +81,20 @@ class _SamModelPageState extends State<SamModelPage> {
     return Uint8List.fromList(img.encodePng(resizedImage));
   }
 
-  /// Sends the preprocessed image to the server for segmentation.
-  /// This method sends an HTTP POST request with the image data to the
+  /// Sends the preprocessed image and bounding box coordinates to the server for segmentation.
+  /// This method sends an HTTP POST request with the image data and bbox coordinates to the
   /// Flask server. It also handles showing the loading indicator and
   /// displaying any error or success messages using `Fluttertoast`.
   Future<void> _runModel() async {
     if (_imageData == null) {
       // Show a message if no image is selected
       Fluttertoast.showToast(msg: 'Please select an image first.');
+      return;
+    }
+
+    final bbox = _getBoundingBox();
+    if (bbox == null) {
+      Fluttertoast.showToast(msg: 'Please draw a bounding box first.');
       return;
     }
 
@@ -98,6 +112,12 @@ class _SamModelPageState extends State<SamModelPage> {
         filename: 'image.jpg', // Filename to identify the image
         contentType: MediaType('image', 'jpeg'), // Set the content type to JPEG
       ));
+
+      // Add bounding box coordinates to the request
+      request.fields['x1'] = bbox[0].toString();
+      request.fields['y1'] = bbox[1].toString();
+      request.fields['x2'] = bbox[2].toString();
+      request.fields['y2'] = bbox[3].toString();
 
       // Send the POST request to the server
       var response = await request.send();
@@ -134,9 +154,41 @@ class _SamModelPageState extends State<SamModelPage> {
     }
   }
 
-  /// Builds the UI for the SamModelPage. It includes a layout for selecting
-  /// an image, running segmentation, and displaying both the original and
-  /// segmented images.
+  /// Handle the start of drawing
+  void _startDrawing(Offset startPoint) {
+    setState(() {
+      _startPoint = startPoint;
+      _isDrawing = true;
+    });
+  }
+
+  /// Handle the end of drawing
+  void _endDrawing(Offset endPoint) {
+    setState(() {
+      _endPoint = endPoint;
+      _isDrawing = false;
+    });
+  }
+
+  /// Clear the bounding box
+  void _clearBoundingBox() {
+    setState(() {
+      _startPoint = null;
+      _endPoint = null;
+    });
+  }
+
+  /// Get the bounding box coordinates
+  List<double>? _getBoundingBox() {
+    if (_startPoint == null || _endPoint == null) return null;
+    return [
+      _startPoint!.dx,
+      _startPoint!.dy,
+      _endPoint!.dx,
+      _endPoint!.dy,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,7 +198,7 @@ class _SamModelPageState extends State<SamModelPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // If segmentation is complete, display the segmented image
+            // Display the segmented image
             _maskImage != null
                 ? Container(
               margin: const EdgeInsets.all(20.0),
@@ -165,7 +217,6 @@ class _SamModelPageState extends State<SamModelPage> {
                     ),
                   ),
                   SizedBox(height: 10),
-                  // Display the segmented image
                   Image.memory(
                     _maskImage!,
                     fit: BoxFit.cover,
@@ -187,14 +238,43 @@ class _SamModelPageState extends State<SamModelPage> {
               ),
             ),
 
-            // Display the selected image (if available)
+            // Display the selected image with bounding box
             _imageData == null
                 ? Text('No image selected.')
-                : Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Image.memory(
-                _imageData!,
-                fit: BoxFit.cover,
+                : GestureDetector(
+              onPanStart: (details) {
+                final renderBox = context.findRenderObject() as RenderBox;
+                final localPosition = renderBox.globalToLocal(details.globalPosition);
+                _startDrawing(localPosition);
+              },
+              onPanUpdate: (details) {
+                final renderBox = context.findRenderObject() as RenderBox;
+                final localPosition = renderBox.globalToLocal(details.globalPosition);
+                setState(() {
+                  _endPoint = localPosition;
+                });
+              },
+              onPanEnd: (details) {
+                _endDrawing(_endPoint!);
+              },
+              child: Stack(
+                children: [
+                  Image.memory(
+                    _imageData!,
+                    fit: BoxFit.cover,
+                  ),
+                  if (_startPoint != null && _endPoint != null)
+                    CustomPaint(
+                      size: Size(
+                        MediaQuery.of(context).size.width,
+                        MediaQuery.of(context).size.width,
+                      ),
+                      painter: BoundingBoxPainter(
+                        startPoint: _startPoint!,
+                        endPoint: _endPoint!,
+                      ),
+                    ),
+                ],
               ),
             ),
             SizedBox(height: 20),
@@ -211,9 +291,40 @@ class _SamModelPageState extends State<SamModelPage> {
               onPressed: _isModelLoaded ? _runModel : null,
               child: Text('Run Segmentation'),
             ),
+            SizedBox(height: 10),
+
+            // Button to clear the bounding box
+            ElevatedButton(
+              onPressed: _clearBoundingBox,
+              child: Text('Clear Bounding Box'),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+// Custom painter to draw the bounding box
+class BoundingBoxPainter extends CustomPainter {
+  final Offset startPoint;
+  final Offset endPoint;
+
+  BoundingBoxPainter({required this.startPoint, required this.endPoint});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.red
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawRect(
+      Rect.fromPoints(startPoint, endPoint),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
