@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Prediction with Annotation</title>
+    <link href="{{ url_for('static', filename='tw.css') }}" rel="stylesheet">
+    <style>
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin: auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #canvas {
+            border: 1px solid #ddd;
+            display: none; /* Initially hidden */
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-100">
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-xl font-bold mb-4">Image Segmentation with Bounding Box</h1>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" style="display: none" placeholder="Select Image" name="file" accept="image/*" class="mb-4" required>
+            <button type="button" onclick="selectImage()" class="bg-blue-500 text-white py-2 px-4 rounded">Select Image</button>
+            <input type="hidden" name="annotatedImage" id="annotatedImage"> <!-- Hidden input for annotated image -->
+            <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded">Upload</button>
+        </form>
+        <div class="loader" id="loader"></div>
+        <div id="imageContainer" class="mt-4 flex flex-col justify-between relative">
+            <div id="originalImage" class="w-full p-2 relative">
+                <canvas id="canvas"></canvas>
+            </div>
+            <div id="result" class="w-full p-2"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let imgElement = new Image();
+        let startX = 0, startY = 0, endX = 0, endY = 0;
+        let isDrawing = false;
+
+
+        function selectImage(){
+            document.querySelector('input[type="file"]').click()
+        }
+
+        document.querySelector('input[type="file"]').onchange = function(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imgElement.src = e.target.result;
+                imgElement.onload = () => {
+                    canvas.width = imgElement.naturalWidth;
+                    canvas.height = imgElement.naturalHeight;
+                    const resultDiv = document.getElementById("result")
+                    resultDiv.setAttribute("style",`width:${imgElement.naturalWidth}px;height:${imgElement.naturalHeight}px`)
+                    ctx.drawImage(imgElement, 0, 0);
+                    canvas.style.display = 'block'; // Show the canvas
+                };
+            };
+            reader.readAsDataURL(file);
+        };
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+
+            const rect = canvas.getBoundingClientRect();
+            endX = e.clientX - rect.left;
+            endY = e.clientY - rect.top;
+
+            // Clear the canvas and redraw the image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(imgElement, 0, 0); // Redraw image
+            // Draw the rectangle
+            ctx.strokeStyle = 'green';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+            ctx.lineWidth = 3
+            const width = endX - startX;
+            const height = endY - startY;
+            ctx.fillRect(startX, startY, width, height);
+            ctx.strokeRect(startX, startY, width, height);
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        document.getElementById('uploadForm').onsubmit = async function(event) {
+            event.preventDefault();
+            document.getElementById('loader').style.display = 'block';
+
+            const formData = new FormData(this);
+            formData.append("x1", startX)
+            formData.append("x2",endX)
+            formData.append("y1", startY)
+            formData.append("y2",endY)
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (data.image) {
+                    document.getElementById('result').innerHTML = `<img src="data:image/jpeg;base64,${data.image}" class="mt-4 rounded border w-full">`;
+                } else {
+                    alert(data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        };
+    </script>
+</body>
+</html>
