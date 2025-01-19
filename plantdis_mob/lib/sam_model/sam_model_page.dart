@@ -29,7 +29,7 @@ class _SamModelPageState extends State<SamModelPage> {
 
   // URL to your Flask server for image segmentation
   // Replace '192.168.X.Y' with your host machine's Wi-Fi IP address
-  String serverUrl = 'http://192.168.56.1:8081/predict';
+  String serverUrl = 'http://192.168.X.Y:8081/predict';
 
   @override
   void initState() {
