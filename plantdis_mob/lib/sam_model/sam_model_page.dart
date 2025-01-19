@@ -28,7 +28,8 @@ class _SamModelPageState extends State<SamModelPage> {
   bool _isDrawing = false;
 
   // URL to your Flask server for image segmentation
-  String serverUrl = 'http://192.168.10.216:5000/predict';
+  // Replace '192.168.X.Y' with your host machine's Wi-Fi IP address
+  String serverUrl = 'http://192.168.56.1:8081/predict';
 
   @override
   void initState() {
@@ -201,29 +202,29 @@ class _SamModelPageState extends State<SamModelPage> {
             // Display the segmented image
             _maskImage != null
                 ? Container(
-              margin: const EdgeInsets.all(20.0),
-              padding: const EdgeInsets.all(10.0),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.blueAccent),
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Segmented Image',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                    margin: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.all(10.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.blueAccent),
+                      borderRadius: BorderRadius.circular(10.0),
                     ),
-                  ),
-                  SizedBox(height: 10),
-                  Image.memory(
-                    _maskImage!,
-                    fit: BoxFit.cover,
-                  ),
-                ],
-              ),
-            )
+                    child: Column(
+                      children: [
+                        Text(
+                          'Segmented Image',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Image.memory(
+                          _maskImage!,
+                          fit: BoxFit.cover,
+                        ),
+                      ],
+                    ),
+                  )
                 : Container(),
 
             // Instruction to choose the plant to analyze
@@ -241,42 +242,54 @@ class _SamModelPageState extends State<SamModelPage> {
             // Display the selected image with bounding box
             _imageData == null
                 ? Text('No image selected.')
-                : GestureDetector(
-              onPanStart: (details) {
-                final renderBox = context.findRenderObject() as RenderBox;
-                final localPosition = renderBox.globalToLocal(details.globalPosition);
-                _startDrawing(localPosition);
-              },
-              onPanUpdate: (details) {
-                final renderBox = context.findRenderObject() as RenderBox;
-                final localPosition = renderBox.globalToLocal(details.globalPosition);
-                setState(() {
-                  _endPoint = localPosition;
-                });
-              },
-              onPanEnd: (details) {
-                _endDrawing(_endPoint!);
-              },
-              child: Stack(
-                children: [
-                  Image.memory(
-                    _imageData!,
-                    fit: BoxFit.cover,
-                  ),
-                  if (_startPoint != null && _endPoint != null)
-                    CustomPaint(
-                      size: Size(
-                        MediaQuery.of(context).size.width,
-                        MediaQuery.of(context).size.width,
-                      ),
-                      painter: BoundingBoxPainter(
-                        startPoint: _startPoint!,
-                        endPoint: _endPoint!,
+                : SizedBox(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context)
+                        .size
+                        .width, // Match width to make it square
+                    child: GestureDetector(
+                      onPanStart: (details) {
+                        final renderBox =
+                            context.findRenderObject() as RenderBox;
+                        final localPosition =
+                            renderBox.globalToLocal(details.globalPosition);
+                        _startDrawing(localPosition);
+                      },
+                      onPanUpdate: (details) {
+                        final renderBox =
+                            context.findRenderObject() as RenderBox;
+                        final localPosition =
+                            renderBox.globalToLocal(details.globalPosition);
+                        setState(() {
+                          _endPoint = localPosition;
+                        });
+                      },
+                      onPanEnd: (details) {
+                        if (_endPoint != null) {
+                          _endDrawing(_endPoint!);
+                        }
+                      },
+                      child: Stack(
+                        children: [
+                          Image.memory(
+                            _imageData!,
+                            fit: BoxFit.cover,
+                          ),
+                          if (_startPoint != null && _endPoint != null)
+                            CustomPaint(
+                              size: Size(
+                                MediaQuery.of(context).size.width,
+                                MediaQuery.of(context).size.width,
+                              ),
+                              painter: BoundingBoxPainter(
+                                startPoint: _startPoint!,
+                                endPoint: _endPoint!,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
-              ),
-            ),
+                  ),
             SizedBox(height: 20),
 
             // Button to pick an image from the gallery
