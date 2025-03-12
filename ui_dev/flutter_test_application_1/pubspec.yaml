@@ -37,6 +37,7 @@ dependencies:
   flutter_svg: ^2.0.17
   lottie: ^3.3.1
   shared_preferences: ^2.5.2
+  lorem_ipsum: any
 
 dev_dependencies:
   flutter_test:

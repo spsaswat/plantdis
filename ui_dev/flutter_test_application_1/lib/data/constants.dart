@@ -14,9 +14,14 @@ class KTextStyle {
     fontWeight: FontWeight.bold,
   );
 
+  static const TextStyle termTealText = TextStyle(
+    color: Colors.teal,
+    fontSize: 16.0,
+    fontWeight: FontWeight.bold,
+  );
+
   static const TextStyle descriptionText = TextStyle(fontSize: 16.0);
 }
-
 
 class KKeys {
   static const String themeModeKey = "themeModeKey";
