@@ -15,59 +15,65 @@ class WelcomePage extends StatelessWidget {
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                spacing: 10,
-                children: [
-                  // HeroWidget(),
-                  Lottie.asset(
-                    "assets/lotties/welcome-leaf.json",
-                    height: 250.0,
-                    width: double.infinity,
-                  ),
-                  Text("PlantDis", style: KTextStyle.appTitle),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: Size(150, 50),
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) {
-                            return LoginPage();
-                          },
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return FractionallySizedBox(
+                    widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 10,
+                      children: [
+                        Lottie.asset(
+                          "assets/lotties/welcome-leaf.json",
+                          height: 250.0,
+                          width: double.infinity,
                         ),
-                      );
-                    },
-                    child: Text("Login"),
-                  ),
+                        Text("PlantDis", style: KTextStyle.appTitle),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: Size(150, 50),
+                            textStyle: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) {
+                                  return LoginPage();
+                                },
+                              ),
+                            );
+                          },
+                          child: Text("Login"),
+                        ),
 
-                  ElevatedButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: Size(150, 50),
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) {
-                            return RegisterPage();
+                        ElevatedButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: Size(150, 50),
+                            textStyle: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) {
+                                  return RegisterPage();
+                                },
+                              ),
+                            );
                           },
+                          child: Text("Register"),
                         ),
-                      );
-                    },
-                    child: Text("Register"),
-                  ),
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),

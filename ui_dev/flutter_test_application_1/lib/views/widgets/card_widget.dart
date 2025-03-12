@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
+import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
 
 import '../../data/constants.dart';
 
@@ -16,6 +17,7 @@ class CardWidget extends StatelessWidget {
   final String description;
   final String imgSrc;
   final bool completed;
+  final String uniqueId = UniqueKey().toString();
 
   final borderRadius = BorderRadius.circular(10);
 
@@ -34,7 +36,11 @@ class CardWidget extends StatelessWidget {
                   ? () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => SegmentPage(imgSrc: imgSrc,)),
+                      MaterialPageRoute(
+                        builder:
+                            (context) =>
+                                SegmentPage(imgSrc: imgSrc, id: uniqueId),
+                      ),
                     );
                   }
                   : null,
@@ -43,18 +49,23 @@ class CardWidget extends StatelessWidget {
             child: Row(
               spacing: 20.0,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3.0),
-                  child:
-                      completed
-                          ? Image.asset(imgSrc, width: 50.0)
-                          : Opacity(
-                            opacity: 0.75,
-                            child: Image.asset(
-                              'assets/images/loading_icon.jpg',
-                              width: 50.0,
+                SizedBox(
+                  width: 50.0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3.0),
+                    child:
+                        completed
+                            ? SegmentHero(
+                              imgSrc: 'assets/images/segmentation.png',
+                              id: uniqueId,
+                            )
+                            : Opacity(
+                              opacity: 0.75,
+                              child: Image.asset(
+                                'assets/images/loading_icon.jpg',
+                              ),
                             ),
-                          ),
+                  ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
