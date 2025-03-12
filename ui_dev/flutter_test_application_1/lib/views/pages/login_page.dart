@@ -33,48 +33,55 @@ class _LoginPageState extends State<LoginPage> {
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(50.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                spacing: 30.0,
-                children: [
-                  HeroWidget(title: "Login"),
-                  TextField(
-                    controller: controllerEmail,
-                    decoration: InputDecoration(
-                      hintText: "Username / Email",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return FractionallySizedBox(
+                    widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 25.0,
+                      children: [
+                        HeroWidget(title: "Login"),
+                        TextField(
+                          controller: controllerEmail,
+                          decoration: InputDecoration(
+                            hintText: "Username / Email",
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10.0),
+                            ),
+                          ),
+                          onEditingComplete: () {
+                            setState(() {});
+                          },
+                        ),
+                        TextField(
+                          controller: controllerPwd,
+                          decoration: InputDecoration(
+                            hintText: "Password",
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10.0),
+                            ),
+                          ),
+                          onEditingComplete: () {
+                            setState(() {});
+                          },
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: Size(150, 50),
+                            textStyle: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          // onPressed: () => onLoginPressed(),
+                          onPressed: () => onLoginPressedDummy(),
+                          child: Text("Get Started"),
+                        ),
+                      ],
                     ),
-                    onEditingComplete: () {
-                      setState(() {});
-                    },
-                  ),
-                  TextField(
-                    controller: controllerPwd,
-                    decoration: InputDecoration(
-                      hintText: "Password",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                    ),
-                    onEditingComplete: () {
-                      setState(() {});
-                    },
-                  ),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: Size(150, 50),
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    // onPressed: () => onLoginPressed(),
-                    onPressed: () => onLoginPressedDummy(),
-                    child: Text("Get Started"),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),

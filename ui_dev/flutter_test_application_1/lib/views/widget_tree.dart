@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test_application_1/data/constants.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'widgets/navbar_widget.dart';
 
 import '../data/notifiers.dart';
@@ -18,37 +17,7 @@ class WidgetTree extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.green,
-          title: Text("Plant Disease Detector"),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              padding: EdgeInsets.all(5.0),
-              icon: Icon(Icons.energy_savings_leaf_sharp),
-              onPressed: () => debugPrint("[Redirect to company page?]"),
-            ),
-            ValueListenableBuilder(
-              valueListenable: isDarkModeNotifier,
-              builder: (context, isDarkMode, child) {
-                return IconButton(
-                  padding: EdgeInsets.all(5.0),
-                  icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-                  onPressed: () async {
-                    isDarkModeNotifier.value = !isDarkModeNotifier.value;
-
-                    final SharedPreferences prefs =
-                        await SharedPreferences.getInstance();
-                    await prefs.setBool(
-                      KKeys.themeModeKey,
-                      isDarkModeNotifier.value,
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
+        appBar: AppbarWidget(),
 
         drawer: DrawerWidget(),
 
