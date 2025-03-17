@@ -16,15 +16,18 @@ class HeroWidget extends StatelessWidget {
           child: ValueListenableBuilder(
             valueListenable: isDarkModeNotifier,
             builder: (context, isDarkMode, child) {
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(5.0),
-                child: Image.asset(
-                  'assets/images/background.jpg',
-                  color: Colors.white,
-                  colorBlendMode:
-                      isDarkMode ? BlendMode.exclusion : BlendMode.softLight,
-                  width: double.infinity,
-                  fit: BoxFit.fitWidth,
+              return AspectRatio(
+                aspectRatio: 1920 / 1080,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5.0),
+                  child: Image.asset(
+                    'assets/images/background.jpg',
+                    color: Colors.white,
+                    colorBlendMode:
+                        isDarkMode ? BlendMode.exclusion : BlendMode.softLight,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               );
             },

@@ -53,6 +53,20 @@ class _MyAppState extends State<MyApp> {
 
 
 
+// ! HTTP (GET/POST)
+
+// ? Workaround: Diable web security at launch.
+// ? flutter run -d edge --web-browser-flag "--disable-web-security"
+
+// * The correct solution is from the server side to allow CORS from the requesting 
+// * domain and allow the needed methods, and credentials if needed.
+
+// Something along the lines of:
+// header('Access-Control-Allow-Origin: *');
+// header('Access-Control-Allow-Methods: GET, POST');
+// header("Access-Control-Allow-Headers: X-Requested-With");
+
+
 // ! GENERAL INFO
 
 // * EXPENSIVE
