@@ -69,8 +69,6 @@ class _LoginPageState extends State<LoginPage> {
                           },
                         ),
 
-                        SizedBox(height: 16),
-
                         TextField(
                           controller: controllerPwd,
                           decoration: InputDecoration(
@@ -84,8 +82,6 @@ class _LoginPageState extends State<LoginPage> {
                             setState(() {});
                           },
                         ),
-
-                        SizedBox(height: 24),
 
                         FilledButton(
                           style: FilledButton.styleFrom(
@@ -109,8 +105,6 @@ class _LoginPageState extends State<LoginPage> {
                                   : Text("Get Started"),
                         ),
 
-                        SizedBox(height: 16),
-
                         Row(
                           children: [
                             Expanded(child: Divider()),
@@ -129,8 +123,6 @@ class _LoginPageState extends State<LoginPage> {
                             Expanded(child: Divider()),
                           ],
                         ),
-
-                        SizedBox(height: 16),
 
                         GoogleSignInButton(
                           isLoading: _isGoogleSignInLoading,
