@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/services/auth_service.dart';
 import 'package:flutter_test_application_1/views/widget_tree.dart';
+import 'package:flutter_test_application_1/views/widgets/google_sign_in_button.dart';
 import 'package:flutter_test_application_1/views/widgets/hero_widget.dart';
 
 class LoginPage extends StatefulWidget {
@@ -12,10 +14,11 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   TextEditingController controllerEmail = TextEditingController();
   TextEditingController controllerPwd = TextEditingController();
+  bool _isLoading = false;
+  bool _isGoogleSignInLoading = false;
+  String? _errorMessage;
 
-  // TODO: Link to Database!!!
-  String testEmail = "yash";
-  String testPass = "pass";
+  final _authService = AuthService();
 
   @override
   void dispose() {
@@ -42,6 +45,17 @@ class _LoginPageState extends State<LoginPage> {
                       spacing: 25.0,
                       children: [
                         HeroWidget(title: "Login"),
+
+                        if (_errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: Text(
+                              _errorMessage!,
+                              style: TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+
                         TextField(
                           controller: controllerEmail,
                           decoration: InputDecoration(
@@ -54,6 +68,9 @@ class _LoginPageState extends State<LoginPage> {
                             setState(() {});
                           },
                         ),
+
+                        SizedBox(height: 16),
+
                         TextField(
                           controller: controllerPwd,
                           decoration: InputDecoration(
@@ -62,21 +79,71 @@ class _LoginPageState extends State<LoginPage> {
                               borderRadius: BorderRadius.circular(10.0),
                             ),
                           ),
+                          obscureText: true,
                           onEditingComplete: () {
                             setState(() {});
                           },
                         ),
+
+                        SizedBox(height: 24),
+
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            minimumSize: Size(150, 50),
+                            minimumSize: Size(double.infinity, 50),
                             textStyle: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          // onPressed: () => onLoginPressed(),
-                          onPressed: () => onLoginPressedDummy(),
-                          child: Text("Get Started"),
+                          onPressed: _isLoading ? null : () => onLoginPressed(),
+                          child:
+                              _isLoading
+                                  ? SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                  : Text("Get Started"),
+                        ),
+
+                        SizedBox(height: 16),
+
+                        Row(
+                          children: [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
+                              child: Text(
+                                "OR",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+
+                        SizedBox(height: 16),
+
+                        GoogleSignInButton(
+                          isLoading: _isGoogleSignInLoading,
+                          onSignInComplete: (isSuccess, errorMessage) {
+                            if (isSuccess) {
+                              navigateToHome();
+                            } else {
+                              setState(() {
+                                _isGoogleSignInLoading = false;
+                                _errorMessage = errorMessage;
+                              });
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -90,7 +157,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void onLoginPressedDummy() {
+  void navigateToHome() {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -102,17 +169,26 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void onLoginPressed() {
-    if (controllerEmail.text == testEmail && controllerPwd.text == testPass) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) {
-            return WidgetTree();
-          },
-        ),
-        (route) => false,
+  Future<void> onLoginPressed() async {
+    if (controllerEmail.text.isEmpty || controllerPwd.text.isEmpty) {
+      setState(() {
+        _errorMessage = "Please enter both email and password";
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _authService.signInWithEmailPassword(
+        controllerEmail.text,
+        controllerPwd.text,
       );
+
+      navigateToHome();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -121,17 +197,20 @@ class _LoginPageState extends State<LoginPage> {
           behavior: SnackBarBehavior.fixed,
         ),
       );
-    } else {
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString();
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Incorrect Credentials"),
+          content: Text("Login Failed: ${e.toString()}"),
           duration: Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
         ),
       );
-
-      controllerEmail.clear();
-      controllerPwd.clear();
     }
   }
 }

@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/Users/shaorouzongdu/plantdis/plantdis_flutter/linux"
+    "cmake.sourceDirectory": "/Users/shaorouzongdu/plantdis/plantdis_flutter/linux",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
