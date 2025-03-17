@@ -68,8 +68,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
 
-                        SizedBox(height: 16),
-
                         TextField(
                           controller: controllerPwd,
                           obscureText: true,
@@ -81,8 +79,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
 
-                        SizedBox(height: 16),
-
                         TextField(
                           controller: controllerConfirmPwd,
                           obscureText: true,
@@ -93,8 +89,6 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                         ),
-
-                        SizedBox(height: 24),
 
                         FilledButton(
                           style: FilledButton.styleFrom(
@@ -119,8 +113,6 @@ class _RegisterPageState extends State<RegisterPage> {
                                   : Text("Register"),
                         ),
 
-                        SizedBox(height: 16),
-
                         Row(
                           children: [
                             Expanded(child: Divider()),
@@ -139,9 +131,6 @@ class _RegisterPageState extends State<RegisterPage> {
                             Expanded(child: Divider()),
                           ],
                         ),
-
-                        SizedBox(height: 16),
-
                         GoogleSignInButton(
                           isLoading: _isGoogleSignInLoading,
                           onSignInComplete: (isSuccess, errorMessage) {

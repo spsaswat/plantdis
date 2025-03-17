@@ -34,7 +34,7 @@ class _WelcomePageState extends State<WelcomePage> {
                     widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 10,
+                      spacing: 15,
                       children: [
                         Lottie.asset(
                           "assets/lotties/welcome-leaf.json",
@@ -75,8 +75,6 @@ class _WelcomePageState extends State<WelcomePage> {
                           child: Text("Login"),
                         ),
 
-                        SizedBox(height: 12),
-
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             minimumSize: Size(double.infinity, 50),
@@ -98,8 +96,6 @@ class _WelcomePageState extends State<WelcomePage> {
                           child: Text("Register"),
                         ),
 
-                        SizedBox(height: 24),
-
                         Row(
                           children: [
                             Expanded(child: Divider()),
@@ -119,8 +115,6 @@ class _WelcomePageState extends State<WelcomePage> {
                           ],
                         ),
 
-                        SizedBox(height: 16),
-
                         GoogleSignInButton(
                           isLoading: _isGoogleSignInLoading,
                           onSignInComplete: (isSuccess, errorMessage) {
@@ -134,8 +128,6 @@ class _WelcomePageState extends State<WelcomePage> {
                             }
                           },
                         ),
-
-                        SizedBox(height: 16),
 
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
