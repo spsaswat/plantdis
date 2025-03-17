@@ -16,6 +16,7 @@ class SegmentPage extends StatelessWidget {
     return Scaffold(
       appBar: AppbarWidget(),
       body: Center(
+        heightFactor: 1,
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
