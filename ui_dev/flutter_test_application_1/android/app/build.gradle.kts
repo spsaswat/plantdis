@@ -11,10 +11,7 @@ android {
     ndkVersion = "27.0.12077973"
     namespace = "com.example.flutter_test_application_1"
     compileSdk = flutter.compileSdkVersion
-<<<<<<< Updated upstream
     ndkVersion = "27.0.12077973"
-=======
->>>>>>> Stashed changes
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:cross_file_image/cross_file_image.dart';
 import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -23,6 +24,7 @@ class WidgetTree extends StatefulWidget {
 
 class _WidgetTreeState extends State<WidgetTree> {
   XFile? xfile;
+  DatabaseService database = DatabaseService();
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,7 @@ class _WidgetTreeState extends State<WidgetTree> {
           doubleTapZoomable: true,
           onViewerDismissed: () {},
         );
+        database.uploadImage(xfile!);
       });
     }
   }
