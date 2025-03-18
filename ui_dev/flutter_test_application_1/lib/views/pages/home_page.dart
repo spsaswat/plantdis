@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/views/pages/processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/results_page.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
@@ -7,6 +8,8 @@ import '../widgets/hero_widget.dart';
 
 class HomePage extends StatelessWidget {
   HomePage({super.key});
+
+  final DatabaseService database = DatabaseService();
 
   final List<CardWidget> resultsList = List.generate(4, (index) {
     return CardWidget(

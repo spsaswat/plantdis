@@ -7,14 +7,14 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:748587653216:android:0ae8fc58b47b2dbe2b8b05",
+        "mobilesdk_app_id": "1:748587653216:android:64ad728a1dee03662b8b05",
         "android_client_info": {
           "package_name": "com.example.flutter_test_application_1"
         }
       },
       "oauth_client": [
         {
-          "client_id": "748587653216-rvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv.apps.googleusercontent.com",
+          "client_id": "748587653216-3fdjn59qrs56gh3qpojkgcna1tuobn4j.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -27,8 +27,51 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "748587653216-rvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv.apps.googleusercontent.com",
+              "client_id": "748587653216-3fdjn59qrs56gh3qpojkgcna1tuobn4j.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "748587653216-mgg38h9hae4umkjog7ensvretitoi777.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.spsaswat.plantdis.plantdisMob"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748587653216:android:0ae8fc58b47b2dbe2b8b05",
+        "android_client_info": {
+          "package_name": "com.spsaswat.plantdis.plantdis_mob"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "748587653216-3fdjn59qrs56gh3qpojkgcna1tuobn4j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQHSmvy5hkg4lUNxH0-HGo7Us4PUYJO_I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "748587653216-3fdjn59qrs56gh3qpojkgcna1tuobn4j.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "748587653216-mgg38h9hae4umkjog7ensvretitoi777.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.spsaswat.plantdis.plantdisMob"
+              }
             }
           ]
         }
@@ -36,4 +79,4 @@
     }
   ],
   "configuration_version": "1"
-} 
+}
