@@ -1,70 +1,120 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_test_application_1/services/database_service.dart';
+import 'package:flutter_test_application_1/models/plant_model.dart';
+import 'package:flutter_test_application_1/models/image_model.dart';
+import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/results_page.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
-
 import '../widgets/hero_widget.dart';
 
 class HomePage extends StatefulWidget {
-  HomePage({super.key});
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final DatabaseService database = DatabaseService();
-
-  final List<CardWidget> resultsList = List.generate(4, (index) {
-    return CardWidget(
-      title: "Basic Layout ${index + 1}",
-      description: "Basic Desc",
-      imgSrc: 'assets/images/segmentation.png',
-      completed: true,
-    );
-  });
-
-  late List<CardWidget> processingList = // List.empty(growable: true);
-  List.generate(7, (index) {
-    return CardWidget(
-      title: "Basic Layout ${index + 1}",
-      description: "Basic Desc",
-      imgSrc: 'assets/images/loading_icon.jpg',
-      completed: false,
-    );
-  });
-
-  late StreamController processingListController;
+  final PlantService _plantService = PlantService();
+  List<CardWidget> _completedPlantsList = [];
+  List<CardWidget> _pendingPlantsList = [];
+  bool _isLoading = true;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    processingListController = StreamController();
-    getImages();
+    _loadUserPlants();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-    processingListController.close();
-  }
+  Future<void> _loadUserPlants() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
 
-  void getImages() async {
-    var imageList = await database.getImages();
+    try {
+      // Load all plants
+      List<PlantModel> plants = await _plantService.getUserPlants();
 
-    for (int i = 0; i < imageList.length; i++) {
-      processingListController.sink.add(i);
-      processingList.add(
-        CardWidget(
-          title: "Image ${i + 1}",
-          description: "Processing",
-          imgSrc: imageList[i].fullPath,
-          completed: false,
-        ),
-      );
+      // Split plants into completed and pending based on status
+      var completedPlants =
+          plants.where((plant) => plant.status == 'completed').toList();
+      var pendingPlants =
+          plants
+              .where(
+                (plant) =>
+                    plant.status == 'pending' || plant.status == 'processing',
+              )
+              .toList();
+
+      // Load all images for these plants in one batch instead of per plant
+      Map<String, List<ImageModel>> plantImagesMap = {};
+
+      // Fetch images for all plants in one go
+      for (var plant in [...completedPlants, ...pendingPlants]) {
+        if (plant.images.isNotEmpty) {
+          try {
+            var images = await _plantService.getPlantImages(plant.plantId);
+            plantImagesMap[plant.plantId] = images;
+          } catch (e) {
+            print('Error fetching images for plant ${plant.plantId}: $e');
+            // Continue with other plants even if one fails
+            plantImagesMap[plant.plantId] = [];
+          }
+        } else {
+          plantImagesMap[plant.plantId] = [];
+        }
+      }
+
+      // Convert to CardWidget objects with fetched images
+      _completedPlantsList =
+          completedPlants.map((plant) {
+            var images = plantImagesMap[plant.plantId] ?? [];
+            var firstImage = images.isNotEmpty ? images.first : null;
+
+            return CardWidget(
+              title:
+                  plant.analysisResults?['plantName'] ??
+                  'Plant Analysis Results',
+              description:
+                  plant.analysisResults?['description'] ?? 'Analysis completed',
+              imgSrc: firstImage?.originalUrl ?? '',
+              completed: true,
+              imageId: firstImage?.imageId,
+              plantId: plant.plantId,
+            );
+          }).toList();
+
+      _pendingPlantsList =
+          pendingPlants.map((plant) {
+            var images = plantImagesMap[plant.plantId] ?? [];
+            var firstImage = images.isNotEmpty ? images.first : null;
+
+            return CardWidget(
+              title: 'Plant Analysis in Progress',
+              description:
+                  plant.status == 'processing'
+                      ? 'Processing'
+                      : 'Pending analysis',
+              imgSrc: firstImage?.originalUrl ?? '',
+              completed: false,
+              imageId: firstImage?.imageId,
+              plantId: plant.plantId,
+            );
+          }).toList();
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Error loading plants: $e';
+      });
+      print('Error loading plants: $e');
     }
   }
 
@@ -125,23 +175,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                     Divider(),
                     ...processingList.sublist(0, 2),
-                    // StreamBuilder(
-                    //   stream: processingListController.stream,
-                    //   builder: (context, snapshot) {
-                    //     if (snapshot.connectionState ==
-                    //         ConnectionState.waiting) {
-                    //       return CircularProgressIndicator.adaptive();
-                    //     } else {
-                    //       return ListView(
-                    //         children: [
-                    //           ...(processingList.length > 2
-                    //               ? processingList.sublist(0, 2)
-                    //               : processingList),
-                    //         ],
-                    //       );
-                    //     }
-                    //   },
-                    // ),
                   ],
                 ),
               );

@@ -11,18 +11,25 @@ class CardWidget extends StatelessWidget {
     required this.description,
     required this.imgSrc,
     required this.completed,
+    this.imageId,
+    this.plantId,
   });
 
   final String title;
   final String description;
   final String imgSrc;
   final bool completed;
+  final String? imageId;
+  final String? plantId;
   final String uniqueId = UniqueKey().toString();
 
   final borderRadius = BorderRadius.circular(10);
 
   @override
   Widget build(BuildContext context) {
+    // Use imageId if provided, otherwise use uniqueId
+    final id = imageId ?? uniqueId;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: 5.0),
@@ -38,8 +45,11 @@ class CardWidget extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder:
-                            (context) =>
-                                SegmentPage(imgSrc: imgSrc, id: uniqueId),
+                            (context) => SegmentPage(
+                              imgSrc: imgSrc,
+                              id: id,
+                              plantId: plantId,
+                            ),
                       ),
                     );
                   }
@@ -56,23 +66,59 @@ class CardWidget extends StatelessWidget {
                     child:
                         completed
                             ? SegmentHero(
-                              imgSrc: 'assets/images/segmentation.png',
-                              id: uniqueId,
+                              imgSrc:
+                                  imgSrc, // Use the actual image URL instead of a static asset
+                              id: id,
                             )
                             : Opacity(
                               opacity: 0.75,
-                              child: Image.asset(
-                                'assets/images/loading_icon.jpg',
+                              child: Image.network(
+                                imgSrc,
+                                loadingBuilder: (
+                                  context,
+                                  child,
+                                  loadingProgress,
+                                ) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: CircularProgressIndicator(
+                                      value:
+                                          loadingProgress.expectedTotalBytes !=
+                                                  null
+                                              ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  (loadingProgress
+                                                          .expectedTotalBytes ??
+                                                      1)
+                                              : null,
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Image.asset(
+                                    'assets/images/loading_icon.jpg',
+                                  );
+                                },
                               ),
                             ),
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: KTextStyle.titleTealText),
-                    Text(description, style: KTextStyle.descriptionText),
-                  ],
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 15.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: KTextStyle.titleTealText),
+                        Text(
+                          description,
+                          style: KTextStyle.descriptionText,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
