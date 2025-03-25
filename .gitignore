@@ -1,2 +1,6 @@
 # for ignoring all h5 files
 *.h5
+
+.idea
+
+.vscode
