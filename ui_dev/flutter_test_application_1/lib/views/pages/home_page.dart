@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/views/pages/processing_page.dart';
@@ -6,9 +8,14 @@ import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 
 import '../widgets/hero_widget.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   HomePage({super.key});
 
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   final DatabaseService database = DatabaseService();
 
   final List<CardWidget> resultsList = List.generate(4, (index) {
@@ -20,7 +27,8 @@ class HomePage extends StatelessWidget {
     );
   });
 
-  final List<CardWidget> processingList = List.generate(7, (index) {
+  late List<CardWidget> processingList = // List.empty(growable: true);
+  List.generate(7, (index) {
     return CardWidget(
       title: "Basic Layout ${index + 1}",
       description: "Basic Desc",
@@ -28,6 +36,37 @@ class HomePage extends StatelessWidget {
       completed: false,
     );
   });
+
+  late StreamController processingListController;
+
+  @override
+  void initState() {
+    super.initState();
+    processingListController = StreamController();
+    getImages();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    processingListController.close();
+  }
+
+  void getImages() async {
+    var imageList = await database.getImages();
+
+    for (int i = 0; i < imageList.length; i++) {
+      processingListController.sink.add(i);
+      processingList.add(
+        CardWidget(
+          title: "Image ${i + 1}",
+          description: "Processing",
+          imgSrc: imageList[i].fullPath,
+          completed: false,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +125,23 @@ class HomePage extends StatelessWidget {
                     ),
                     Divider(),
                     ...processingList.sublist(0, 2),
+                    // StreamBuilder(
+                    //   stream: processingListController.stream,
+                    //   builder: (context, snapshot) {
+                    //     if (snapshot.connectionState ==
+                    //         ConnectionState.waiting) {
+                    //       return CircularProgressIndicator.adaptive();
+                    //     } else {
+                    //       return ListView(
+                    //         children: [
+                    //           ...(processingList.length > 2
+                    //               ? processingList.sublist(0, 2)
+                    //               : processingList),
+                    //         ],
+                    //       );
+                    //     }
+                    //   },
+                    // ),
                   ],
                 ),
               );
