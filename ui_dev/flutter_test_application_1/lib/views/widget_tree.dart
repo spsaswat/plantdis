@@ -3,6 +3,7 @@ import 'package:cross_file_image/cross_file_image.dart';
 import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/services/database_service.dart';
+import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -13,10 +14,10 @@ import 'widgets/drawer_widget.dart';
 import 'pages/home_page.dart';
 import 'pages/profile_page.dart';
 
-List<Widget> pages = [HomePage(), ProfilePage()];
+List<Widget> pages = [HomePage(), ChatPage(), ProfilePage()];
 
 class WidgetTree extends StatefulWidget {
-  WidgetTree({super.key});
+  const WidgetTree({super.key});
 
   @override
   State<WidgetTree> createState() => _WidgetTreeState();
@@ -41,9 +42,16 @@ class _WidgetTreeState extends State<WidgetTree> {
           },
         ),
 
-        floatingActionButton: FloatingActionButton(
-          child: Icon(Icons.add_a_photo_rounded),
-          onPressed: () => _showCamera(),
+        floatingActionButton: ValueListenableBuilder(
+          valueListenable: selectedPageNotifier,
+          builder: (BuildContext context, dynamic selectedPage, Widget? child) {
+            return selectedPage == 0
+                ? FloatingActionButton(
+                  child: Icon(Icons.add_a_photo_rounded),
+                  onPressed: () => _showCamera(),
+                )
+                : SizedBox();
+          },
         ),
 
         bottomNavigationBar: NavBarWidget(),
