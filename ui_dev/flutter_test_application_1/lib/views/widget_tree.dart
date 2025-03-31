@@ -1,14 +1,9 @@
 import 'package:camera/camera.dart';
-import 'package:cross_file_image/cross_file_image.dart';
-import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
-<<<<<<< Updated upstream
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
-=======
 import 'package:flutter_test_application_1/utils/web_utils.dart';
->>>>>>> Stashed changes
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -74,18 +69,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         return;
       }
 
-      // Request camera permission first if on web
-      if (kIsWeb) {
-        try {
-          await WebUtils.requestCameraPermission();
-        } catch (e) {
-          _showErrorDialog(
-            'Camera permission denied. Please allow camera access in your browser settings.',
-          );
-          return;
-        }
-      }
-
+      // Get available cameras
       final cameras = await availableCameras();
 
       if (cameras.isEmpty) {
@@ -101,24 +85,16 @@ class _WidgetTreeState extends State<WidgetTree> {
 
       if (!mounted) return;
 
-      final result = await Navigator.push(
-        context,
+      final xfile = await Navigator.of(context).push<XFile>(
         MaterialPageRoute(
           builder: (context) => TakePicturePage(camera: camera),
         ),
       );
 
-      if (result != null && mounted) {
+      if (xfile != null) {
         setState(() {
-          xfile = result as XFile;
-          showImageViewer(
-            context,
-            Image(image: XFileImage(xfile!)).image,
-            swipeDismissible: true,
-            doubleTapZoomable: true,
-            onViewerDismissed: () {},
-          );
-          database.uploadImage(xfile!);
+          this.xfile = xfile;
+          database.uploadImage(xfile);
         });
       }
     } catch (e) {
