@@ -14,72 +14,66 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
+// TODO: Implement user settings and preferences
 class _ProfilePageState extends State<ProfilePage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  String? _userName;
+  String? _userEmail;
+  String? _avatarUrl;
 
-  Future<Map<String, dynamic>> _getUserData() async {
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('Not authenticated');
-    }
-
-    try {
-      // Get user document from Firestore
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (!doc.exists) {
+    if (user != null) {
+      final userData = await _firestore.collection('users').doc(user.uid).get();
+      if (userData.exists) {
+        setState(() {
+          _userName = userData.data()?['name'] ?? 'User';
+          _userEmail = user.email;
+          _avatarUrl =
+              userData.data()?['avatarUrl'] ?? 'assets/avatars/botanist.png';
+        });
+      } else {
         // Create user document if it doesn't exist
         await _firestore.collection('users').doc(user.uid).set({
+          'name': user.displayName ?? 'User',
           'email': user.email,
-          'createdAt': DateTime.now(),
-          'plants': [],
-          'avatarUrl': 'assets/avatars/farmer.png', // Default avatar
+          'avatarUrl': 'assets/avatars/botanist.png',
+          'createdAt': FieldValue.serverTimestamp(),
         });
-        return {
-          'email': user.email,
-          'plantsCount': 0,
-          'avatarUrl': 'assets/avatars/farmer.png',
-        };
+        setState(() {
+          _userName = user.displayName ?? 'User';
+          _userEmail = user.email;
+          _avatarUrl = 'assets/avatars/botanist.png';
+        });
       }
-
-      final data = doc.data()!;
-      return {
-        'email': user.email,
-        'plantsCount': (data['plants'] as List?)?.length ?? 0,
-        'createdAt': (data['createdAt'] as Timestamp?)?.toDate(),
-        'avatarUrl': data['avatarUrl'] ?? 'assets/avatars/farmer.png',
-      };
-    } catch (e) {
-      print('Error getting user data: $e');
-      throw Exception('Failed to load profile');
     }
   }
 
-  Future<void> _updateAvatar(String avatarUrl) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('Not authenticated');
-
+  Future<void> _updateAvatar(String newAvatarUrl) async {
+    final user = _auth.currentUser;
+    if (user != null) {
       await _firestore.collection('users').doc(user.uid).update({
-        'avatarUrl': avatarUrl,
+        'avatarUrl': newAvatarUrl,
       });
-
-      // Refresh the UI
-      setState(() {});
-    } catch (e) {
-      print('Error updating avatar: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update profile picture')),
-      );
+      setState(() {
+        _avatarUrl = newAvatarUrl;
+      });
     }
   }
 
-  void _showAvatarPicker(String? currentAvatarUrl) {
+  void _showAvatarPicker() {
     showDialog(
       context: context,
       builder:
           (context) => AvatarPickerDialog(
-            currentAvatarUrl: currentAvatarUrl,
+            currentAvatarUrl: _avatarUrl,
             onAvatarSelected: _updateAvatar,
           ),
     );
@@ -88,122 +82,125 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _getUserData(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final userData = snapshot.data!;
-          String avatarUrl = userData['avatarUrl'] ?? '';
-          bool isNetworkImage = avatarUrl.startsWith('http');
-
-          // Check if we need to use a fallback
-          if (avatarUrl.isEmpty || (!isNetworkImage && kIsWeb)) {
-            // Try to get fallback from WebUtils for web
-            if (kIsWeb) {
-              String? fallbackUrl = WebUtils.getFallbackImageUrl('farmer');
-              if (fallbackUrl != null) {
-                avatarUrl = fallbackUrl;
-                isNetworkImage = true; // Data URLs act like network images
-              }
-            }
-
-            if (avatarUrl.isEmpty) {
-              // If still empty, use icon as fallback
-              return _buildProfileContent(
-                userData,
-                Icon(
-                  Icons.account_circle,
-                  size: 100,
-                  color: Colors.blue.shade300,
-                ),
-              );
-            }
-          }
-
-          return _buildProfileContent(
-            userData,
-            GestureDetector(
-              onTap: () => _showAvatarPicker(avatarUrl),
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage:
-                        isNetworkImage ? NetworkImage(avatarUrl) : null,
-                    child:
-                        !isNetworkImage
-                            ? Image.asset(
-                              avatarUrl,
-                              errorBuilder: (context, error, stackTrace) {
-                                // If asset image fails to load, show icon
-                                return Icon(
-                                  Icons.account_circle,
-                                  size: 80,
-                                  color: Colors.blue.shade300,
-                                );
-                              },
-                            )
-                            : null,
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor,
-                        shape: BoxShape.circle,
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(height: 20),
+              GestureDetector(
+                onTap: _showAvatarPicker,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: AssetImage(
+                        _avatarUrl ?? 'assets/avatars/botanist.png',
                       ),
-                      child: Icon(Icons.edit, color: Colors.white, size: 16),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.edit, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+              SizedBox(height: 16),
+              Text(
+                _userName ?? 'Loading...',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                _userEmail ?? '',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              SizedBox(height: 32),
+              _buildCreditsSection(),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildProfileContent(
-    Map<String, dynamic> userData,
-    Widget avatarWidget,
-  ) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildCreditsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Avatar Credits',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Special thanks to the following artists for their beautiful avatars:',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 16),
+            _buildCreditItem(
+              'Botanist Avatar',
+              'Created by dDara - Flaticon',
+              'assets/avatars/botanist.png',
+            ),
+            _buildCreditItem(
+              'Farmer Avatar',
+              'Created by Amethyst prime - Flaticon',
+              'assets/avatars/farmer.png',
+            ),
+            _buildCreditItem(
+              'Gardener Avatar',
+              'Created by Umeicon - Flaticon',
+              'assets/avatars/gardener.png',
+            ),
+            _buildCreditItem(
+              'Plant Character',
+              'Created by jocularityart - Flaticon',
+              'assets/avatars/plant.png',
+            ),
+            _buildCreditItem(
+              'Forest Ranger Avatar',
+              'Created by Febrian Hidayat - Flaticon',
+              'assets/avatars/forest ranger.png',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreditItem(String title, String credit, String imagePath) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
         children: [
-          avatarWidget,
-          SizedBox(height: 20),
-          Text(
-            userData['name'] ?? 'Guest User',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Image.asset(imagePath, width: 40, height: 40),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
+                Text(
+                  credit,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: 10),
-          Text(
-            userData['email'] ?? 'No email provided',
-            style: TextStyle(fontSize: 16),
-          ),
-          SizedBox(height: 20),
-          ElevatedButton(onPressed: () => _signOut(), child: Text('Sign Out')),
         ],
       ),
     );
-  }
-
-  void _signOut() async {
-    await _auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-    }
   }
 }
