@@ -1,0 +1,83 @@
+# CodeRabbit configuration for plantdis project
+reviews:
+  # Configure which paths to review
+  path_filters:
+    # Flutter/Dart paths
+    - "ui_dev/flutter_test_application_1/**"
+    - "lib/**"
+    - "plantdis_flutter/**"
+    - "plantdis_mob/**"
+    # Python/ML paths
+    - "SAM-Model-Server-end/**"
+    - "mlhub/**"
+    - "ipynb/**"
+    # Test paths
+    - "test/**"
+    - "self_tests/**"
+
+  # Ignore certain files
+  ignore:
+    - "**/*.g.dart"  # Generated Dart files
+    - "**/*.freezed.dart"
+    - "**/*.pyc"
+    - "**/__pycache__/**"
+    - "**/build/**"
+    - "**/dist/**"
+    
+  # Auto review settings
+  auto_review:
+    enabled: true
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT REVIEW"
+      - "DRAFT"
+    
+  # Language-specific settings
+  language_settings:
+    dart:
+      type: flutter
+      analysis_level: deep
+      lint:
+        enabled: true
+        rules:
+          - avoid_print
+          - prefer_const_constructors
+          - prefer_final_fields
+      
+    python:
+      type: python
+      analysis_level: deep
+      lint:
+        enabled: true
+        rules:
+          - E  # pycodestyle errors
+          - F  # pyflakes
+          - W  # pycodestyle warnings
+      
+  # Review comment style
+  comment_style:
+    approach: collaborative
+    solution_focused: true
+    include_code_suggestions: true
+    
+  # Specify review coverage
+  review_coverage:
+    methods: true
+    classes: true
+    documentation: true
+    tests: true
+    
+  # Custom labels for PRs
+  labels:
+    performance: ["perf:", "performance:"]
+    bug: ["fix:", "bug:"]
+    feature: ["feat:", "feature:"]
+    documentation: ["docs:", "documentation:"]
+    
+  # Notification settings
+  notifications:
+    slack:
+      enabled: false  # Enable if you want Slack notifications
+    email:
+      enabled: true
+      on_review_complete: true 

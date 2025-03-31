@@ -7,6 +7,10 @@ import 'package:flutter_test_application_1/views/widgets/avatar_picker_dialog.da
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/utils/web_utils.dart';
 
+/// A page that displays and manages user profile information.
+///
+/// This widget handles user authentication state, profile data management,
+/// and avatar selection functionality.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -14,72 +18,113 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
+// TODO: Implement user settings and preferences
 class _ProfilePageState extends State<ProfilePage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  String? _userName;
+  String? _userEmail;
+  String? _avatarUrl;
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  Future<Map<String, dynamic>> _getUserData() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('Not authenticated');
-    }
-
-    try {
-      // Get user document from Firestore
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (!doc.exists) {
-        // Create user document if it doesn't exist
-        await _firestore.collection('users').doc(user.uid).set({
-          'email': user.email,
-          'createdAt': DateTime.now(),
-          'plants': [],
-          'avatarUrl': 'assets/avatars/farmer.png', // Default avatar
-        });
-        return {
-          'email': user.email,
-          'plantsCount': 0,
-          'avatarUrl': 'assets/avatars/farmer.png',
-        };
-      }
-
-      final data = doc.data()!;
-      return {
-        'email': user.email,
-        'plantsCount': (data['plants'] as List?)?.length ?? 0,
-        'createdAt': (data['createdAt'] as Timestamp?)?.toDate(),
-        'avatarUrl': data['avatarUrl'] ?? 'assets/avatars/farmer.png',
-      };
-    } catch (e) {
-      print('Error getting user data: $e');
-      throw Exception('Failed to load profile');
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
   }
 
-  Future<void> _updateAvatar(String avatarUrl) async {
+  /// Loads user data from Firestore and handles authentication state.
+  ///
+  /// This method:
+  /// 1. Checks for current user authentication
+  /// 2. Retrieves user data from Firestore
+  /// 3. Creates a new user document if one doesn't exist
+  /// 4. Updates the UI state accordingly
+  Future<void> _loadUserData() async {
     try {
       final user = _auth.currentUser;
-      if (user == null) throw Exception('Not authenticated');
-
-      await _firestore.collection('users').doc(user.uid).update({
-        'avatarUrl': avatarUrl,
-      });
-
-      // Refresh the UI
-      setState(() {});
+      if (user != null) {
+        final userData =
+            await _firestore.collection('users').doc(user.uid).get();
+        if (userData.exists) {
+          setState(() {
+            _userName = userData.data()?['name'] ?? 'User';
+            _userEmail = user.email;
+            _avatarUrl =
+                userData.data()?['avatarUrl'] ?? 'assets/avatars/botanist.png';
+            _isLoading = false;
+          });
+        } else {
+          await _createNewUserDocument(user);
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'No user logged in';
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('Error updating avatar: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update profile picture')),
-      );
+      setState(() {
+        _errorMessage = 'Error loading user data: ${e.toString()}';
+        _isLoading = false;
+      });
     }
   }
 
-  void _showAvatarPicker(String? currentAvatarUrl) {
+  /// Creates a new user document in Firestore with default values.
+  Future<void> _createNewUserDocument(User user) async {
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': user.displayName ?? 'User',
+        'email': user.email,
+        'avatarUrl': 'assets/avatars/botanist.png',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      setState(() {
+        _userName = user.displayName ?? 'User';
+        _userEmail = user.email;
+        _avatarUrl = 'assets/avatars/botanist.png';
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error creating user document: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Updates the user's avatar URL in Firestore and local state.
+  Future<void> _updateAvatar(String newAvatarUrl) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await _firestore.collection('users').doc(user.uid).update({
+          'avatarUrl': newAvatarUrl,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        });
+        if (mounted) {
+          setState(() {
+            _avatarUrl = newAvatarUrl;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating avatar: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  void _showAvatarPicker() {
     showDialog(
       context: context,
       builder:
           (context) => AvatarPickerDialog(
-            currentAvatarUrl: currentAvatarUrl,
+            currentAvatarUrl: _avatarUrl,
             onAvatarSelected: _updateAvatar,
           ),
     );
@@ -87,123 +132,157 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _getUserData(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final userData = snapshot.data!;
-          String avatarUrl = userData['avatarUrl'] ?? '';
-          bool isNetworkImage = avatarUrl.startsWith('http');
-
-          // Check if we need to use a fallback
-          if (avatarUrl.isEmpty || (!isNetworkImage && kIsWeb)) {
-            // Try to get fallback from WebUtils for web
-            if (kIsWeb) {
-              String? fallbackUrl = WebUtils.getFallbackImageUrl('farmer');
-              if (fallbackUrl != null) {
-                avatarUrl = fallbackUrl;
-                isNetworkImage = true; // Data URLs act like network images
-              }
-            }
-
-            if (avatarUrl.isEmpty) {
-              // If still empty, use icon as fallback
-              return _buildProfileContent(
-                userData,
-                Icon(
-                  Icons.account_circle,
-                  size: 100,
-                  color: Colors.blue.shade300,
-                ),
-              );
-            }
-          }
-
-          return _buildProfileContent(
-            userData,
-            GestureDetector(
-              onTap: () => _showAvatarPicker(avatarUrl),
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage:
-                        isNetworkImage ? NetworkImage(avatarUrl) : null,
-                    child:
-                        !isNetworkImage
-                            ? Image.asset(
-                              avatarUrl,
-                              errorBuilder: (context, error, stackTrace) {
-                                // If asset image fails to load, show icon
-                                return Icon(
-                                  Icons.account_circle,
-                                  size: 80,
-                                  color: Colors.blue.shade300,
-                                );
-                              },
-                            )
-                            : null,
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.edit, color: Colors.white, size: 16),
-                    ),
-                  ),
-                ],
+    if (_errorMessage != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(_errorMessage!),
+              ElevatedButton(
+                onPressed: _loadUserData,
+                child: const Text('Retry'),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: _showAvatarPicker,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: AssetImage(
+                        _avatarUrl ?? 'assets/avatars/botanist.png',
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _userName ?? 'Loading...',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                _userEmail ?? '',
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              _buildCreditsSection(),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildProfileContent(
-    Map<String, dynamic> userData,
-    Widget avatarWidget,
-  ) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildCreditsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Avatar Credits',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Special thanks to the following artists for their beautiful avatars:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            _buildCreditItem(
+              'Botanist Avatar',
+              'Created by dDara - Flaticon',
+              'assets/avatars/botanist.png',
+            ),
+            _buildCreditItem(
+              'Farmer Avatar',
+              'Created by Amethyst prime - Flaticon',
+              'assets/avatars/farmer.png',
+            ),
+            _buildCreditItem(
+              'Gardener Avatar',
+              'Created by Umeicon - Flaticon',
+              'assets/avatars/gardener.png',
+            ),
+            _buildCreditItem(
+              'Plant Character',
+              'Created by jocularityart - Flaticon',
+              'assets/avatars/plant.png',
+            ),
+            _buildCreditItem(
+              'Forest Ranger Avatar',
+              'Created by Febrian Hidayat - Flaticon',
+              'assets/avatars/forest ranger.png',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreditItem(String title, String credit, String imagePath) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
         children: [
-          avatarWidget,
-          SizedBox(height: 20),
-          Text(
-            userData['name'] ?? 'Guest User',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Image.asset(imagePath, width: 40, height: 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  credit,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: 10),
-          Text(
-            userData['email'] ?? 'No email provided',
-            style: TextStyle(fontSize: 16),
-          ),
-          SizedBox(height: 20),
-          ElevatedButton(onPressed: () => _signOut(), child: Text('Sign Out')),
         ],
       ),
     );
-  }
-
-  void _signOut() async {
-    await _auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-    }
   }
 }
