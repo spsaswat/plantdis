@@ -7,6 +7,10 @@ import 'package:flutter_test_application_1/views/widgets/avatar_picker_dialog.da
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/utils/web_utils.dart';
 
+/// A page that displays and manages user profile information.
+///
+/// This widget handles user authentication state, profile data management,
+/// and avatar selection functionality.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -21,6 +25,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _userName;
   String? _userEmail;
   String? _avatarUrl;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -28,43 +34,88 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserData();
   }
 
+  /// Loads user data from Firestore and handles authentication state.
+  ///
+  /// This method:
+  /// 1. Checks for current user authentication
+  /// 2. Retrieves user data from Firestore
+  /// 3. Creates a new user document if one doesn't exist
+  /// 4. Updates the UI state accordingly
   Future<void> _loadUserData() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final userData = await _firestore.collection('users').doc(user.uid).get();
-      if (userData.exists) {
-        setState(() {
-          _userName = userData.data()?['name'] ?? 'User';
-          _userEmail = user.email;
-          _avatarUrl =
-              userData.data()?['avatarUrl'] ?? 'assets/avatars/botanist.png';
-        });
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final userData =
+            await _firestore.collection('users').doc(user.uid).get();
+        if (userData.exists) {
+          setState(() {
+            _userName = userData.data()?['name'] ?? 'User';
+            _userEmail = user.email;
+            _avatarUrl =
+                userData.data()?['avatarUrl'] ?? 'assets/avatars/botanist.png';
+            _isLoading = false;
+          });
+        } else {
+          await _createNewUserDocument(user);
+        }
       } else {
-        // Create user document if it doesn't exist
-        await _firestore.collection('users').doc(user.uid).set({
-          'name': user.displayName ?? 'User',
-          'email': user.email,
-          'avatarUrl': 'assets/avatars/botanist.png',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         setState(() {
-          _userName = user.displayName ?? 'User';
-          _userEmail = user.email;
-          _avatarUrl = 'assets/avatars/botanist.png';
+          _errorMessage = 'No user logged in';
+          _isLoading = false;
         });
       }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading user data: ${e.toString()}';
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _updateAvatar(String newAvatarUrl) async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      await _firestore.collection('users').doc(user.uid).update({
-        'avatarUrl': newAvatarUrl,
+  /// Creates a new user document in Firestore with default values.
+  Future<void> _createNewUserDocument(User user) async {
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': user.displayName ?? 'User',
+        'email': user.email,
+        'avatarUrl': 'assets/avatars/botanist.png',
+        'createdAt': FieldValue.serverTimestamp(),
       });
       setState(() {
-        _avatarUrl = newAvatarUrl;
+        _userName = user.displayName ?? 'User';
+        _userEmail = user.email;
+        _avatarUrl = 'assets/avatars/botanist.png';
+        _isLoading = false;
       });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error creating user document: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Updates the user's avatar URL in Firestore and local state.
+  Future<void> _updateAvatar(String newAvatarUrl) async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await _firestore.collection('users').doc(user.uid).update({
+          'avatarUrl': newAvatarUrl,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        });
+        if (mounted) {
+          setState(() {
+            _avatarUrl = newAvatarUrl;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating avatar: ${e.toString()}')),
+        );
+      }
     }
   }
 
@@ -81,6 +132,27 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_errorMessage != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(_errorMessage!),
+              ElevatedButton(
+                onPressed: _loadUserData,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: SingleChildScrollView(
         child: Padding(
@@ -88,7 +160,7 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               GestureDetector(
                 onTap: _showAvatarPicker,
                 child: Stack(
@@ -103,27 +175,34 @@ class _ProfilePageState extends State<ProfilePage> {
                       bottom: 0,
                       right: 0,
                       child: Container(
-                        padding: EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: Theme.of(context).primaryColor,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.edit, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Text(
                 _userName ?? 'Loading...',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 _userEmail ?? '',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
               _buildCreditsSection(),
             ],
           ),
@@ -139,16 +218,16 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Avatar Credits',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 8),
-            Text(
+            const SizedBox(height: 8),
+            const Text(
               'Special thanks to the following artists for their beautiful avatars:',
               style: TextStyle(fontSize: 14),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             _buildCreditItem(
               'Botanist Avatar',
               'Created by dDara - Flaticon',
@@ -186,15 +265,18 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Row(
         children: [
           Image.asset(imagePath, width: 40, height: 40),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
                 Text(
                   credit,
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
