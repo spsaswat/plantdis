@@ -137,35 +137,15 @@ class _HomePageState extends State<HomePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("Results (${resultsList.length})"),
+                        Text("Results (${_completedPlantsList.length})"),
                         TextButton(
                           onPressed:
                               () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder:
-                                      (context) =>
-                                          ResultsPage(cardList: resultsList),
-                                ),
-                              ),
-                          child: Text("View all"),
-                        ),
-                      ],
-                    ),
-                    Divider(),
-                    ...resultsList.sublist(0, 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("Processing (${processingList.length})"),
-                        TextButton(
-                          onPressed:
-                              () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => ProcessingPage(
-                                        cardList: processingList,
+                                      (context) => ResultsPage(
+                                        cardList: _completedPlantsList,
                                       ),
                                 ),
                               ),
@@ -174,7 +154,28 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     Divider(),
-                    ...processingList.sublist(0, 2),
+                    // ..._completedPlantsList.sublist(0, 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("Processing (${_pendingPlantsList.length})"),
+                        TextButton(
+                          onPressed:
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => ProcessingPage(
+                                        cardList: _pendingPlantsList,
+                                      ),
+                                ),
+                              ),
+                          child: Text("View all"),
+                        ),
+                      ],
+                    ),
+                    Divider(),
+                    // ..._pendingPlantsList.sublist(0, 2),
                   ],
                 ),
               );
