@@ -9,7 +9,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
-  final List<String> _messages = ["Hi ! How can I help you?"];
+  final List<String> _messages = ["Hi! How can I help you?"];
 
   @override
   Widget build(BuildContext context) {

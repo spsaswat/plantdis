@@ -4,11 +4,8 @@ import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
-<<<<<<< Updated upstream
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
-=======
 import 'package:flutter_test_application_1/utils/web_utils.dart';
->>>>>>> Stashed changes
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -67,24 +64,24 @@ class _WidgetTreeState extends State<WidgetTree> {
   Future<void> _showCamera() async {
     try {
       // Check if camera is allowed on this connection
-      if (kIsWeb && !WebUtils.isCameraAllowed) {
-        _showErrorDialog(
-          'Camera access requires HTTPS or localhost. Please access the app using a secure connection.',
-        );
-        return;
-      }
+      // if (kIsWeb && !WebUtils.isCameraAllowed) {
+      //   _showErrorDialog(
+      //     'Camera access requires HTTPS or localhost. Please access the app using a secure connection.',
+      //   );
+      //   return;
+      // }
 
       // Request camera permission first if on web
-      if (kIsWeb) {
-        try {
-          await WebUtils.requestCameraPermission();
-        } catch (e) {
-          _showErrorDialog(
-            'Camera permission denied. Please allow camera access in your browser settings.',
-          );
-          return;
-        }
-      }
+      // if (kIsWeb) {
+      //   try {
+      //     await WebUtils.requestCameraPermission();
+      //   } catch (e) {
+      //     _showErrorDialog(
+      //       'Camera permission denied. Please allow camera access in your browser settings.',
+      //     );
+      //     return;
+      //   }
+      // }
 
       final cameras = await availableCameras();
 
