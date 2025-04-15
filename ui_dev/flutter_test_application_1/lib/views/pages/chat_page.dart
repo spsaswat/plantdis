@@ -10,7 +10,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
-  final List<String> _messages = ["Hi ! How can I help you?"];
+  final List<String> _messages = ["Hi! How can I help you?"];
   final List<bool> _isUserMessage = [false]; // false for AI, true for user
   bool _isLoading = false;
   
