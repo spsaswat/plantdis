@@ -1,8 +1,9 @@
 import 'dart:async';
-// ignore: avoid_web_libraries_in_flutter
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Web-specific imports
 import 'dart:html' as html;
 import 'dart:js' as js;
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class WebUtils {
   static Future<void> requestCameraPermission() async {
