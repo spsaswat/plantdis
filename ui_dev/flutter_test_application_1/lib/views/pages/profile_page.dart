@@ -244,11 +244,6 @@ class _ProfilePageState extends State<ProfilePage> {
               'assets/avatars/gardener.png',
             ),
             _buildCreditItem(
-              'Plant Character',
-              'Created by jocularityart - Flaticon',
-              'assets/avatars/plant.png',
-            ),
-            _buildCreditItem(
               'Forest Ranger Avatar',
               'Created by Febrian Hidayat - Flaticon',
               'assets/avatars/forest ranger.png',
