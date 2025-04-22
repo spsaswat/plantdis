@@ -24,11 +24,10 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
 
   // Predefined avatars based on personas
   final List<String> _presetAvatars = [
-    'assets/avatars/farmer.png', // Farmer persona
-    'assets/avatars/researcher.png', // Researcher persona
-    'assets/avatars/student.png', // Student persona
-    'assets/avatars/hobbyist.png', // Garden hobbyist persona
-    'assets/avatars/professional.png', // Agriculture professional
+    'assets/avatars/ranger.png',
+    'assets/avatars/farmer.png',
+    'assets/avatars/gardener.png',
+    'assets/avatars/botanist.png',
   ];
 
   Future<void> _uploadCustomImage() async {
