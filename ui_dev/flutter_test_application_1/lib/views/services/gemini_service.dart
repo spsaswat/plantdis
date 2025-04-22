@@ -18,7 +18,8 @@ class GeminiService {
   }
 
   // Private constructor to initialize the API
-  GeminiService._internal() : _apiKey = 'AIzaSyDfDxPC2xc06Qj9qriKp1TUlhLt-ek5Y3Q' {
+  GeminiService._internal()
+    : _apiKey = 'AIzaSyDfDxPC2xc06Qj9qriKp1TUlhLt-ek5Y3Q' {
     if (_apiKey.isEmpty) {
       developer.log('API Key is empty', error: 'API key not found');
       throw Exception('API key not found');
@@ -34,10 +35,7 @@ class GeminiService {
       try {
         developer.log('Trying model: $modelName');
 
-        _model = GenerativeModel(
-          model: modelName,
-          apiKey: _apiKey,
-        );
+        _model = GenerativeModel(model: modelName, apiKey: _apiKey);
 
         final prompt = '''
 I need information about the following plant disease-related question:
@@ -74,24 +72,27 @@ Important formatting requirements:
     // If all models failed
     return 'Error: Could not connect to any Gemini models. Please check your API key permissions.';
   }
-  
+
   // Helper method to clean and format the response text
   String _cleanResponseFormat(String text) {
     // Remove any markdown headers
     String cleaned = text.replaceAll(RegExp(r'#+\s+'), '');
-    
+
     // Standardize bullet points to simple dashes
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*[\*\-]\s+', multiLine: true), '- ');
-    
+    cleaned = cleaned.replaceAll(
+      RegExp(r'^\s*[\*\-]\s+', multiLine: true),
+      '- ',
+    );
+
     // Remove any code blocks
     cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
-    
+
     // Remove markdown emphasis (bold, italic)
     cleaned = cleaned.replaceAll(RegExp(r'[\_\*\`]'), '');
-    
+
     // Fix spacing - remove excessive newlines
     cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    
+
     // Trim extra whitespace
     return cleaned.trim();
   }
