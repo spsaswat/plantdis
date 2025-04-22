@@ -4,8 +4,9 @@ import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
+
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
-import 'package:flutter_test_application_1/utils/web_utils.dart';
+// import 'package:flutter_test_application_1/utils/web_utils.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -71,7 +72,7 @@ class _WidgetTreeState extends State<WidgetTree> {
       //   return;
       // }
 
-      // Request camera permission first if on web
+      // // Request camera permission first if on web
       // if (kIsWeb) {
       //   try {
       //     await WebUtils.requestCameraPermission();

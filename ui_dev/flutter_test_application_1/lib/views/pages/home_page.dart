@@ -154,7 +154,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     Divider(),
-                    // ..._completedPlantsList.sublist(0, 2),
+                    ..._completedPlantsList.take(2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -175,7 +175,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     Divider(),
-                    // ..._pendingPlantsList.sublist(0, 2),
+                    ..._pendingPlantsList.take(2),
                   ],
                 ),
               );
