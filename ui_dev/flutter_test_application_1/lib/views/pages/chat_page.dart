@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/gemini_service.dart';
+import '../services/openrouter_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -13,9 +14,28 @@ class _ChatPageState extends State<ChatPage> {
   final List<String> _messages = ["Hi! How can I help you?"];
   final List<bool> _isUserMessage = [false]; // false for AI, true for user
   bool _isLoading = false;
-  
+  late String _selectedModel;
+
+
+  final List<String> _models = [
+    "gemini-pro",
+    "gemini-1.5-pro",
+    "openrouter-mistral-7b",
+    "openrouter-claude-instant",
+  ];
+
+
   // Initialize Gemini service
   final GeminiService _geminiService = GeminiService();
+  // Initialize openrouter service
+  final OpenRouterService _openRouterService = OpenRouterService();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedModel = _models[0];
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +49,35 @@ class _ChatPageState extends State<ChatPage> {
               widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
               child: Column(
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10.0),
+                    child: Row(
+                      children: [
+                        Text("Select Model:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButton<String>(
+                            value: _selectedModel,
+                            isExpanded: true,
+                            onChanged: (String? newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedModel = newValue;
+                                });
+                              }
+                            },
+                            items: _models.map<DropdownMenuItem<String>>((String model) {
+                              return DropdownMenuItem<String>(
+                                value: model,
+                                child: Text(model),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   Expanded(
                     flex: 8,
                     child: Container(
@@ -145,8 +194,23 @@ class _ChatPageState extends State<ChatPage> {
     });
     
     try {
-      // Call Gemini API to get an answer
-      final answer = await _geminiService.getAnswer(text);
+      String answer;
+
+      if (_selectedModel.startsWith("gemini")) {
+        answer = await _geminiService.getAnswer(text);
+      }else if (_selectedModel.startsWith("openrouter")) {
+        String modelName;
+        if (_selectedModel == "openrouter-mistral-7b") {
+          modelName = "mistralai/mistral-7b-instruct";
+        } else if (_selectedModel == "openrouter-claude-instant") {
+          modelName = "anthropic/claude-instant-v1";
+        } else {
+          modelName = "mistralai/mistral-7b-instruct"; // fallback
+        }
+        answer = await _openRouterService.getAnswer(text, model: modelName);
+      } else {
+        answer = "Unknown model selected.";
+      }
       
       // Add AI response
       setState(() {
