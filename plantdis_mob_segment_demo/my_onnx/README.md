@@ -3,7 +3,9 @@
 A new Flutter project.
 
 ## Getting Started
-Please first download the (leaf_mask_rcnn.onnx)[https://anu365-my.sharepoint.com/:u:/g/personal/u7670021_anu_edu_au/ESFo4Dk_89xAvC28d8JXc0wBihtlitR60cfUnxZnwgvaNw?e=LHfAM6] model and put it in `assets/models`
+Please first download the [leaf_mask_rcnn.onnx](https://anu365-my.sharepoint.com/:u:/g/personal/u7670021_anu_edu_au/ESFo4Dk_89xAvC28d8JXc0wBihtlitR60cfUnxZnwgvaNw?e=LHfAM6) model and put it in `assets/models`.
+
+And you can change the image in `assets` to test different image.
 
 **Implementation Steps:**
 
