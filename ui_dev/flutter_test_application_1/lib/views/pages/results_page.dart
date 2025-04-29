@@ -26,7 +26,13 @@ class ResultsPage extends StatelessWidget {
                     children: [
                       HeroWidget(title: "Results"),
                       SizedBox(height: 10.0),
-                      ...cardList,
+                      if (cardList.isEmpty)
+                        Text(
+                          "No results available.",
+                          style: TextStyle(color: Colors.grey),
+                        )
+                      else
+                        ...cardList,
                     ],
                   ),
                 );

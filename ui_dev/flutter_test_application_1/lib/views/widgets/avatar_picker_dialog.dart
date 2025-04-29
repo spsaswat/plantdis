@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -49,16 +48,20 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      // Upload to Firebase Storage
-      final storageRef = FirebaseStorage.instance.ref().child(
-        'users/${user.uid}/profile/avatar.jpg',
-      );
+      // get bytes
+      final bytes = await image.readAsBytes();
 
-      await storageRef.putFile(
-        File(image.path),
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('users/${user.uid}/profile/avatar.jpg');
+
+      //  Upload byte instead of file
+      await storageRef.putData(
+        bytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
 
+      // 获取下载链接并返回
       final downloadUrl = await storageRef.getDownloadURL();
       widget.onAvatarSelected(downloadUrl);
       Navigator.of(context).pop();
@@ -72,6 +75,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
       });
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
