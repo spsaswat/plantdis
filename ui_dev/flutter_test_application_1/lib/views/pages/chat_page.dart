@@ -204,7 +204,7 @@ class _ChatPageState extends State<ChatPage> {
         } else if (_selectedModel == "openrouter-Qwen3--30b") {
           modelName = "qwen/qwen3-30b-a3b:free";
         } else {
-          modelName = "mistralai/mistral-7b-instruct"; // fallback
+          modelName = "qwen/qwen3-30b-a3b:free"; // fallback
         }
         answer = await _openRouterService.getAnswer(text, model: modelName);
       } else {
