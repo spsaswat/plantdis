@@ -23,7 +23,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
 
   // Predefined avatars based on personas
   final List<String> _presetAvatars = [
-    'assets/avatars/ranger.png',
+    'assets/avatars/forest ranger.png',
     'assets/avatars/farmer.png',
     'assets/avatars/gardener.png',
     'assets/avatars/botanist.png',
