@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
 
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
+import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 // import 'package:flutter_test_application_1/utils/web_utils.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
+import 'package:image_picker/image_picker.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
 
@@ -47,20 +49,88 @@ class _WidgetTreeState extends State<WidgetTree> {
 
         floatingActionButton: ValueListenableBuilder(
           valueListenable: selectedPageNotifier,
-          builder: (BuildContext context, dynamic selectedPage, Widget? child) {
+          builder: (context, selectedPage, child) {
             return selectedPage == 0
-                ? FloatingActionButton(
-                  child: Icon(Icons.add_a_photo_rounded),
+                ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton(
+                  heroTag: 'upload_image',
+                  child: Icon(Icons.photo_library),
+                  tooltip: 'Upload from Gallery',
+                  onPressed: () => _pickImageFromGallery(),
+                ),
+                SizedBox(height: 10),
+                FloatingActionButton(
+                  heroTag: 'take_picture',
+                  child: Icon(Icons.add_a_photo),
+                  tooltip: 'Take Picture',
                   onPressed: () => _showCamera(),
-                )
+                ),
+              ],
+            )
                 : SizedBox();
           },
         ),
+
 
         bottomNavigationBar: NavBarWidget(),
       ),
     );
   }
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85, // 压缩一点，兼顾传输速度
+      );
+
+      if (pickedFile == null) {
+        // 用户取消了
+        return;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        xfile = pickedFile;
+      });
+
+      final result = await database.uploadImage(xfile!);
+
+      if (!mounted) return;
+
+      showImageViewer(
+        context,
+        Image(image: XFileImage(xfile!)).image,
+        swipeDismissible: true,
+        doubleTapZoomable: true,
+        onViewerDismissed: () {},
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SegmentPage(
+            imgSrc: result['downloadUrl'],
+            id: result['imageId'],
+            plantId: result['plantId'],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorDialog(
+        'Error picking image: $e\n\nPlease make sure you have granted gallery access (Mobile) or file selection (Web) permissions.',
+      );
+    }
+  }
+
 
   Future<void> _showCamera() async {
     try {

@@ -1,10 +1,11 @@
-import 'dart:io';
-
+import 'dart:io' as io; // Alias to avoid conflict in web
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class DatabaseService {
   final User _user = FirebaseAuth.instance.currentUser!;
@@ -19,14 +20,11 @@ class DatabaseService {
 
   // Upload image to Firebase Storage and save metadata to Firestore
   Future<Map<String, dynamic>> uploadImage(
-    XFile image, {
-    String? plantType,
-    String? notes,
-  }) async {
+      XFile image, {
+        String? plantType,
+        String? notes,
+      }) async {
     try {
-      // Create a file from the XFile
-      File imageFile = File(image.path);
-
       // Create a unique filename
       String fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
@@ -37,18 +35,28 @@ class DatabaseService {
       // Create a reference to the storage location
       Reference storageRef = _storage.ref().child(storagePath);
 
-      // Upload the file with metadata
-      UploadTask uploadTask = storageRef.putFile(
-        imageFile,
-        SettableMetadata(contentType: "image/jpeg"),
-      );
+      UploadTask uploadTask;
+
+      if (kIsWeb) {
+        // Web: Read image bytes and upload
+        final bytes = await image.readAsBytes();
+        uploadTask = storageRef.putData(
+          bytes,
+          SettableMetadata(contentType: "image/jpeg"),
+        );
+      } else {
+        // Mobile: Create a file from the XFile and upload
+        io.File imageFile = io.File(image.path);
+        uploadTask = storageRef.putFile(
+          imageFile,
+          SettableMetadata(contentType: "image/jpeg"),
+        );
+      }
 
       uploadTask.snapshotEvents.listen((TaskSnapshot taskSnapshot) {
         switch (taskSnapshot.state) {
           case TaskState.running:
-            final progress =
-                100.0 *
-                (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
+            final progress = 100.0 * (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
             print("Upload is $progress% complete.");
             CircularProgressIndicator.adaptive();
             break;
@@ -59,15 +67,14 @@ class DatabaseService {
             print("Upload was cancelled");
             break;
           case TaskState.error:
-            // Handle unsuccessful uploads
             print("Upload encountered an error");
             break;
           case TaskState.success:
-            // Handle successful uploads on complete
             print("Upload Successful");
             break;
         }
       });
+
       // Wait for the upload to complete and get the download URL
       TaskSnapshot taskSnapshot = await uploadTask;
       String downloadUrl = await taskSnapshot.ref.getDownloadURL();
@@ -110,11 +117,11 @@ class DatabaseService {
     try {
       // Query the images collection for the current user's images
       QuerySnapshot querySnapshot =
-          await _images
-              .where('userId', isEqualTo: _user.uid)
-              .orderBy('uploadTime', descending: true)
-              .limit(limit)
-              .get();
+      await _images
+          .where('userId', isEqualTo: _user.uid)
+          .orderBy('uploadTime', descending: true)
+          .limit(limit)
+          .get();
 
       // Convert the query results to a List of Maps
       return querySnapshot.docs.map((doc) {
@@ -128,17 +135,17 @@ class DatabaseService {
 
   // Get images with a specific status (pending, processing, completed)
   Future<List<Map<String, dynamic>>> getImagesByStatus(
-    String status, {
-    int limit = 10,
-  }) async {
+      String status, {
+        int limit = 10,
+      }) async {
     try {
       QuerySnapshot querySnapshot =
-          await _images
-              .where('userId', isEqualTo: _user.uid)
-              .where('processingStatus', isEqualTo: status)
-              .orderBy('uploadTime', descending: true)
-              .limit(limit)
-              .get();
+      await _images
+          .where('userId', isEqualTo: _user.uid)
+          .where('processingStatus', isEqualTo: status)
+          .orderBy('uploadTime', descending: true)
+          .limit(limit)
+          .get();
 
       return querySnapshot.docs.map((doc) {
         return doc.data() as Map<String, dynamic>;
@@ -151,10 +158,10 @@ class DatabaseService {
 
   // Update image processing status and analysis results
   Future<void> updateImageAnalysis(
-    String imageId,
-    String status,
-    Map<String, dynamic>? results,
-  ) async {
+      String imageId,
+      String status,
+      Map<String, dynamic>? results,
+      ) async {
     try {
       await _images.doc(imageId).update({
         'processingStatus': status,
