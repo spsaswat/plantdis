@@ -19,7 +19,7 @@ class _ChatPageState extends State<ChatPage> {
 
   final List<String> _models = [
     "gemini-1.5-pro",
-    "openrouter-mistral-7b",
+    "openrouter-Llama4-Scout",
     "openrouter-Qwen3--30b",
   ];
 
@@ -199,8 +199,8 @@ class _ChatPageState extends State<ChatPage> {
         answer = await _geminiService.getAnswer(text);
       }else if (_selectedModel.startsWith("openrouter")) {
         String modelName;
-        if (_selectedModel == "openrouter-mistral-7b") {
-          modelName = "mistralai/mistral-7b-instruct";
+        if (_selectedModel == "openrouter-Llama4-Scout") {
+          modelName = "meta-llama/llama-4-scout:free";
         } else if (_selectedModel == "openrouter-Qwen3--30b") {
           modelName = "qwen/qwen3-30b-a3b:free";
         } else {

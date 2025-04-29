@@ -15,7 +15,7 @@ class DrawerWidget extends StatelessWidget {
           DrawerHeader(
             child: SizedBox(
               child: Image.asset(
-                'assets/images/appn_banner.jpg',
+                'assets/images/appn_banner.png',
                 color: Colors.white,
                 colorBlendMode: BlendMode.darken,
               ),
