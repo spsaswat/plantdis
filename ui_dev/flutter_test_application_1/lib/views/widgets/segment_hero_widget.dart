@@ -17,7 +17,7 @@ class SegmentHero extends StatelessWidget {
           onTap: () {
             showImageViewer(
               context,
-              Image.asset(imgSrc).image,
+              Image.network(imgSrc).image,
               swipeDismissible: true,
               doubleTapZoomable: true,
               onViewerDismissed: () {},
@@ -25,7 +25,7 @@ class SegmentHero extends StatelessWidget {
           },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(5.0),
-            child: Image.asset(
+            child: Image.network(
               imgSrc,
               width: double.infinity,
               fit: BoxFit.cover,
