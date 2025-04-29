@@ -18,10 +18,9 @@ class _ChatPageState extends State<ChatPage> {
 
 
   final List<String> _models = [
-    "gemini-pro",
     "gemini-1.5-pro",
     "openrouter-mistral-7b",
-    "openrouter-claude-instant",
+    "openrouter-Qwen3--30b",
   ];
 
 
@@ -202,8 +201,8 @@ class _ChatPageState extends State<ChatPage> {
         String modelName;
         if (_selectedModel == "openrouter-mistral-7b") {
           modelName = "mistralai/mistral-7b-instruct";
-        } else if (_selectedModel == "openrouter-claude-instant") {
-          modelName = "anthropic/claude-instant-v1";
+        } else if (_selectedModel == "openrouter-Qwen3--30b") {
+          modelName = "qwen/qwen3-30b-a3b:free";
         } else {
           modelName = "mistralai/mistral-7b-instruct"; // fallback
         }
