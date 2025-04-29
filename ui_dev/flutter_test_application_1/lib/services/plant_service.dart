@@ -1,8 +1,9 @@
-import 'dart:io';
+import 'dart:io' as io;
 import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import '../models/plant_model.dart';
 import '../models/image_model.dart';
 import '../utils/storage_utils.dart';
@@ -19,29 +20,36 @@ class PlantService {
 
   /// Upload a new plant image and create associated records
   Future<Map<String, dynamic>> uploadPlantImage(
-    XFile image, {
-    String? notes,
-    String? existingPlantId,
-  }) async {
+      XFile image, {
+        String? notes,
+        String? existingPlantId,
+      }) async {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      // Create a file from XFile
-      File imageFile = File(image.path);
-
-      // Generate IDs and get file info
       final String plantId = existingPlantId ?? StorageUtils.generatePlantId();
       final String imageId = StorageUtils.generateImageId();
-      final String extension = StorageUtils.getFileExtension(image.path);
 
-      if (!StorageUtils.isValidImageExtension(extension)) {
-        throw Exception(
-          'Invalid image format. Supported formats: jpg, jpeg, png',
-        );
+      // Determine extension
+      String extension;
+      if (kIsWeb) {
+        final mimeType = await image.mimeType;
+        if (mimeType == 'image/png') {
+          extension = 'png';
+        } else if (mimeType == 'image/jpeg') {
+          extension = 'jpg';
+        } else {
+          throw Exception('Invalid image format. Supported formats: jpg, jpeg, png');
+        }
+      } else {
+        extension = StorageUtils.getFileExtension(image.path);
+        if (!StorageUtils.isValidImageExtension(extension)) {
+          throw Exception('Invalid image format. Supported formats: jpg, jpeg, png');
+        }
       }
 
-      // Get storage path for original image
+      // Prepare storage path
       String storagePath = StorageUtils.getOriginalImagePath(
         user.uid,
         plantId,
@@ -49,26 +57,43 @@ class PlantService {
         extension,
       );
 
-      // Upload original image
       Reference storageRef = _storage.ref().child(storagePath);
-      UploadTask uploadTask = storageRef.putFile(
-        imageFile,
-        SettableMetadata(
-          contentType: StorageUtils.getContentType(extension),
-          customMetadata: {
-            'plantId': plantId,
-            'imageId': imageId,
-            'userId': user.uid,
-            'uploadTime': DateTime.now().toIso8601String(),
-          },
-        ),
-      );
+      UploadTask uploadTask;
 
-      // Wait for upload and get URL
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        uploadTask = storageRef.putData(
+          bytes,
+          SettableMetadata(
+            contentType: StorageUtils.getContentType(extension),
+            customMetadata: {
+              'plantId': plantId,
+              'imageId': imageId,
+              'userId': user.uid,
+              'uploadTime': DateTime.now().toIso8601String(),
+            },
+          ),
+        );
+      } else {
+        final io.File imageFile = io.File(image.path);
+        uploadTask = storageRef.putFile(
+          imageFile,
+          SettableMetadata(
+            contentType: StorageUtils.getContentType(extension),
+            customMetadata: {
+              'plantId': plantId,
+              'imageId': imageId,
+              'userId': user.uid,
+              'uploadTime': DateTime.now().toIso8601String(),
+            },
+          ),
+        );
+      }
+
       TaskSnapshot taskSnapshot = await uploadTask;
       String downloadUrl = await taskSnapshot.ref.getDownloadURL();
 
-      // Create image document
+      // Create Firestore document
       ImageModel imageModel = ImageModel(
         imageId: imageId,
         plantId: plantId,
@@ -76,14 +101,12 @@ class PlantService {
         originalUrl: downloadUrl,
         processedUrls: {},
         uploadTime: DateTime.now(),
-        metadata: {'cameraInfo': await image.mimeType, 'notes': notes},
+        metadata: {'notes': notes},
       );
 
       await _images.doc(imageId).set(imageModel.toMap());
 
-      // Create or update plant document
       if (existingPlantId == null) {
-        // New plant
         PlantModel plantModel = PlantModel(
           plantId: plantId,
           userId: user.uid,
@@ -94,12 +117,10 @@ class PlantService {
 
         await _plants.doc(plantId).set(plantModel.toMap());
 
-        // Update user's plants list
         await _users.doc(user.uid).update({
           'plants': FieldValue.arrayUnion([plantId]),
         });
       } else {
-        // Existing plant - update images list
         await _plants.doc(plantId).update({
           'images': FieldValue.arrayUnion([imageId]),
         });
@@ -118,7 +139,7 @@ class PlantService {
 
   /// Save a processed image
   Future<String> saveProcessedImage(
-    File processedImage,
+    io.File processedImage,
     String plantId,
     String originalImageId,
     String processType,

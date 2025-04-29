@@ -4,6 +4,7 @@ import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
+import 'package:flutter_test_application_1/services/plant_service.dart';
 
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
@@ -30,6 +31,8 @@ class WidgetTree extends StatefulWidget {
 
 class _WidgetTreeState extends State<WidgetTree> {
   XFile? xfile;
+  final PlantService _plantService = PlantService();
+
   DatabaseService database = DatabaseService();
 
   @override
@@ -87,11 +90,11 @@ class _WidgetTreeState extends State<WidgetTree> {
         source: ImageSource.gallery,
         maxWidth: 1024,
         maxHeight: 1024,
-        imageQuality: 85, // 压缩一点，兼顾传输速度
+        imageQuality: 85,
       );
 
       if (pickedFile == null) {
-        // 用户取消了
+        // User cancelled the picker
         return;
       }
 
@@ -101,28 +104,44 @@ class _WidgetTreeState extends State<WidgetTree> {
         xfile = pickedFile;
       });
 
-      final result = await database.uploadImage(xfile!);
-
-      if (!mounted) return;
-
-      showImageViewer(
-        context,
-        Image(image: XFileImage(xfile!)).image,
-        swipeDismissible: true,
-        doubleTapZoomable: true,
-        onViewerDismissed: () {},
-      );
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SegmentPage(
-            imgSrc: result['downloadUrl'],
-            id: result['imageId'],
-            plantId: result['plantId'],
-          ),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
         ),
       );
+
+      try {
+        final result = await _plantService.uploadPlantImage(
+          pickedFile,
+          notes: 'Uploaded from gallery',
+        );
+
+        if (!mounted) return;
+
+        Navigator.of(context).pop(); // Close loading dialog
+
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SegmentPage(
+              imgSrc: result['downloadUrl'],
+              id: result['imageId'],
+              plantId: result['plantId'],
+            ),
+          ),
+        );
+      } catch (uploadError) {
+        if (!mounted) return;
+
+        Navigator.of(context).pop();
+
+        _showErrorDialog(
+          'Error uploading image: $uploadError\n\nPlease try again later.',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
@@ -130,6 +149,9 @@ class _WidgetTreeState extends State<WidgetTree> {
       );
     }
   }
+
+
+
 
 
   Future<void> _showCamera() async {
