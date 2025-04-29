@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class OpenRouterService {
   static final OpenRouterService _instance = OpenRouterService._internal();
 
-  final String _apiKey = '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';
+  final String _apiKey = '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';
 
   factory OpenRouterService() {
     return _instance;
