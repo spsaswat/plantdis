@@ -4,8 +4,7 @@ import 'package:http/http.dart' as http;
 class OpenRouterService {
   static final OpenRouterService _instance = OpenRouterService._internal();
 
-  // don't use non-free model or it will show 401 error
-  final String _apiKey = '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';
+  final String _apiKey = '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';
 
   factory OpenRouterService() {
     return _instance;
@@ -13,7 +12,7 @@ class OpenRouterService {
 
   OpenRouterService._internal();
 
-  Future<String> getAnswer(String prompt, {String model = "mistralai/mistral-7b-instruct"}) async {
+  Future<String> getAnswer(String prompt, {String model = "qwen/qwen3-30b-a3b:free"}) async {
     final url = Uri.parse('https://openrouter.ai/api/v1/chat/completions');
 
     final headers = {
