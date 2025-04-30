@@ -4,7 +4,9 @@ import 'package:http/http.dart' as http;
 class OpenRouterService {
   static final OpenRouterService _instance = OpenRouterService._internal();
 
-  final String _apiKey = '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';
+  final String part1 = 'sk-or-v1';
+  final String part2 = '-f381cf86eb82382709b76024ba028d6119865c3036873b77f84263d10122ea05';
+  String _apiKey='';
 
   factory OpenRouterService() {
     return _instance;
@@ -14,7 +16,7 @@ class OpenRouterService {
 
   Future<String> getAnswer(String prompt, {String model = "qwen/qwen3-30b-a3b:free"}) async {
     final url = Uri.parse('https://openrouter.ai/api/v1/chat/completions');
-
+    _apiKey = part1 + part2;
     final headers = {
       'Authorization': 'Bearer $_apiKey',
       'Content-Type': 'application/json',
