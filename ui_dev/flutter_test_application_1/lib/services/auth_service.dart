@@ -34,12 +34,23 @@ class AuthService {
     String password,
   ) async {
     try {
+      // Get IP address before sign in
+      final ipAddress = await _userService.getUserIpAddress();
+
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      // Create or update user data in Firestore
-      await _userService.createOrUpdateUser(credential.user!);
+
+      // Create or update user data in Firestore with IP
+      await _userService.createOrUpdateUser(
+        credential.user!,
+        ipAddress: ipAddress,
+      );
+
+      // Link accounts with same IP
+      await _userService.linkAccountsByIp(credential.user!);
+
       return credential;
     } on FirebaseAuthException catch (e) {
       throw _handleFirebaseAuthException(e);
@@ -85,11 +96,20 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
 
+      // Get IP address before sign in
+      final ipAddress = await _userService.getUserIpAddress();
+
       // Sign in with credential
       final userCredential = await _auth.signInWithCredential(credential);
 
-      // Create or update user data in Firestore
-      await _userService.createOrUpdateUser(userCredential.user!);
+      // Create or update user data in Firestore with IP address
+      await _userService.createOrUpdateUser(
+        userCredential.user!,
+        ipAddress: ipAddress,
+      );
+
+      // Link accounts with same IP
+      await _userService.linkAccountsByIp(userCredential.user!);
 
       return userCredential;
     } catch (e) {
@@ -101,16 +121,23 @@ class AuthService {
   // Sign in anonymously (Guest Login)
   Future<UserCredential> signInAnonymously() async {
     try {
+      // Get IP address before sign in
+      final ipAddress = await _userService.getUserIpAddress();
+
       final userCredential = await _auth.signInAnonymously();
 
-      // Create or update user data in Firestore with additional guest info
+      // Create or update user data in Firestore with additional guest info and IP
       await _userService.createOrUpdateUser(
         userCredential.user!,
         additionalData: {
           'userType': 'guest',
           'guestSignInTime': FieldValue.serverTimestamp(),
         },
+        ipAddress: ipAddress,
       );
+
+      // Link accounts with same IP
+      await _userService.linkAccountsByIp(userCredential.user!);
 
       return userCredential;
     } on FirebaseAuthException catch (e) {

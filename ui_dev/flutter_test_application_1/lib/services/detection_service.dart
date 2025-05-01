@@ -88,6 +88,9 @@ class DetectionService {
           rawLabels
               .split(RegExp(r'\r?\n'))
               .where((e) => e.trim().isNotEmpty)
+              .map(
+                (label) => label.replaceAll(' ', '_'),
+              ) // Replace spaces with underscores
               .toList();
       if (kDebugMode) print('[DetectionService] Labels loaded from asset.');
 
