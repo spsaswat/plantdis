@@ -217,6 +217,11 @@ class PlantService {
         Map<String, dynamic> analysisData = {};
         if (detectionResults.isNotEmpty) {
           final topResult = detectionResults.first;
+          if (kDebugMode) {
+            print(
+              '[_runAnalysis] Top detection result: ${topResult.diseaseName} with confidence ${topResult.confidence}',
+            );
+          }
           analysisData = {
             'detectedDisease': topResult.diseaseName,
             'confidence': topResult.confidence,
@@ -225,11 +230,21 @@ class PlantService {
                 detectionResults.map((r) => r.toMap()).toList(), // Use .toMap()
           };
         } else {
+          if (kDebugMode) {
+            print(
+              '[_runAnalysis] Detection results array is empty! Using fallback result.',
+            );
+          }
           analysisData = {
             'detectedDisease': 'No disease detected',
             'confidence': 0.0,
             'detectionTimestamp': DateTime.now().toIso8601String(),
           };
+        }
+        if (kDebugMode) {
+          print(
+            '[_runAnalysis] Updating Firestore document for plant $plantId with analysis data: $analysisData',
+          );
         }
         await _plants.doc(plantId).update({
           'status': 'completed',
@@ -237,6 +252,18 @@ class PlantService {
           'lastAnalyzedImageId': imageId,
           'lastAnalyzedTimestamp': FieldValue.serverTimestamp(),
         });
+        // Verify the update was successful by reading the document back
+        if (kDebugMode) {
+          try {
+            final updatedDoc = await _plants.doc(plantId).get();
+            final data = updatedDoc.data() as Map<String, dynamic>?;
+            print(
+              '[_runAnalysis] Verification - updated document: status=${data?['status']}, analysisResults=${data?['analysisResults']}',
+            );
+          } catch (e) {
+            print('[_runAnalysis] Error verifying document update: $e');
+          }
+        }
         if (kDebugMode)
           print('[_runAnalysis] Updated plant $plantId status to completed.');
       } else {
