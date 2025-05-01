@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/data/constants.dart';
-import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
 import 'package:intl/intl.dart'; // Import for date formatting
@@ -12,12 +11,12 @@ class SegmentPage extends StatefulWidget {
     super.key,
     required this.imgSrc,
     required this.id,
-    this.plantId,
+    required this.plantId,
   });
 
   final String imgSrc;
   final String id;
-  final String? plantId;
+  final String plantId;
 
   @override
   State<SegmentPage> createState() => _SegmentPageState();
@@ -26,72 +25,6 @@ class SegmentPage extends StatefulWidget {
 class _SegmentPageState extends State<SegmentPage> {
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance; // Firestore instance
-  bool _isLoading = true;
-  String _errorMessage = '';
-  Map<String, dynamic>? _analysisResults;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPlantData();
-  }
-
-  Future<void> _loadPlantData() async {
-    if (widget.plantId == null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Plant ID not provided';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      // Fetch the specific plant document directly
-      DocumentSnapshot plantDoc =
-          await _firestore.collection('plants').doc(widget.plantId).get();
-
-      if (!plantDoc.exists) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Plant data not found (ID: ${widget.plantId})';
-        });
-        return;
-      }
-
-      // Convert Firestore data to PlantModel
-      PlantModel plant = PlantModel.fromMap(
-        plantDoc.data() as Map<String, dynamic>,
-      );
-
-      // Check if analysisResults exist
-      if (plant.analysisResults == null || plant.analysisResults!.isEmpty) {
-        print(
-          '[SegmentPage] Loaded plant ${widget.plantId}, but analysisResults are null or empty.',
-        );
-        // Keep loading false, but results map will be empty, leading to "No analysis results" message.
-        setState(() {
-          _analysisResults = {};
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _analysisResults = plant.analysisResults;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading specific plant data for ${widget.plantId}: $e');
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Error loading plant data: $e';
-      });
-    }
-  }
 
   // Helper function to format the timestamp
   String _formatTimestamp(String? timestamp) {
@@ -122,156 +55,213 @@ class _SegmentPageState extends State<SegmentPage> {
     // Define a low confidence threshold
     const double lowConfidenceThreshold = 0.1; // 10%
 
-    // Determine display state based on results and confidence
-    bool hasResults = _analysisResults != null && _analysisResults!.isNotEmpty;
-    double confidence = 0.0;
-    if (hasResults && _analysisResults!['confidence'] != null) {
-      confidence =
-          (_analysisResults!['confidence'] as num).toDouble(); // Ensure double
-    }
-    bool isLowConfidence = hasResults && confidence < lowConfidenceThreshold;
-    String detectedDisease = 'N/A'; // Initialize
-    if (hasResults) {
-      detectedDisease =
-          _analysisResults!['detectedDisease']?.toString() ?? 'N/A';
-    }
-
-    // **** Add Debug Prints ****
-    print('[SegmentPage build] plantId: ${widget.plantId}');
-    print('[SegmentPage build] isLoading: $_isLoading');
-    print('[SegmentPage build] errorMessage: $_errorMessage');
-    print('[SegmentPage build] _analysisResults: $_analysisResults');
-    print('[SegmentPage build] hasResults: $hasResults');
-    print('[SegmentPage build] confidence: $confidence');
-    print('[SegmentPage build] isLowConfidence: $isLowConfidence');
-    print('[SegmentPage build] detectedDisease: $detectedDisease');
-    // **** End Debug Prints ****
-
     return Scaffold(
       appBar: AppbarWidget(),
-      body: Center(
-        heightFactor: 1,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return FractionallySizedBox(
-                  widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
-                  child:
-                      _isLoading
-                          ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 20),
-                                Text('Loading plant analysis...'),
-                              ],
-                            ),
-                          )
-                          : _errorMessage.isNotEmpty
-                          ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  size: 48,
-                                  color: Colors.red,
-                                ),
-                                SizedBox(height: 20),
-                                Text(_errorMessage),
-                                SizedBox(height: 20),
-                                ElevatedButton(
-                                  onPressed: _loadPlantData,
-                                  child: Text('Try Again'),
-                                ),
-                              ],
-                            ),
-                          )
-                          : Column(
-                            spacing: 10.0,
-                            children: [
-                              SegmentHero(imgSrc: widget.imgSrc, id: widget.id),
-                              Container(
-                                width: double.infinity,
-                                padding: EdgeInsets.symmetric(vertical: 10.0),
-                                child: Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(15.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      spacing: 5.0,
-                                      children: [
-                                        Center(
-                                          child: Text(
-                                            "Analysis Results",
-                                            style: KTextStyle.titleTealText,
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          height: 10,
-                                        ), // Add some spacing
-                                        // --- Start Refactored Results Display ---
-                                        if (hasResults) ...[
-                                          if (detectedDisease ==
-                                              'No disease detected')
-                                            ListTile(
-                                              leading: Icon(
-                                                Icons.check_circle_outline,
-                                                color: Colors.green,
-                                              ),
-                                              title: Text('Analysis Completed'),
-                                              subtitle: Text(
-                                                'No disease detected above the confidence threshold.',
-                                              ),
-                                            )
-                                          else if (isLowConfidence)
-                                            _buildLowConfidenceInfo(
-                                              detectedDisease,
-                                              confidence,
-                                            )
-                                          else
-                                            _buildStandardResults(
-                                              detectedDisease,
-                                              confidence,
-                                            ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: _firestore.collection('plants').doc(widget.plantId).snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 20),
+                  Text('Loading plant data...'),
+                ],
+              ),
+            );
+          }
 
-                                          // Always show detection time if available
-                                          _buildResultTile(
-                                            icon: Icons.timer_outlined,
-                                            label: 'Detection Time',
-                                            value: _formatTimestamp(
-                                              _analysisResults!['detectionTimestamp']
-                                                  ?.toString(),
-                                            ),
-                                          ),
-                                        ] else
+          if (snapshot.hasError) {
+            print(
+              'Error in StreamBuilder for plant ${widget.plantId}: ${snapshot.error}',
+            );
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  SizedBox(height: 20),
+                  Text('Error loading plant data: ${snapshot.error}'),
+                  // Optional: Add a retry button if appropriate
+                ],
+              ),
+            );
+          }
+
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.warning_amber_outlined,
+                    size: 48,
+                    color: Colors.orange,
+                  ),
+                  SizedBox(height: 20),
+                  Text('Plant data not found (ID: ${widget.plantId})'),
+                ],
+              ),
+            );
+          }
+
+          // Data is available, parse it
+          final docData = snapshot.data!.data()!;
+          PlantModel plant = PlantModel.fromMap(docData);
+          Map<String, dynamic>? analysisResults = plant.analysisResults;
+          String status = plant.status;
+          // Read analysisError directly from the document data
+          String? analysisErrorMsg = docData['analysisError'] as String?;
+
+          // Determine display state based on results and confidence
+          bool hasResults =
+              analysisResults != null && analysisResults.isNotEmpty;
+          double confidence = 0.0;
+          if (hasResults && analysisResults!['confidence'] != null) {
+            confidence = (analysisResults['confidence'] as num).toDouble();
+          }
+          bool isLowConfidence =
+              hasResults && confidence < lowConfidenceThreshold;
+          String detectedDisease = 'N/A';
+          if (hasResults) {
+            detectedDisease =
+                analysisResults!['detectedDisease']?.toString() ?? 'N/A';
+          }
+
+          // Debug prints inside StreamBuilder
+          // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
+          // print('[SegmentPage StreamBuilder] status: $status');
+          // print('[SegmentPage StreamBuilder] analysisResults: $analysisResults');
+          // print('[SegmentPage StreamBuilder] hasResults: $hasResults');
+          // print('[SegmentPage StreamBuilder] confidence: $confidence');
+          // print('[SegmentPage StreamBuilder] detectedDisease: $detectedDisease');
+
+          return Center(
+            heightFactor: 1,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return FractionallySizedBox(
+                      widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
+                      child: Column(
+                        spacing: 10.0,
+                        children: [
+                          SegmentHero(imgSrc: widget.imgSrc, id: widget.id),
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(vertical: 10.0),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(15.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  spacing: 5.0,
+                                  children: [
+                                    Center(
+                                      child: Text(
+                                        "Analysis Results",
+                                        style: KTextStyle.titleTealText,
+                                      ),
+                                    ),
+                                    SizedBox(height: 10),
+                                    // Handle different statuses
+                                    if (status == 'processing' ||
+                                        status == 'analyzing')
+                                      ListTile(
+                                        leading: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                        title: Text('Analysis in progress...'),
+                                        subtitle: Text(
+                                          'Results will appear here shortly.',
+                                        ),
+                                      )
+                                    else if (status == 'error')
+                                      ListTile(
+                                        leading: Icon(
+                                          Icons.error_outline,
+                                          color: Colors.red,
+                                        ),
+                                        title: Text('Analysis Failed'),
+                                        subtitle: Text(
+                                          analysisErrorMsg ??
+                                              'An unknown error occurred.',
+                                        ),
+                                      )
+                                    // Display results if completed
+                                    else if (status == 'completed') ...[
+                                      if (hasResults) ...[
+                                        if (detectedDisease ==
+                                            'No disease detected')
                                           ListTile(
                                             leading: Icon(
-                                              Icons.info_outline,
-                                              color: Colors.grey,
+                                              Icons.check_circle_outline,
+                                              color: Colors.green,
                                             ),
-                                            title: Text(
-                                              "No analysis results available.",
-                                              style: KTextStyle.descriptionText,
+                                            title: Text('Analysis Completed'),
+                                            subtitle: Text(
+                                              'No disease detected above the confidence threshold.',
                                             ),
+                                          )
+                                        else if (isLowConfidence)
+                                          _buildLowConfidenceInfo(
+                                            detectedDisease,
+                                            confidence,
+                                          )
+                                        else
+                                          _buildStandardResults(
+                                            detectedDisease,
+                                            confidence,
                                           ),
-                                        // --- End Refactored Results Display ---
-                                      ],
-                                    ),
-                                  ),
+                                        // Always show detection time if available
+                                        _buildResultTile(
+                                          icon: Icons.timer_outlined,
+                                          label: 'Detection Time',
+                                          value: _formatTimestamp(
+                                            analysisResults!['detectionTimestamp']
+                                                ?.toString(),
+                                          ),
+                                        ),
+                                      ] else
+                                        ListTile(
+                                          leading: Icon(
+                                            Icons.info_outline,
+                                            color: Colors.grey,
+                                          ),
+                                          title: Text(
+                                            "No analysis results available.",
+                                          ),
+                                          subtitle: Text(
+                                            "The analysis completed, but no specific results were found.",
+                                          ),
+                                        ),
+                                    ] else // Handle other statuses like 'pending' or unknown
+                                      ListTile(
+                                        leading: Icon(
+                                          Icons.hourglass_empty,
+                                          color: Colors.grey,
+                                        ),
+                                        title: Text('Analysis Pending'),
+                                        subtitle: Text('Status: $status'),
+                                      ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                );
-              },
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
