@@ -3,6 +3,8 @@ import 'package:flutter_test_application_1/models/image_model.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
+import 'package:flutter_test_application_1/utils/ui_utils.dart';
+import 'dart:async'; // Import for TimeoutException
 
 import '../../data/constants.dart';
 
@@ -14,6 +16,7 @@ class CardWidget extends StatefulWidget {
     required this.completed,
     this.imageId,
     required this.plantId,
+    this.onDelete,
   });
 
   final String title;
@@ -21,6 +24,7 @@ class CardWidget extends StatefulWidget {
   final bool completed;
   final String? imageId;
   final String plantId;
+  final Function? onDelete;
 
   @override
   State<CardWidget> createState() => _CardWidgetState();
@@ -30,6 +34,7 @@ class _CardWidgetState extends State<CardWidget> {
   final PlantService _plantService = PlantService();
   Future<String?>? _imageUrlFuture;
   String? _heroTag;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -49,6 +54,71 @@ class _CardWidgetState extends State<CardWidget> {
     } catch (e) {
       print('Error fetching image URL for CardWidget ($plantId/$imageId): $e');
       return null;
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    if (_isDeleting) return; // Prevent multiple deletion attempts
+
+    final bool confirm = await UIUtils.showConfirmationDialog(
+      context: context,
+      title: 'Delete Item',
+      message:
+          'Are you sure you want to delete this ${widget.completed ? 'result' : 'processing item'}? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: Colors.red,
+    );
+
+    if (confirm) {
+      _deletePlant(context);
+    }
+  }
+
+  Future<void> _deletePlant(BuildContext context) async {
+    if (_isDeleting) return;
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      // Show the auto-dismissing deletion dialog
+      UIUtils.showDeletionDialog(
+        context,
+        'Deleting item...\nDeletion will continue in the background.',
+        timeoutSeconds: 3, // Show briefly
+      );
+
+      // Notify parent immediately to refresh the list
+      if (widget.onDelete != null) {
+        widget.onDelete!();
+      }
+
+      // Start deletion in background immediately
+      _plantService.deletePlant(widget.plantId).catchError((e) {
+        // Log background errors but don't bother the user
+        print("Background deletion error (CardWidget, ignored): $e");
+      });
+
+      // Reset deleting state immediately after triggering background task
+      // The visual feedback is the dialog and the item disappearing from the list.
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    } catch (e) {
+      // Handle any errors *before* deletion starts (e.g., showing dialog failed)
+      if (context.mounted) {
+        UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
+      }
+      // Ensure state is reset even if dialog fails
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
     }
   }
 
@@ -171,6 +241,17 @@ class _CardWidgetState extends State<CardWidget> {
                       ],
                     ),
                   ),
+                ),
+                // Delete button
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color:
+                        _isDeleting ? Colors.grey : Colors.red.withOpacity(0.7),
+                  ),
+                  // Disable button while _isDeleting is true
+                  onPressed: _isDeleting ? null : () => _confirmDelete(context),
+                  tooltip: 'Delete',
                 ),
               ],
             ),

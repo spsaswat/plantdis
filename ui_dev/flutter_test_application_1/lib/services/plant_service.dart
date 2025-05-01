@@ -418,48 +418,120 @@ class PlantService {
       // Get all images for this plant
       List<ImageModel> images = await getPlantImages(plantId);
 
-      // Delete all images from Storage
-      for (var image in images) {
-        // Delete original image
-        await _storage
-            .ref()
-            .child(
-              StorageUtils.getOriginalImagePath(
-                user.uid,
-                plantId,
-                image.imageId,
-                'jpg',
-              ),
-            )
-            .delete();
-
-        // Delete processed images
-        for (var processedUrl in image.processedUrls.entries) {
-          await _storage
-              .ref()
-              .child(
-                StorageUtils.getProcessedImagePath(
-                  user.uid,
-                  plantId,
-                  image.imageId,
-                  processedUrl.key,
-                  'jpg',
-                ),
-              )
-              .delete();
-        }
-
-        // Delete image document
-        await _images.doc(image.imageId).delete();
-      }
-
-      // Delete plant document
+      // Delete the Firestore documents first to ensure the operation completes even if storage fails
+      // Delete plant document first to prevent new operations on it
       await _plants.doc(plantId).delete();
 
       // Remove from user's plants list
       await _users.doc(user.uid).update({
         'plants': FieldValue.arrayRemove([plantId]),
       });
+
+      // Now delete the images (after the main documents are gone)
+      bool isLastImage = images.length <= 1;
+
+      for (var image in images) {
+        try {
+          // Delete image document first
+          await _images.doc(image.imageId).delete();
+
+          // Then try to delete the storage files with a timeout
+          // Delete original image with timeout
+          try {
+            await _storage
+                .ref()
+                .child(
+                  StorageUtils.getOriginalImagePath(
+                    user.uid,
+                    plantId,
+                    image.imageId,
+                    'jpg',
+                  ),
+                )
+                .delete()
+                .timeout(
+                  // Shorter timeout for normal images, longer for last image
+                  Duration(seconds: isLastImage ? 8 : 3),
+                  onTimeout: () {
+                    print(
+                      'Storage deletion timed out, continuing with operation',
+                    );
+                    return;
+                  },
+                )
+                .catchError((error) {
+                  if (error.toString().contains('object-not-found') ||
+                      error.toString().contains('Not Found')) {
+                    print(
+                      'Warning: Image file not found in storage, but continuing with deletion',
+                    );
+                    // Continue with deletion process
+                    return null;
+                  } else {
+                    // Log other errors but don't fail the whole operation
+                    print('Error deleting from storage: $error');
+                    return null;
+                  }
+                });
+          } catch (e) {
+            // Log but continue
+            print('Error deleting original image from storage: $e');
+          }
+
+          // Delete processed images with timeout
+          for (var processedUrl in image.processedUrls.entries) {
+            try {
+              await _storage
+                  .ref()
+                  .child(
+                    StorageUtils.getProcessedImagePath(
+                      user.uid,
+                      plantId,
+                      image.imageId,
+                      processedUrl.key,
+                      'jpg',
+                    ),
+                  )
+                  .delete()
+                  .timeout(
+                    // Shorter timeout for processed images
+                    const Duration(seconds: 2),
+                    onTimeout: () {
+                      print(
+                        'Processed image deletion timed out, continuing with operation',
+                      );
+                      return;
+                    },
+                  )
+                  .catchError((error) {
+                    if (error.toString().contains('object-not-found') ||
+                        error.toString().contains('Not Found')) {
+                      print(
+                        'Warning: Processed image file not found in storage, but continuing with deletion',
+                      );
+                      // Continue with deletion process
+                      return null;
+                    } else {
+                      // Log other errors but don't fail the whole operation
+                      print(
+                        'Error deleting processed image from storage: $error',
+                      );
+                      return null;
+                    }
+                  });
+            } catch (e) {
+              // Log but continue
+              print('Error deleting processed image from storage: $e');
+            }
+          }
+        } catch (e) {
+          print('Error deleting image: $e');
+          // Continue with other images instead of failing completely
+        }
+      }
+
+      // Operation is considered successful even if some storage deletions failed
+      // since the database entries are gone
     } catch (e) {
       print('Error deleting plant: $e');
       throw Exception('Failed to delete plant: $e');

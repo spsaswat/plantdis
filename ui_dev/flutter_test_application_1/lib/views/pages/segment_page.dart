@@ -5,6 +5,9 @@ import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dar
 import 'package:intl/intl.dart'; // Import for date formatting
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:flutter_test_application_1/models/plant_model.dart'; // Import PlantModel
+import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
+import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
+import 'dart:async'; // Import for TimeoutException
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -25,6 +28,8 @@ class SegmentPage extends StatefulWidget {
 class _SegmentPageState extends State<SegmentPage> {
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance; // Firestore instance
+  final PlantService _plantService =
+      PlantService(); // Plant service for deletion
 
   // Helper function to format the timestamp
   String _formatTimestamp(String? timestamp) {
@@ -92,17 +97,56 @@ class _SegmentPageState extends State<SegmentPage> {
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.warning_amber_outlined,
-                    size: 48,
-                    color: Colors.orange,
-                  ),
-                  SizedBox(height: 20),
-                  Text('Plant data not found (ID: ${widget.plantId})'),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(30.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.info_outline, // Changed icon
+                      size: 60,
+                      color: Colors.blueGrey, // Changed color
+                    ),
+                    SizedBox(height: 25),
+                    Text(
+                      'Plant Data Unavailable', // Changed title
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 15),
+                    Text(
+                      'This plant data (ID: ${widget.plantId}) cannot be displayed. It might have been deleted or is still processing.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[400], // Adjusted color
+                        height: 1.4, // Added line height
+                      ),
+                    ),
+                    SizedBox(height: 30),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.arrow_back),
+                      label: Text('Go Back'),
+                      style: ElevatedButton.styleFrom(
+                        // Use primary color for button background
+                        foregroundColor: Colors.white, // White text
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -129,6 +173,11 @@ class _SegmentPageState extends State<SegmentPage> {
             detectedDisease =
                 analysisResults!['detectedDisease']?.toString() ?? 'N/A';
           }
+
+          // Format the displayed disease name to show spaces instead of underscores
+          String displayDiseaseName = UIUtils.formatDiseaseName(
+            detectedDisease,
+          );
 
           // Debug prints inside StreamBuilder
           // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
@@ -179,6 +228,15 @@ class _SegmentPageState extends State<SegmentPage> {
                                         subtitle: Text(
                                           'Results will appear here shortly.',
                                         ),
+                                        trailing: IconButton(
+                                          icon: Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed:
+                                              () => _confirmDelete(context),
+                                          tooltip: 'Cancel analysis',
+                                        ),
                                       )
                                     else if (status == 'error')
                                       ListTile(
@@ -209,12 +267,12 @@ class _SegmentPageState extends State<SegmentPage> {
                                           )
                                         else if (isLowConfidence)
                                           _buildLowConfidenceInfo(
-                                            detectedDisease,
+                                            displayDiseaseName,
                                             confidence,
                                           )
                                         else
                                           _buildStandardResults(
-                                            detectedDisease,
+                                            displayDiseaseName,
                                             confidence,
                                           ),
                                         // Always show detection time if available
@@ -224,6 +282,31 @@ class _SegmentPageState extends State<SegmentPage> {
                                           value: _formatTimestamp(
                                             analysisResults!['detectionTimestamp']
                                                 ?.toString(),
+                                          ),
+                                        ),
+
+                                        // Add delete button
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 16.0,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              TextButton.icon(
+                                                style: TextButton.styleFrom(
+                                                  foregroundColor: Colors.red,
+                                                ),
+                                                icon: Icon(
+                                                  Icons.delete_outline,
+                                                ),
+                                                label: Text('Delete Result'),
+                                                onPressed:
+                                                    () =>
+                                                        _confirmDelete(context),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ] else
@@ -342,5 +425,53 @@ class _SegmentPageState extends State<SegmentPage> {
     if (confidence >= 0.7) return Colors.green.shade600;
     if (confidence >= 0.4) return Colors.orange.shade700;
     return Colors.red.shade600;
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final bool confirm = await UIUtils.showConfirmationDialog(
+      context: context,
+      title: 'Delete Analysis',
+      message:
+          'Are you sure you want to delete this analysis and its associated images? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: Colors.red,
+    );
+
+    if (confirm) {
+      _deletePlant(context);
+    }
+  }
+
+  Future<void> _deletePlant(BuildContext context) async {
+    try {
+      // Show the auto-dismissing deletion dialog
+      UIUtils.showDeletionDialog(
+        context,
+        'Deleting analysis...\nDeletion will continue in the background.',
+        timeoutSeconds: 3, // Show briefly
+      );
+
+      // Start deletion in background immediately
+      _plantService.deletePlant(widget.plantId).catchError((e) {
+        // Log background errors but don't bother the user
+        print("Background deletion error (SegmentPage, ignored): $e");
+      });
+
+      // Navigate back immediately
+      if (Navigator.of(context).canPop()) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          // Small delay before pop
+          if (context.mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+    } catch (e) {
+      // Handle any errors *before* deletion starts (e.g., showing dialog failed)
+      if (context.mounted) {
+        UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
+      }
+    }
   }
 }
