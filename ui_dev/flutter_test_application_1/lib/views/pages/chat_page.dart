@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/gemini_service.dart';
 import '../services/openrouter_service.dart';
+import '../services/chat_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -11,18 +12,14 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
-  final List<String> _messages = ["Hi! How can I help you?"];
-  final List<bool> _isUserMessage = [false]; // false for AI, true for user
+  //final List<String> _messages = ["Hi! How can I help you?"];
+  //final List<bool> _isUserMessage = [false];
   bool _isLoading = false;
   late String _selectedModel;
 
+  final ChatService _chatService = ChatService();
 
-  final List<String> _models = [
-    "gemini-1.5-pro",
-    "openrouter-Llama4-Scout",
-    "openrouter-Qwen3--30b",
-  ];
-
+  final List<String> _models = ["gemini-1.5-pro", "openrouter-Llama4-Scout"];
 
   // Initialize Gemini service
   final GeminiService _geminiService = GeminiService();
@@ -34,7 +31,6 @@ class _ChatPageState extends State<ChatPage> {
     super.initState();
     _selectedModel = _models[0];
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +48,10 @@ class _ChatPageState extends State<ChatPage> {
                     padding: const EdgeInsets.only(bottom: 10.0),
                     child: Row(
                       children: [
-                        Text("Select Model:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          "Select Model:",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         SizedBox(width: 10),
                         Expanded(
                           child: DropdownButton<String>(
@@ -65,13 +64,26 @@ class _ChatPageState extends State<ChatPage> {
                                 });
                               }
                             },
-                            items: _models.map<DropdownMenuItem<String>>((String model) {
-                              return DropdownMenuItem<String>(
-                                value: model,
-                                child: Text(model),
-                              );
-                            }).toList(),
+                            items:
+                                _models.map<DropdownMenuItem<String>>((
+                                  String model,
+                                ) {
+                                  return DropdownMenuItem<String>(
+                                    value: model,
+                                    child: Text(model),
+                                  );
+                                }).toList(),
                           ),
+                        ),
+                        // add clear button
+                        IconButton(
+                          icon: Icon(Icons.delete_outline),
+                          onPressed: () {
+                            setState(() {
+                              _chatService.clearMessages();
+                            });
+                          },
+                          tooltip: "Clear chat history",
                         ),
                       ],
                     ),
@@ -89,9 +101,12 @@ class _ChatPageState extends State<ChatPage> {
                         padding: const EdgeInsets.all(5.0),
                         child: ListView.builder(
                           shrinkWrap: true,
-                          itemCount: _messages.length + (_isLoading ? 1 : 0),
+                          itemCount:
+                              _chatService.messages.length +
+                              (_isLoading ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (_isLoading && index == _messages.length) {
+                            if (_isLoading &&
+                                index == _chatService.messages.length) {
                               // Show loading indicator
                               return ListTile(
                                 leading: CircleAvatar(
@@ -113,17 +128,19 @@ class _ChatPageState extends State<ChatPage> {
                                 ),
                               );
                             }
-                            
+
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: index >= _isUserMessage.length || !_isUserMessage[index] 
-                                    ? Colors.red 
-                                    : Colors.green,
-                                child: index >= _isUserMessage.length || !_isUserMessage[index] 
-                                    ? Text('A') 
-                                    : Text('U'),
+                                backgroundColor:
+                                    !_chatService.isUserMessage[index]
+                                        ? Colors.red
+                                        : Colors.green,
+                                child:
+                                    !_chatService.isUserMessage[index]
+                                        ? Text('A')
+                                        : Text('U'),
                               ),
-                              title: Text(_messages[index]),
+                              title: Text(_chatService.messages[index]),
                             );
                           },
                         ),
@@ -161,13 +178,14 @@ class _ChatPageState extends State<ChatPage> {
                                 backgroundColor: Colors.teal,
                               ),
                               icon: Icon(Icons.send),
-                              onPressed: _isLoading 
-                                  ? null 
-                                  : () {
-                                      if (_controller.text.isNotEmpty) {
-                                        _handleSubmitted(_controller.text);
-                                      }
-                                    },
+                              onPressed:
+                                  _isLoading
+                                      ? null
+                                      : () {
+                                        if (_controller.text.isNotEmpty) {
+                                          _handleSubmitted(_controller.text);
+                                        }
+                                      },
                             ),
                           ],
                         ),
@@ -186,43 +204,38 @@ class _ChatPageState extends State<ChatPage> {
   void _handleSubmitted(String text) async {
     // Add user message
     setState(() {
-      _messages.add(text);
-      _isUserMessage.add(true);
+      _chatService.addMessage(text, true);
       _controller.clear();
-      _isLoading = true;  // Show loading state
+      _isLoading = true; // Show loading state
     });
-    
+
     try {
       String answer;
 
       if (_selectedModel.startsWith("gemini")) {
         answer = await _geminiService.getAnswer(text);
-      }else if (_selectedModel.startsWith("openrouter")) {
+      } else if (_selectedModel.startsWith("openrouter")) {
         String modelName;
         if (_selectedModel == "openrouter-Llama4-Scout") {
           modelName = "meta-llama/llama-4-scout:free";
-        } else if (_selectedModel == "openrouter-Qwen3--30b") {
-          modelName = "qwen/qwen3-30b-a3b:free";
         } else {
-          modelName = "qwen/qwen3-30b-a3b:free"; // fallback
+          modelName = "meta-llama/llama-4-scout:free"; // fallback
         }
         answer = await _openRouterService.getAnswer(text, model: modelName);
       } else {
         answer = "Unknown model selected.";
       }
-      
+
       // Add AI response
       setState(() {
-        _messages.add(answer);
-        _isUserMessage.add(false);
-        _isLoading = false;  // Hide loading state
+        _chatService.addMessage(answer, false);
+        _isLoading = false; // Hide loading state
       });
     } catch (e) {
       // Handle errors
       setState(() {
-        _messages.add("Sorry, an error occurred: $e");
-        _isUserMessage.add(false);
-        _isLoading = false;  // Hide loading state
+        _chatService.addMessage("Sorry, an error occurred: $e", false);
+        _isLoading = false; // Hide loading state
       });
     }
   }
