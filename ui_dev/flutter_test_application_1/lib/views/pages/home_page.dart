@@ -77,7 +77,9 @@ class _HomePageState extends State<HomePage> {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // Waiting for connection
           return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -89,6 +91,7 @@ class _HomePageState extends State<HomePage> {
             ),
           );
         }
+
 
         final allPlants = snapshot.data!;
         final plantLists = _getPlantLists(allPlants);
