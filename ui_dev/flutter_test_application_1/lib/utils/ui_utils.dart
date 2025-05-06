@@ -35,25 +35,26 @@ class UIUtils {
   }
 
   /// Shows a deletion loading dialog that auto-dismisses.
-  static void showDeletionDialog(
-    BuildContext context,
-    String message, {
-    int timeoutSeconds = 5, // Shorter timeout now
-  }) {
-    // Create a timer that will auto-close the dialog
-    Timer? timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
-      // Ensure context is still valid before trying to pop
-      if (Navigator.of(context, rootNavigator: true).canPop()) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    });
+  static Future<void> showDeletionDialog(
+      BuildContext context,
+      String message, {
+        int timeoutSeconds = 5,
+      }) async {
+    final Completer<void> completer = Completer<void>();
 
     showDialog(
       context: context,
-      barrierDismissible: false, // User cannot dismiss manually
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
+        Future.delayed(Duration(seconds: timeoutSeconds), () {
+          if (Navigator.of(dialogContext).canPop()) {
+            Navigator.of(dialogContext).pop();
+            completer.complete();
+          }
+        });
+
         return WillPopScope(
-          onWillPop: () async => false, // Prevent back button from closing
+          onWillPop: () async => false,
           child: Dialog(
             backgroundColor: Colors.white,
             child: Padding(
@@ -61,31 +62,28 @@ class UIUtils {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 20),
                   Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.black87),
+                    style: const TextStyle(fontSize: 16, color: Colors.black87),
                   ),
-                  SizedBox(height: 10),
-                  Text(
-                    "Deletion continuing in background...", // Simpler message
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Deletion continuing in background...",
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
-                  // Removed Button
                 ],
               ),
             ),
           ),
         );
       },
-    ).then((_) {
-      // Ensure timer is cancelled when dialog is dismissed
-      timeoutTimer?.cancel();
-    });
-    // No completer or return value needed
+    );
+
+    return completer.future; // 确保 await 会在 auto-close 后继续
   }
 
   /// Shows a confirmation dialog with customizable actions
