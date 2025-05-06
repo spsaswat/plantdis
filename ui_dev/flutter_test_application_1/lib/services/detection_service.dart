@@ -537,4 +537,5 @@ class DetectionService {
     // _progressControllers.clear();
     // if (kDebugMode) print('[DetectionService] Cleared progress controllers.');
   }
+
 }
