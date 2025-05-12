@@ -8,6 +8,7 @@ import 'package:flutter_test_application_1/models/plant_model.dart'; // Import P
 import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
 import 'dart:async'; // Import for TimeoutException
+import '../services/openrouter_service.dart';
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -336,6 +337,18 @@ class _SegmentPageState extends State<SegmentPage> {
                               ),
                             ),
                           ),
+                          FutureBuilder<String>(
+                            future: _generateSuggestion(detectedDisease, confidence),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return _buildAiSuggestionBox('Generating AI suggestion...');
+                              } else if (snapshot.hasError) {
+                                return _buildAiSuggestionBox('Failed to generate suggestion.');
+                              } else {
+                                return _buildAiSuggestionBox(snapshot.data ?? 'No suggestion available.');
+                              }
+                            },
+                          ),
                         ],
                       ),
                     );
@@ -397,6 +410,75 @@ class _SegmentPageState extends State<SegmentPage> {
         ),
       ],
     );
+  }
+
+  // Widget to display AI suggestion box
+  Widget _buildAiSuggestionBox(String suggestion) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'AI Suggestion',
+                style: KTextStyle.titleTealText,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                suggestion,
+                style: KTextStyle.descriptionText,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Future<String> _generateSuggestion(String disease, double confidence) async {
+    // 1. If the result is background (not a leaf)
+    if (disease == 'Background_without_leaves') {
+      return 'Please upload an image that clearly shows a plant leaf.';
+    }
+
+    // 2. If confidence is below 80%
+    if (confidence < 0.8) {
+      return 'We are unable to determine whether this is a plant leaf or whether it is diseased. Please try uploading a clearer image.';
+    }
+
+    // 3. If the detected result is a healthy label
+    if (disease.endsWith('_healthy')) {
+      final plantName = disease.replaceAll('_healthy', '');
+      return 'Congratulations! Your $plantName leaf appears to be healthy!';
+    }
+
+    // 4. For specific plant diseases, call Gemini to generate advice
+
+    final prompt =
+        'What is the best way to identify, manage, or treat the plant disease "$disease"?';
+
+    try {
+      final response = await OpenRouterService().getAnswer(
+        prompt,
+        model: 'qwen/qwen3-30b-a3b:free',
+      );
+
+      // Basic cleanup if needed
+      if (response.isEmpty) {
+        return 'No suggestion could be generated for "$disease".';
+      }
+
+      return response;
+    } catch (e) {
+      return 'Error generating suggestion for "$disease": ${e.toString()}';
+    }
   }
 
   // Helper widget to build a consistent ListTile for each result item
