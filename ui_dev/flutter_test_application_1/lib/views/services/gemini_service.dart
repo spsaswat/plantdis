@@ -9,8 +9,8 @@ class GeminiService {
   // List of model names to try
   final List<String> _modelNames = [
     'gemini-1.5-pro',
-    'gemini-pro',
-    'gemini-1.0-pro',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
   ];
 
   factory GeminiService() {
@@ -27,7 +27,11 @@ class GeminiService {
   }
 
   // Send a question and get an answer
-  Future<String> getAnswer(String question) async {
+  // Added isPlantRelated parameter to control prompt type
+  Future<String> getAnswer(
+    String question, {
+    bool isPlantRelated = true,
+  }) async {
     developer.log('Sending question to Gemini: $question');
 
     // Try each model until one works
@@ -37,17 +41,33 @@ class GeminiService {
 
         _model = GenerativeModel(model: modelName, apiKey: _apiKey);
 
-        final prompt = '''
+        // Use different prompts based on whether the question is plant-related
+        String prompt;
+        if (isPlantRelated) {
+          // Original plant-related prompt
+          prompt = '''
 I need information about the following plant disease-related question:
 $question
 
 Important formatting requirements:
 1. Provide a brief 1-2 sentence direct answer first
-2. Then include 3-5 main points using simple bullet points with dash (-)
+2. Then include 3-4 main points using simple bullet points with dash (-)
 3. Keep the total response under 150 words
 4. Use plain text only - no markdown, headings, or special formatting
 5. Provide accurate, practical information for farmers and gardeners
 ''';
+        } else {
+          // General prompt for any question
+          prompt = '''
+Please answer the following question:
+$question
+
+Important formatting requirements:
+1. Keep the response concise and helpful
+2. Use plain text only - no markdown, headings, or special formatting
+3. Provide a direct and relevant answer
+''';
+        }
 
         final content = [Content.text(prompt)];
         developer.log('Sending request to Gemini API with model $modelName...');
