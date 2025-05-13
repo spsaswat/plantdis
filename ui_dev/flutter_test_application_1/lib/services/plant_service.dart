@@ -180,19 +180,28 @@ class PlantService {
     if (kDebugMode)
       print('[_runAnalysis] Starting for plant: $plantId, image: $imageId');
     try {
-      // 1. Check if the image file exists
+      // Check if the image file exists
       io.File inputFile = imageFile;
+
+      // For segmentation, we need to ensure the model is loaded and then run it
       try {
+        // 1. Check if the segmentation model is loaded
         if (kDebugMode) print('[_runAnalysis] Loading segmentation model…');
         await _segmentationService.loadModel();
         if (kDebugMode) print('[_runAnalysis] Running segmentation…');
+
+        // 2. Run segmentation on the image
         final io.File segFile = await _segmentationService.segment(imageFile);
         if (kDebugMode) print('[_runAnalysis] Segmentation output: ${segFile.path}');
+
+        // 3. Use the segmented image for detection
         inputFile = segFile;
       } catch (e) {
         if (kDebugMode) print('[_runAnalysis] Segmentation failed: $e');
       }
 
+
+      // For detection, we need to ensure the model is loaded and then run it
       // 1. Ensure model is loaded
       await _detectionService.loadModel();
       if (!_detectionService.isModelLoaded) {
