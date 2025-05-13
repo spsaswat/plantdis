@@ -4,11 +4,13 @@ import 'dart:math'; // Keep Random if needed for other logic, or remove if not.
 import 'package:flutter_test_application_1/models/detection_result.dart';
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:flutter_test_application_1/services/detection_service.dart'; // Use the correct service
+// import 'package:flutter_test_application_1/services/segmentation_service.dart';
 
 /// Service to handle ML model inference for plant disease detection.
 /// Provides progress feedback via stream during analysis.
 class InferenceService {
   // Use the correct TFLite Flutter service
+  // final SegmentationService _segmentationService = SegmentationService();
   final DetectionService _detectionService = DetectionService();
   final _random = Random(); // Still used for simulateAnalysis
 
@@ -23,6 +25,11 @@ class InferenceService {
     try {
       _updateProgress(AnalysisStage.preprocessing, 0.1, "Preparing...");
       await _detectionService.loadModel(); // Ensure model is loaded
+
+      // _updateProgress(AnalysisStage.preprocessing, 0.25, "Segmenting leaf...");
+      // await _segmentationService.loadModel();
+      // File segFile = await _segmentationService.segment(imageFile);
+      // print('Segmentation output at: ${segFile.path}');    
 
       _updateProgress(AnalysisStage.detecting, 0.4, "Detecting...");
       List<DetectionResult> results = await _detectionService.detect(imageFile);

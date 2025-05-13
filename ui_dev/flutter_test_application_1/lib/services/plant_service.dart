@@ -9,6 +9,7 @@ import '../models/image_model.dart';
 import '../models/detection_result.dart'; // Import DetectionResult model
 import '../utils/storage_utils.dart';
 import './detection_service.dart'; // Import DetectionService
+import './segmentation_service.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -17,6 +18,7 @@ class PlantService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DetectionService _detectionService = DetectionService();
+  final SegmentationService _segmentationService = SegmentationService();
 
   // Collection references
   CollectionReference get _plants => _firestore.collection('plants');
@@ -178,6 +180,19 @@ class PlantService {
     if (kDebugMode)
       print('[_runAnalysis] Starting for plant: $plantId, image: $imageId');
     try {
+      // 1. Check if the image file exists
+      io.File inputFile = imageFile;
+      try {
+        if (kDebugMode) print('[_runAnalysis] Loading segmentation model…');
+        await _segmentationService.loadModel();
+        if (kDebugMode) print('[_runAnalysis] Running segmentation…');
+        final io.File segFile = await _segmentationService.segment(imageFile);
+        if (kDebugMode) print('[_runAnalysis] Segmentation output: ${segFile.path}');
+        inputFile = segFile;
+      } catch (e) {
+        if (kDebugMode) print('[_runAnalysis] Segmentation failed: $e');
+      }
+
       // 1. Ensure model is loaded
       await _detectionService.loadModel();
       if (!_detectionService.isModelLoaded) {
@@ -188,7 +203,8 @@ class PlantService {
       await _plants.doc(plantId).update({'status': 'analyzing'});
 
       // 3. Perform detection (Await the result)
-      detectionResults = await _detectionService.detect(imageFile, plantId);
+      // detectionResults = await _detectionService.detect(imageFile, plantId);
+      detectionResults = await _detectionService.detect(inputFile, plantId);
 
       // If detect completes without error, proceed to update Firestore with results
       if (kDebugMode)
