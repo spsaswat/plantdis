@@ -8,7 +8,7 @@ import 'package:flutter_test_application_1/models/plant_model.dart'; // Import P
 import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
 import 'dart:async'; // Import for TimeoutException
-import '../services/openrouter_service.dart';
+import 'dart:io' as io;
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -201,6 +201,42 @@ class _SegmentPageState extends State<SegmentPage> {
                         spacing: 10.0,
                         children: [
                           SegmentHero(imgSrc: widget.imgSrc, id: widget.id),
+
+                          // Check for segmentation result in analysisResults
+                          if (hasResults &&
+                              analysisResults!['segmentationUrl'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 15.0),
+                              child: Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(15.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Center(
+                                        child: Text(
+                                          "Segmentation Result",
+                                          style: KTextStyle.titleTealText,
+                                        ),
+                                      ),
+                                      SizedBox(height: 15),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          5.0,
+                                        ),
+                                        child: Image.network(
+                                          analysisResults!['segmentationUrl'],
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
                           Container(
                             width: double.infinity,
                             padding: EdgeInsets.symmetric(vertical: 10.0),
