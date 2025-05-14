@@ -181,7 +181,7 @@ class PlantService {
     if (kDebugMode)
       print('[_runAnalysis] Starting for plant: $plantId, image: $imageId');
     try {
-      // 1. Check if the image file exists
+      // Check if the image file exists
       io.File inputFile = imageFile;
 
       try {
