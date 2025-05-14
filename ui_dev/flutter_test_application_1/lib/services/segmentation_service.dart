@@ -179,7 +179,7 @@ class SegmentationService {
       inputOrt.release();
       runOptions.release();
 
-      if (kDebugMode) print('[SegmentationService] Segmentation done: ${outFile.path}');
+      if (kDebugMode) print('[SegmentationService] Segmentation done, the result image is in: ${outFile.path}');
 
       // 8. Return the output mask file
       return outFile;
