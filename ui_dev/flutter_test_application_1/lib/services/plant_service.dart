@@ -9,7 +9,7 @@ import '../models/image_model.dart';
 import '../models/detection_result.dart'; // Import DetectionResult model
 import '../utils/storage_utils.dart';
 import './detection_service.dart'; // Import DetectionService
-import './segmentation_service.dart';
+import './segmentation_service.dart'; // Import SegmentationService
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -176,34 +176,42 @@ class PlantService {
   ) async {
     List<DetectionResult>? detectionResults;
     dynamic analysisError;
+    io.File? segFile; // Add this to store segmentation file
 
     if (kDebugMode)
       print('[_runAnalysis] Starting for plant: $plantId, image: $imageId');
     try {
       // 1. Check if the image file exists
       io.File inputFile = imageFile;
+
       try {
-        if (kDebugMode) print('[_runAnalysis] Loading segmentation model…');
+        if (kDebugMode) print('[_runAnalysis] Loading segmentation model...');
+        // Attempt to get segmentation result if available
+        // This is where your segmentation code is, as highlighted in the screenshot
+        // Keep your existing segmentation code here, which gets the segFile
         await _segmentationService.loadModel();
         if (kDebugMode) print('[_runAnalysis] Running segmentation…');
-        final io.File segFile = await _segmentationService.segment(imageFile);
-        if (kDebugMode) print('[_runAnalysis] Segmentation output: ${segFile.path}');
+        segFile = await _segmentationService.segment(imageFile);
+        // After obtaining segFile, you may want to save it to Firebase Storage
+        if (segFile != null && kDebugMode)
+          print('[_runAnalysis] Segmentation output: ${segFile.path}');
         inputFile = segFile;
       } catch (e) {
         if (kDebugMode) print('[_runAnalysis] Segmentation failed: $e');
+        // Continue with analysis even if segmentation fails
       }
+
 
       // 1. Ensure model is loaded
       await _detectionService.loadModel();
       if (!_detectionService.isModelLoaded) {
-        throw Exception('Model failed to load before analysis.');
+        throw Exception('Detection Model failed to load before analysis.');
       }
 
       // 2. Update status to analyzing (before starting detection)
       await _plants.doc(plantId).update({'status': 'analyzing'});
 
       // 3. Perform detection (Await the result)
-      // detectionResults = await _detectionService.detect(imageFile, plantId);
       detectionResults = await _detectionService.detect(inputFile, plantId);
 
       // If detect completes without error, proceed to update Firestore with results
@@ -245,6 +253,32 @@ class PlantService {
             'fullDetectionResults':
                 detectionResults.map((r) => r.toMap()).toList(), // Use .toMap()
           };
+
+          // If we have a segmentation file, upload it
+          if (segFile != null) {
+            try {
+              String segmentationUrl = await saveProcessedImage(
+                segFile,
+                plantId,
+                imageId,
+                'segmentation',
+              );
+
+              // Add the segmentation URL to the analysis data
+              analysisData['segmentationUrl'] = segmentationUrl;
+
+              if (kDebugMode) {
+                print(
+                  '[_runAnalysis] Uploaded segmentation image: $segmentationUrl',
+                );
+              }
+            } catch (e) {
+              if (kDebugMode) {
+                print('[_runAnalysis] Error uploading segmentation: $e');
+              }
+              // Continue even if segmentation upload fails
+            }
+          }
         } else {
           if (kDebugMode) {
             print(
