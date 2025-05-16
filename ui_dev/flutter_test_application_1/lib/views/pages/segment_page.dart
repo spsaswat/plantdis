@@ -9,6 +9,7 @@ import 'package:flutter_test_application_1/services/plant_service.dart'; // Impo
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
 import 'dart:async'; // Import for TimeoutException
 import 'dart:io' as io;
+import '../services/openrouter_service.dart';
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
