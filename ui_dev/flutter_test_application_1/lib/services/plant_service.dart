@@ -186,16 +186,22 @@ class PlantService {
 
       try {
         if (kDebugMode) print('[_runAnalysis] Loading segmentation model...');
-        // Attempt to get segmentation result if available
-        // This is where your segmentation code is, as highlighted in the screenshot
-        // Keep your existing segmentation code here, which gets the segFile
+
+        // Load the segmentation model
         await _segmentationService.loadModel();
         if (kDebugMode) print('[_runAnalysis] Running segmentation…');
-        segFile = await _segmentationService.segment(imageFile);
+
+        // Perform segmentation, useUnionMask is used to determine if we want to use the union mask
+        // or masks for each leaf.
+        segFile = await _segmentationService.segment(imageFile, useUnionMask: true);
+
         // After obtaining segFile, you may want to save it to Firebase Storage
         if (segFile != null && kDebugMode)
           print('[_runAnalysis] Segmentation output: ${segFile.path}');
+
+        // Update inputFile to the segmentation output so that it can be used for detection
         inputFile = segFile;
+
       } catch (e) {
         if (kDebugMode) print('[_runAnalysis] Segmentation failed: $e');
         // Continue with analysis even if segmentation fails
