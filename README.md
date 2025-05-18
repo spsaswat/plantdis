@@ -6,9 +6,9 @@ The objective of the project is to identify plant disease by using image of a pl
 <h2 align="center"> Mobile App Demo </h2>
 <br>
 <p align="center">
-<img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/tomato_lb_fin.gif" alt="Mob App Demo">
+  <img src="https://github.com/spsaswat/plantdis/raw/main/op_m_readme/Plantdis%20Demo%20App.gif" alt="Plantdis Demo App" width="800" height="600">
 </p>
-  
+
 <h2 align="center"> Desktop App Demo </h2>
 <br><p align="center"> <img src="https://github.com/spsaswat/plantdis/blob/main/op_m_readme/desk_demo.gif" alt="Desktop App Demo"> </p>
 
@@ -21,7 +21,7 @@ The knowledge in the diagram refers to weights. The weights in model layers will
 
 <h2 align="center"> Trained Models with weights(h5) </h2>
 <p align="center">
-1) <a href = "https://drive.google.com/uc?id=1N_oQbeEhxOqszt-u1v0IroiVhAwqaRh3&export=download">Tansfer Learning Based EfficientB2 - 21 Classes</a>
+1) <a href = "https://drive.google.com/file/d/11nEATbNc65LhLRJx1TvST9V9dh_ZG59j/view?usp=sharing">Transfer Learning Based EfficientB2 - 21 Classes</a>
 <br>
 2) <a href = "https://drive.google.com/file/d/1mAxgMNJZ2c_5c16YdAaQWZ5H06BuBAF9/view?usp=sharing">Nested Tansfer Learning Based EfficientB2 - 22 Classes</a>
 </p>
