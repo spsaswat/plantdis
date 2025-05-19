@@ -1,19 +1,13 @@
-import 'dart:typed_data';
-import 'dart:io';
-import 'package:tflite/tflite.dart';
 import 'package:image/image.dart' as img;
+import 'package:plantdis/services/detection_service.dart';
 
 class CropCassavaModel {
-  static const String modelPath = "assets/cropnet_mobilev2.tflite";
+  static const String modelName = "cropnet_mobilev2";
   static const String labelsPath = "assets/cassava_labels.txt";
   static const int inputSize = 224;
 
   Future<void> loadModel() async {
-    try {
-      await Tflite.loadModel(
-        model: modelPath,
-        labels: labelsPath,
-      );
+    await DetectionService.initialize();
       print('Crop Model loaded successfully');
     } catch (e) {
       print('Error loading Crop model: $e');
@@ -21,8 +15,7 @@ class CropCassavaModel {
   }
 
   Future<List> runModelOnImage(String path) async {
-    File imageFile = File(path);
-    img.Image? image = img.decodeImage(imageFile.readAsBytesSync());
+    return DetectionService.processImage(path, modelName);
     img.Image resizedImage = img.copyResize(image!, width: inputSize, height: inputSize);
 
     var imageBytes = imageToByteListFloat32(resizedImage, inputSize);

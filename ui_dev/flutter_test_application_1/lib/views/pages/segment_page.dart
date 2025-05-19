@@ -163,7 +163,7 @@ class _SegmentPageState extends State<SegmentPage> {
           bool hasResults =
               analysisResults != null && analysisResults.isNotEmpty;
           double confidence = 0.0;
-          if (hasResults && analysisResults!['confidence'] != null) {
+          if (hasResults && analysisResults['confidence'] != null) {
             confidence = (analysisResults['confidence'] as num).toDouble();
           }
           bool isLowConfidence =
@@ -171,7 +171,7 @@ class _SegmentPageState extends State<SegmentPage> {
           String detectedDisease = 'N/A';
           if (hasResults) {
             detectedDisease =
-                analysisResults!['detectedDisease']?.toString() ?? 'N/A';
+                analysisResults['detectedDisease']?.toString() ?? 'N/A';
           }
 
           // Format the displayed disease name to show spaces instead of underscores
@@ -280,7 +280,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                           icon: Icons.timer_outlined,
                                           label: 'Detection Time',
                                           value: _formatTimestamp(
-                                            analysisResults!['detectionTimestamp']
+                                            analysisResults['detectionTimestamp']
                                                 ?.toString(),
                                           ),
                                         ),

@@ -83,7 +83,7 @@ class UIUtils {
       },
     ).then((_) {
       // Ensure timer is cancelled when dialog is dismissed
-      timeoutTimer?.cancel();
+      timeoutTimer.cancel();
     });
     // No completer or return value needed
   }

@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test_application_1/data/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/avatar_picker_dialog.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter_test_application_1/utils/web_utils.dart';
 
 /// A page that displays and manages user profile information.
 ///

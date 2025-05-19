@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/services/database_service.dart';
-import 'package:flutter_test_application_1/services/auth_service.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
 import 'dart:async'; // Import for TimeoutException
 
