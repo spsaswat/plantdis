@@ -599,6 +599,7 @@ class DetectionService {
       _progressStreams.remove(plantId);
     }
   }
+
 }
 
 // The Uint8List.reshape and Float32List.reshape extensions are part of dart:typed_data

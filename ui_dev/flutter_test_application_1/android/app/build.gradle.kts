@@ -39,6 +39,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro"
+                )
         }
     }
     
@@ -53,6 +57,10 @@ android {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.15.1")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.12.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.0")
+
 }
 
 flutter {
