@@ -5,18 +5,13 @@ import 'package:image/image.dart' as img;
 
 class PlantVillageModel {
   // Path to the TFLite model and labels file
-  static const String modelPath = "assets/plant_disease_model.tflite";
-  static const String labelsPath = "assets/labels_village.txt";
-  static const int inputSize = 224; // Input size for the model
+  static const String modelName = "plant_disease_model";
+  static const String labelsName = "labels_village";
+  static const int inputSize = 224;
 
-  // Function to load the TFLite model
   Future<void> loadModel() async {
     try {
-      // Loading the TFLite model and labels
-      await Tflite.loadModel(
-        model: modelPath,
-        labels: labelsPath,
-      );
+      await DetectionService.loadModel(modelName, labelsName);
       print('Plant Village Model loaded successfully');
     } catch (e) {
       print('Error loading Plant Village model: $e');
@@ -24,22 +19,7 @@ class PlantVillageModel {
   }
 
   Future<List?> runModelOnImage(String path) async {
-    // Reading the image file
-    File imageFile = File(path);
-    img.Image? image = img.decodeImage(imageFile.readAsBytesSync());
-    // Resizing the image to the required input size
-    img.Image resizedImage = img.copyResize(image!, width: inputSize, height: inputSize);
-
-    // Preprocessing the image
-    var imageBytes = imageToByteListFloat32(resizedImage, inputSize);
-
-    // Running the model on the preprocessed image
-    var output = await Tflite.runModelOnImage(
-      path: path,
-      numResults: 1, // Getting the top result
-      imageMean: 0, // Mean normalization value
-      imageStd: 255, // Standard deviation normalization value
-    );
+    var output = await DetectionService.runModelOnImage(path, modelName);
 
     // Checking the output and returning the predicted label with confidence
     if (output != null && output.isNotEmpty) {

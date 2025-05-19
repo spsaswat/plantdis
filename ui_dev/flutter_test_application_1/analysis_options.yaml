@@ -26,3 +26,17 @@ linter:
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+
+analyzer:
+  errors:
+    # Disable specific errors related to reshape and conditional imports
+    undefined_method: ignore
+    undefined_function: ignore
+  exclude:
+    # Exclude web-specific implementations from certain analyses
+    - "lib/services/tflite_interop/tflite_web.dart"
+    
+  # Allow for conditional imports based on platform
+  language:
+    strict-casts: false
+    strict-raw-types: false

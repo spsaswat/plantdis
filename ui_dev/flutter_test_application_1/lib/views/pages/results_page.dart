@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/hero_widget.dart';
-import 'package:flutter_test_application_1/models/plant_model.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
 

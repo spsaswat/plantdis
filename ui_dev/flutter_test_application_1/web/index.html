@@ -56,6 +56,104 @@
     window.isOnLocalhost = window.location.hostname === 'localhost' || 
                           window.location.hostname === '127.0.0.1';
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+  <script>
+    // let loadedTfjsModel; // This can be removed or kept; window.loadedTfjsModel is the authority
+
+    // New wrapper function, now async
+    async function getLoadTFJSModelPromise(modelPath) {
+      console.log("[JS getLoadTFJSModelPromise] Called. Current window.loadedTfjsModel:", typeof window.loadedTfjsModel, window.loadedTfjsModel);
+      return await loadTFJSModel(modelPath); 
+    }
+
+    async function loadTFJSModel(modelPath) {
+      console.log("[JS loadTFJSModel] Called. Attempting to ensure model is loaded/re-confirmed at:", modelPath);
+      try {
+        console.log('[JS loadTFJSModel] Attempting to load model via tf.loadGraphModel from:', modelPath);
+        const model = await tf.loadGraphModel(modelPath);
+        window.loadedTfjsModel = model; // Assign to window global
+        
+        if (window.loadedTfjsModel) {
+          console.log('[JS loadTFJSModel] Model (re)loaded/confirmed and assigned to window.loadedTfjsModel successfully. Type:', typeof window.loadedTfjsModel);
+          return true;
+        } else {
+          console.error('[JS loadTFJSModel] CRITICAL: tf.loadGraphModel apparently succeeded but window.loadedTfjsModel is still null/undefined post-assignment!');
+          return false; 
+        }
+      } catch (error) {
+        console.error('[JS loadTFJSModel] Error during tf.loadGraphModel:', error);
+        window.loadedTfjsModel = null;
+        throw error;
+      }
+    }
+
+    async function runTFJSModelOnImageData(imageDataUrl, callback) {
+      console.log("[JS runTFJSModelOnImageData] Entered. Checking window.loadedTfjsModel. Type:", typeof window.loadedTfjsModel, "Value:", window.loadedTfjsModel);
+
+      if (!window.loadedTfjsModel) { // Check window.loadedTfjsModel
+        console.error('TF.js model (window.loadedTfjsModel) not loaded. Call loadTFJSModel first. (Checked inside runTFJSModelOnImageData)');
+        // Callback signature: (errorMessage, classIndex, confidence)
+        callback('Model not loaded (checked window.loadedTfjsModel inside runTFJSModelOnImageData)', null, null);
+        return;
+      }
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous"; // Handle potential CORS issues if image source is different
+        img.src = imageDataUrl;
+
+        img.onload = async () => {
+          let tensor;
+          try {
+            tensor = tf.tidy(() => {
+              const pixels = tf.browser.fromPixels(img);
+              // Ensure these dimensions match your model's expected input
+              const resized = pixels.resizeNearestNeighbor([224, 224]); 
+              const floatTensor = resized.toFloat();
+              const normalized = floatTensor.div(tf.scalar(255.0));
+              return normalized.expandDims();
+            });
+
+            const logits = window.loadedTfjsModel.predict(tensor);      // Get logits (raw scores)
+            const probabilitiesTensor = tf.softmax(logits);          // Apply softmax to get probabilities
+            const values = await probabilitiesTensor.data();         // Get data from the probabilities tensor
+
+            // Dispose tensors to free up memory
+            tensor.dispose();
+            logits.dispose();                 // Dispose the logits tensor
+            probabilitiesTensor.dispose();     // Dispose the probabilities tensor
+
+            let maxVal = -Infinity;
+            let maxIndex = -1;
+            for (let i = 0; i < values.length; i++) {
+              if (values[i] > maxVal) {
+                maxVal = values[i];
+                maxIndex = i;
+              }
+            }
+            // Success callback: (null for error, classIndex, confidence)
+            callback(null, maxIndex, maxVal);
+          } catch (e) {
+            console.error('Error during TF.js tensor processing/prediction:', e);
+            if (tensor) tensor.dispose();
+            callback(e.toString(), null, null);
+          } finally {
+             img.onload = null; 
+             img.onerror = null;
+          }
+        };
+        img.onerror = () => {
+          console.error('Error loading image for TF.js processing from URL:', imageDataUrl);
+          callback('Image load error', null, null);
+          img.onload = null;
+          img.onerror = null;
+        };
+      } catch (error) {
+        console.error('TF.js Error in runTFJSModelOnImageData:', error);
+        callback(error.toString(), null, null);
+      }
+    }
+  </script>
 </head>
 <body>
   <script>

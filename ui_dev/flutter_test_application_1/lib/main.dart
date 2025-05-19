@@ -7,8 +7,14 @@ import 'firebase_options.dart';
 import 'data/notifiers.dart';
 import 'views/pages/welcome_page.dart';
 
+// Import for tflite factories initialization
+import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize TFLite factories
+  initializeTfliteFactories();
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
