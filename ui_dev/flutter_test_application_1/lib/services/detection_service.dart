@@ -1,16 +1,22 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:image/image.dart' as img;
-import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
-import 'package:flutter/foundation.dart'; // Import for kDebugMode
-import 'package:flutter_test_application_1/models/analysis_progress.dart';
-import 'package:flutter_test_application_1/models/detection_result.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:image/image.dart' as img;
+import 'package:flutter/foundation.dart'; // Import for kIsWeb and kDebugMode
+import 'package:image/image.dart' as img; // image package is used.
 import 'dart:async';
-import 'dart:math';
+import 'dart:math'; // For Random
+import 'package:flutter_test_application_1/models/analysis_progress.dart'; // Import for AnalysisProgress and AnalysisStage
+
+// Conditional imports for dart:js and dart:html for web
+import 'dart:js' if (dart.library.io) 'dart:io' as js; // Use a dummy for non-web
+import 'dart:html' if (dart.library.io) 'dart:io' as html; // Use a dummy for non-web
+import 'dart:js_util' if (dart.library.io) 'dart:io' as js_util; // Use a dummy for non-web
+
+// Import the TFLite interop layer
+import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
+
+// Import implementations only when needed and using conditional imports
+// We don't need to import these directly, they're exported via tflite_wrapper.dart
+// import 'package:flutter_test_application_1/services/tflite_interop/tflite_mobile.dart' if (dart.library.html) 'package:flutter_test_application_1/services/tflite_interop/tflite_web.dart';
 
 class DetectionService {
   // --- Singleton Pattern Start ---
@@ -23,26 +29,25 @@ class DetectionService {
   DetectionService._internal();
   // --- Singleton Pattern End ---
 
-  static const String _modelPath = 'assets/models/plant_disease_model.tflite';
-  static const String _labelsPath = 'assets/models/labels_village.txt';
-  // Remove unused model params if input size comes from tensor
-  // static const int _inputSize = 224;
-  // static const double _mean = 127.5;
-  // static const double _std = 127.5;
+  // Model and labels paths
+  static const String _tfliteModelPath =
+      'assets/models/plant_disease_model.tflite';
+  static const String _tfliteLabelsPath = 'assets/models/labels_village.txt';
 
-  Interpreter? _interpreter;
+  // Web model (TF.js) paths
+  static const String _webModelPath = 'assets/models/model.json';
+  static const String _webLabelsPath = 'assets/models/labels_village.txt';
+
+  // Use the TFLite wrapper for the interpreter
+  TfliteInterpreterWrapper? _interpreterWrapper;
+  // TODO: Add variables for TF.js model if needed by the TF.js library
+  // e.g., var _tfjsModel;
+
   List<String>? _labels;
-  bool _modelLoaded = false;
+  bool _modelLoaded =
+      false; // Represents if *either* TFLite (via wrapper) or TF.js model is loaded
   bool _isLoadingModel = false;
 
-  // Remove progress stream map and related methods
-  // final Map<String, StreamController<AnalysisProgress>> _progressControllers =
-  //     {};
-  // Stream<AnalysisProgress>? getProgressStream(String plantId) {
-  //   return _progressControllers[plantId]?.stream;
-  // }
-
-  // Getter to check if model is loaded
   bool get isModelLoaded => _modelLoaded;
 
   Future<void> loadModel() async {
@@ -53,489 +58,552 @@ class DetectionService {
     if (_isLoadingModel) {
       if (kDebugMode)
         print('[DetectionService] Model loading already in progress.');
-      return; // Avoid concurrent loading
+      return;
     }
 
     _isLoadingModel = true;
     if (kDebugMode) print('[DetectionService] Starting to load model...');
 
     try {
-      final options = InterpreterOptions()..threads = 2;
-      // Consider adding delegates here if needed (e.g., options.addDelegate(GpuDelegateV2()); )
-      if (kDebugMode) print('[DetectionService] Interpreter options set.');
-      _interpreter = await Interpreter.fromAsset(_modelPath, options: options);
-      if (kDebugMode)
-        print('[DetectionService] Interpreter loaded from asset.');
-
-      final rawLabels = await rootBundle.loadString(_labelsPath);
-      // Log the raw content read from the file
-      if (kDebugMode) {
-        print(
-          '[DetectionService] Raw labels content read (length: ${rawLabels.length}):\n"$rawLabels"',
-        );
-        // Check for common invisible characters
-        if (rawLabels.contains('\r') && !rawLabels.contains('\n'))
-          print(
-            '[DetectionService] WARNING: Label file might be using old Mac line endings (\r).',
-          );
-        if (rawLabels.startsWith('\uFEFF'))
-          print(
-            '[DetectionService] WARNING: Label file starts with BOM character.',
-          );
-      }
-
-      _labels =
-          rawLabels
-              .split(RegExp(r'\r?\n'))
-              .where((e) => e.trim().isNotEmpty)
-              .map(
-                (label) => label.replaceAll(' ', '_'),
-              ) // Replace spaces with underscores
-              .toList();
-      if (kDebugMode) print('[DetectionService] Labels loaded from asset.');
-
-      _modelLoaded = true;
-      if (kDebugMode) {
-        print(
-          '[DetectionService] Model loaded successfully. Input: ${_interpreter!.getInputTensor(0).shape}',
-        );
-        print(
-          '[DetectionService] Output: ${_interpreter!.getOutputTensor(0).shape}',
-        );
-        print('[DetectionService] Labels loaded: ${_labels?.length}');
-        // Print the actual labels for debugging
-        if (_labels != null && _labels!.isNotEmpty) {
-          print('[DetectionService] First label: "${_labels!.first}"');
-          if (_labels!.length > 1) {
-            print('[DetectionService] Second label: "${_labels![1]}"');
+      if (kIsWeb) {
+        if (kDebugMode) print('[DetectionService WEB] Loading TF.js model and labels...');
+        try {
+          // Check if TF.js and our custom JS functions are available
+          if (js.context['tf'] == null) {
+            throw Exception('TensorFlow.js library (tf) not found in JavaScript context.');
           }
-        } else {
-          print(
-            '[DetectionService] WARNING: No labels loaded or empty labels list',
-          );
-        }
-      }
-    } catch (e, stackTrace) {
-      if (kDebugMode)
-        print(
-          '[DetectionService] Error loading TFLite model or labels: $e\\n$stackTrace',
-        );
-      _modelLoaded = false;
-      // Don't rethrow here, handle it in detect maybe? Or return a status?
-      // For now, just log the error.
-    } finally {
-      _isLoadingModel = false; // Reset the flag regardless of success/failure
-      if (kDebugMode)
-        print('[DetectionService] Finished loading model attempt.');
-    }
-  }
+          if (js.context['loadTFJSModel'] == null || js.context['runTFJSModelOnImageData'] == null) {
+            throw Exception('Required JavaScript functions (loadTFJSModel or runTFJSModelOnImageData) not found.');
+          }
+          // Check for the new wrapper function
+          if (js.context['getLoadTFJSModelPromise'] == null) {
+            throw Exception('Required JavaScript function getLoadTFJSModelPromise not found.');
+          }
 
-  Future<List<DetectionResult>> detect(
-    File imageFile,
-    String plantId, // Keep plantId for logging
-  ) async {
-    if (kDebugMode)
-      print(
-        '[DetectionService] detect called for ${imageFile.path} (Plant: $plantId)',
-      ); // Add plantId to log
-    if (!_modelLoaded || _interpreter == null || _labels == null) {
-      if (kDebugMode)
-        print('[DetectionService] Model not loaded, attempting to load...');
-      await loadModel();
-      if (!_modelLoaded || _interpreter == null || _labels == null) {
+          var loadModelPromise = js_util.callMethod(js_util.globalThis, 'getLoadTFJSModelPromise', [_webModelPath]);
+          if (loadModelPromise == null) {
+            throw Exception('JavaScript getLoadTFJSModelPromise did not return a Promise (returned null).');
+          }
+          if (js_util.getProperty(loadModelPromise, 'then') == null) {
+            throw Exception('JavaScript getLoadTFJSModelPromise did not return a valid Promise (missing .then method).');
+          }
+          
+          bool jsPromiseResolvedValue = await js_util.promiseToFuture<bool>(loadModelPromise);
+          if (kDebugMode) {
+            print('[DetectionService WEB] JavaScript getLoadTFJSModelPromise resolved, returned: $jsPromiseResolvedValue');
+          }
+
+          if (jsPromiseResolvedValue is bool && jsPromiseResolvedValue == true) {
+            // The JS function *believes* it succeeded.
+            // NOW, critically, check the state of window.loadedTfjsModel FROM DART
+            var jsModel = js_util.getProperty(js_util.globalThis, 'loadedTfjsModel');
+            
+            if (jsModel == null) {
+              var jsModelType = jsModel?.runtimeType;
+              var jsModelTypeOfFromJS = "not a JS object or error getting type";
+              // It's tricky to get the JS type of a null JS object from Dart directly
+              // We mostly rely on the console logs from JS side for 'typeof null' which is 'object'
+
+              if (kDebugMode) {
+                print('[DetectionService WEB] WARNING: JS promise resolved true ($jsPromiseResolvedValue), but window.loadedTfjsModel is null/undefined when checked by Dart.');
+                print('[DetectionService WEB] Dart sees jsModel as: $jsModel, Dart type for jsModel: $jsModelType');
+              }
+              _modelLoaded = false; // Ensure it's false
+              throw StateError('[DetectionService WEB] State Inconsistency: JS reported model load success (returned true), but window.loadedTfjsModel is null/undefined when checked by Dart immediately after.');
+            } else {
+              if (kDebugMode) {
+                String jsModelDartType = jsModel.runtimeType.toString();
+                String jsModelJsType = "unknown";
+                try {
+                  if (js_util.hasProperty(jsModel, 'constructor') && js_util.getProperty(jsModel, 'constructor') != null) {
+                     jsModelJsType = js_util.getProperty(js_util.getProperty(jsModel, 'constructor'), 'name')?.toString() ?? "null_constructor_name";
+                  } else {
+                    jsModelJsType = "no_constructor_property";
+                  }
+                } catch (e) {
+                  jsModelJsType = "error_getting_js_type: $e";
+                }
+                print('[DetectionService WEB] window.loadedTfjsModel is accessible and not null. Dart type: $jsModelDartType, JS type via constructor.name: $jsModelJsType');
+              }
+              _modelLoaded = true; // Set model loaded successfully
+            }
+          } else {
+            // JS Promise resolved, but not to 'true'
+            if (kDebugMode) print('[DetectionService WEB] JavaScript getLoadTFJSModelPromise resolved, but returned: $jsPromiseResolvedValue instead of true.');
+            _modelLoaded = false;
+            throw Exception('JavaScript getLoadTFJSModelPromise did not return true. Actual: $jsPromiseResolvedValue');
+          }
+
+          // Load labels only if model loading was truly successful and confirmed
+          if (_modelLoaded) {
+            if (kDebugMode) print('[DetectionService WEB] Proceeding to load labels as _modelLoaded is true.');
+            final rawLabels = await rootBundle.loadString(_webLabelsPath);
+            _labels = rawLabels.split(RegExp(r'\r?\n')).where((e) => e.trim().isNotEmpty).toList();
+            if (kDebugMode) {
+                print('[DetectionService WEB] Dart _modelLoaded flag is true. Labels loaded: ${_labels?.length}');
+            }
+          } else {
+             if (kDebugMode) print('[DetectionService WEB] Skipping label loading as _modelLoaded is false.');
+          }
+
+        } catch (e, s) {
+          _modelLoaded = false; // Ensure it's false on any error during this specific web load block
+          if (kDebugMode) print('[DetectionService WEB] Error in web model loading block: $e\n$s');
+          rethrow; // Rethrow to be caught by the outer try-catch
+        }
+      } else {
+        // --- Load TFLite Model for Mobile/Desktop via Wrapper ---
         if (kDebugMode)
           print(
-            '[DetectionService] Model or labels failed to load after attempt.',
+            '[DetectionService NATIVE] Loading TFLite model via wrapper...',
           );
-        throw Exception('Model or labels failed to load.');
-      }
-      if (kDebugMode)
-        print('[DetectionService] Model successfully loaded/verified.');
-    }
 
-    // Remove progress stream handling
-    // final progressController = StreamController<AnalysisProgress>.broadcast();
-    // _progressControllers[plantId] = progressController;
-
-    try {
-      // 1. Preprocessing
-      // Remove progressController.add calls
-      if (kDebugMode)
-        print('[DetectionService] Preprocessing image for $plantId...');
-
-      // Decode image
-      final imageBytes = await imageFile.readAsBytes();
-      final decodedImage = img.decodeImage(imageBytes);
-      if (decodedImage == null) {
-        throw Exception('Failed to decode image');
-      }
-
-      // Determine model input dimensions and type
-      final inputTensor = _interpreter!.getInputTensor(0);
-      final inputShape = inputTensor.shape;
-      final inputType = inputTensor.type; // TensorType.uint8 or .float32
-      final inputHeight = inputShape[1];
-      final inputWidth = inputShape[2];
-
-      // Resize the image to expected input size
-      final resizedImage = img.copyResize(
-        decodedImage,
-        width: inputWidth,
-        height: inputHeight,
-      );
-
-      // Print image format details for debugging
-      if (kDebugMode) {
-        print(
-          '[DetectionService] Resized image width: ${resizedImage.width}, height: ${resizedImage.height}',
-        );
-        print('[DetectionService] Image format: ${resizedImage.format}');
-      }
-
-      // Prepare input buffer based on tensor type
-      // NOTE: We support both quantized (uint8) and float32 models.
-      Object inputBuffer;
-      if (inputType == TensorType.uint8) {
-        // Extract raw bytes from the image
-        final bytes = resizedImage.getBytes();
-        if (kDebugMode) {
-          print('[DetectionService] Got RGB bytes: ${bytes.length} bytes');
-        }
-
-        // Copy bytes to input buffer in correct format
-        final Uint8List buffer = Uint8List(inputHeight * inputWidth * 3);
-        for (int i = 0; i < bytes.length && i < buffer.length; i++) {
-          buffer[i] = bytes[i];
-        }
-
-        inputBuffer = buffer.reshape([1, inputHeight, inputWidth, 3]);
-      } else if (inputType == TensorType.float32) {
-        // Float model – determine normalisation. Common options:
-        // 1) 0-1  (divide by 255)
-        // 2) ‑1-1 ( (pixel-127.5)/127.5 )
-        // We'll attempt option (1) first but expose both for experimentation.
-        const bool useNegativeOneToOne = false; // flip if needed later
-
-        // Extract raw bytes from the image
-        final bytes = resizedImage.getBytes();
-        final Float32List buffer = Float32List(inputHeight * inputWidth * 3);
-        for (int i = 0; i < bytes.length && i < buffer.length; i++) {
-          double pixelValue = bytes[i].toDouble();
-          if (useNegativeOneToOne) {
-            buffer[i] = (pixelValue - 127.5) / 127.5;
-          } else {
-            buffer[i] = pixelValue / 255.0;
-          }
-        }
-        inputBuffer = buffer.reshape([1, inputHeight, inputWidth, 3]);
-      } else {
-        throw Exception(
-          '[DetectionService] Unsupported input tensor type: $inputType',
-        );
-      }
-
-      // 2. Detection
-      if (kDebugMode) {
-        print('[DetectionService] Running model inference for $plantId...');
-      }
-
-      // Prepare output buffer dynamically according to tensor type and shape
-      final outputTensor = _interpreter!.getOutputTensor(0);
-      final outputShape = outputTensor.shape; // e.g., [1, numClasses]
-      final outputType = outputTensor.type;
-
-      Object outputBuffer;
-      if (outputType == TensorType.uint8) {
-        outputBuffer = Uint8List(
-          outputShape.reduce((a, b) => a * b),
-        ).reshape(outputShape);
-      } else if (outputType == TensorType.float32) {
-        outputBuffer = Float32List(
-          outputShape.reduce((a, b) => a * b),
-        ).reshape(outputShape);
-      } else {
-        throw Exception(
-          '[DetectionService] Unsupported output tensor type: $outputType',
-        );
-      }
-
-      if (kDebugMode) {
-        print('[DetectionService] Input tensor shape: ${inputShape}');
-        print(
-          '[DetectionService] Input buffer type: ${inputBuffer.runtimeType}',
-        );
-        print('[DetectionService] Output tensor shape: ${outputShape}');
-        print(
-          '[DetectionService] Output buffer type: ${outputBuffer.runtimeType}',
-        );
+        // Platform-specific code for non-web - This section doesn't run on web
         try {
-          // Print dimensions based on actual type
-          if (outputBuffer is List &&
-              outputBuffer.isNotEmpty &&
-              outputBuffer.first is List) {
-            print(
-              '[DetectionService] Output buffer dimensions (nested list): [${outputBuffer.length}, ${outputBuffer.first.length}]',
-            );
-          } else if (outputBuffer is List) {
-            print(
-              '[DetectionService] Output buffer dimensions (flat list): [${outputBuffer.length}]',
+          if (!kIsWeb) {
+            // Ensure this block only runs on non-web
+            _interpreterWrapper =
+                TfliteInterpreterWrapper(); // Uses the factory
+
+            final options = TfliteInterpreterOptions(); // Uses the factory
+            options.threads = 2;
+
+            await _interpreterWrapper!.loadModel(
+              _tfliteModelPath,
+              options: options,
             );
           }
         } catch (e) {
-          print('[DetectionService] Could not print output buffer shape: $e');
-        }
-      }
-
-      try {
-        // Run the inference
-        _interpreter!.run(inputBuffer, outputBuffer);
-        if (kDebugMode) {
-          print('[DetectionService] Inference completed successfully');
-
-          // Debug the output buffer
-          if (outputType == TensorType.uint8) {
-            final buffer = outputBuffer as Uint8List;
-            print(
-              '[DetectionService] Sample of output buffer (uint8): ${buffer.take(10).toList()}',
-            );
-          } else if (outputType == TensorType.float32) {
-            // Handle nested list structure for float32 output
-            final nestedList = outputBuffer as List<List<dynamic>>;
-            if (nestedList.isNotEmpty && nestedList.first.isNotEmpty) {
-              // Convert inner list to List<double> for printing
-              final scores =
-                  nestedList.first.map((e) => (e as num).toDouble()).toList();
-              print(
-                '[DetectionService] Sample of output buffer (float32 - from nested): ${scores.take(10).toList()}',
-              );
-            } else {
-              print(
-                '[DetectionService] Output buffer (float32) is empty or has unexpected structure.',
-              );
-            }
-          }
-        }
-      } catch (e, st) {
-        if (kDebugMode) {
-          print('[DetectionService] INFERENCE ERROR: $e');
-          print('[DetectionService] Stack trace: $st');
-        }
-        // When inference fails, return empty results instead of throwing
-        // This prevents the plant from getting stuck in "error" status
-        return [];
-      }
-
-      // 3. Postprocessing
-      List<DetectionResult> results = [];
-
-      try {
-        if (kDebugMode) {
-          print('[DetectionService] Starting postprocessing of results');
-        }
-
-        // Depending on output type, build the results
-        if (outputType == TensorType.uint8) {
-          final buffer = outputBuffer as Uint8List;
-          // Process the output scores
-          int numClasses = outputShape.last;
-          // Process scores (outputBuffer contains raw scores)
-          List<double> scores = List<double>.filled(numClasses, 0.0);
-
-          for (int i = 0; i < numClasses; i++) {
-            scores[i] =
-                buffer[i].toDouble() / 255.0; // Convert uint8 to probability
-          }
-
-          // Get indices sorted by confidence (highest first)
-          List<int> indices = List.generate(numClasses, (i) => i);
-          indices.sort((a, b) => scores[b].compareTo(scores[a]));
-
-          // Create results for top predictions
-          for (int i = 0; i < min(5, numClasses); i++) {
-            int classIndex = indices[i];
-            double confidence = scores[classIndex];
-
-            // Only include if confidence is above a very low threshold to exclude true zeros
-            if (confidence > 0.01) {
-              results.add(
-                DetectionResult(
-                  diseaseName: _labels![classIndex],
-                  confidence: confidence,
-                  boundingBox:
-                      null, // Not using bounding boxes for disease models
-                ),
-              );
-            }
-          }
-        } else if (outputType == TensorType.float32) {
-          // Handle nested list output for float32
-          final nestedList = outputBuffer as List<List<dynamic>>;
-          if (nestedList.isEmpty || nestedList.first.isEmpty) {
-            if (kDebugMode)
-              print(
-                '[DetectionService] WARNING: Float32 output buffer has unexpected empty structure.',
-              );
-            // Return empty results if structure is wrong
-            return [];
-          }
-
-          // Extract the actual scores (likely from the first inner list)
-          final scoresList =
-              nestedList.first.map((e) => (e as num).toDouble()).toList();
-
-          // Process the output scores
-          int numClasses =
-              scoresList.length; // Use length of the actual scores list
-          if (numClasses != outputShape.last) {
-            if (kDebugMode)
-              print(
-                '[DetectionService] WARNING: Number of scores (${scoresList.length}) does not match expected output shape (${outputShape.last})',
-              );
-            // Optionally handle this mismatch, e.g., by using the shorter length
-            numClasses = min(numClasses, outputShape.last);
-          }
-
-          // Get indices sorted by confidence (highest first)
-          List<int> indices = List.generate(numClasses, (i) => i);
-          indices.sort((a, b) => scoresList[b].compareTo(scoresList[a]));
-
-          // Create results for top predictions
-          for (int i = 0; i < min(5, numClasses); i++) {
-            int classIndex = indices[i];
-            double confidence = scoresList[classIndex];
-
-            // Only include if confidence is above a very low threshold to exclude true zeros
-            if (confidence > 0.01) {
-              // Check if classIndex is valid for _labels
-              if (classIndex < 0 || classIndex >= (_labels?.length ?? 0)) {
-                if (kDebugMode)
-                  print(
-                    '[DetectionService] WARNING: Invalid classIndex ($classIndex) for labels list length (${_labels?.length}). Skipping result.',
-                  );
-                continue; // Skip this result
-              }
-              results.add(
-                DetectionResult(
-                  diseaseName: _labels![classIndex],
-                  confidence: confidence,
-                  boundingBox:
-                      null, // Not using bounding boxes for disease models
-                ),
-              );
-            }
-          }
-        }
-
-        // Always return at least the top result even if below threshold
-        if (results.isEmpty && outputShape.last > 0) {
           if (kDebugMode) {
             print(
-              '[DetectionService] No results above threshold, forcing at least one result',
+              '[DetectionService] Error creating or loading native interpreter: $e',
             );
           }
-
-          // Find the highest confidence class
-          if (outputType == TensorType.uint8) {
-            final buffer = outputBuffer as Uint8List;
-            int bestClassIndex = 0;
-            int bestScore = 0;
-
-            for (int i = 0; i < outputShape.last; i++) {
-              if (buffer[i] > bestScore) {
-                bestScore = buffer[i];
-                bestClassIndex = i;
-              }
-            }
-
-            results.add(
-              DetectionResult(
-                diseaseName: _labels![bestClassIndex],
-                confidence: bestScore / 255.0,
-                boundingBox: null,
-              ),
-            );
-          } else if (outputType == TensorType.float32) {
-            // Handle nested list structure for float32
-            final nestedList = outputBuffer as List<List<dynamic>>;
-            if (nestedList.isEmpty || nestedList.first.isEmpty) {
-              if (kDebugMode)
-                print(
-                  '[DetectionService] WARNING: Cannot force result, float32 output buffer is empty.',
-                );
-              return []; // Can't force a result if buffer is empty
-            }
-            final scoresList =
-                nestedList.first.map((e) => (e as num).toDouble()).toList();
-
-            int bestClassIndex = 0;
-            double bestScore = -double.infinity;
-            int numScoresToConsider = scoresList.length;
-
-            for (int i = 0; i < numScoresToConsider; i++) {
-              if (scoresList[i] > bestScore) {
-                bestScore = scoresList[i];
-                bestClassIndex = i;
-              }
-            }
-
-            // Check if bestClassIndex is valid before accessing _labels
-            if (bestClassIndex < 0 ||
-                bestClassIndex >= (_labels?.length ?? 0)) {
-              if (kDebugMode)
-                print(
-                  '[DetectionService] WARNING: Invalid bestClassIndex ($bestClassIndex) for labels list length (${_labels?.length}) when forcing result.',
-                );
-              return []; // Return empty if index is invalid
-            }
-
-            results.add(
-              DetectionResult(
-                diseaseName: _labels![bestClassIndex],
-                confidence: bestScore,
-                boundingBox: null,
-              ),
-            );
-          }
+          rethrow;
         }
 
-        if (kDebugMode) {
-          print(
-            '[DetectionService] Postprocessing complete. Found ${results.length} results.',
-          );
-          if (results.isNotEmpty) {
+        // This part for loading labels and checking model status is common
+        // but _interpreterWrapper would be null on web if we reached here without web-specific loading.
+        // The outer kIsWeb check should prevent this path for web.
+        if (!kIsWeb) {
+          // Condition this part as well
+          final rawLabels = await rootBundle.loadString(_tfliteLabelsPath);
+          _labels =
+              rawLabels
+                  .split(RegExp(r'\r?\n'))
+                  .where((e) => e.trim().isNotEmpty)
+                  .map((label) => label.replaceAll(' ', '_'))
+                  .toList();
+
+          _modelLoaded = _interpreterWrapper?.isModelLoaded ?? false;
+
+          if (kDebugMode && _modelLoaded) {
+            final inputTensorDetails = _interpreterWrapper!.getInputTensor(0);
+            final outputTensorDetails = _interpreterWrapper!.getOutputTensor(0);
             print(
-              '[DetectionService] Top result: ${results.first.diseaseName} (${results.first.confidence})',
+              '[DetectionService NATIVE] TFLite Model loaded via wrapper. Input: ${inputTensorDetails.shape}, Type: ${inputTensorDetails.type}',
+            );
+            print(
+              '[DetectionService NATIVE] Output: ${outputTensorDetails.shape}, Type: ${outputTensorDetails.type}',
+            );
+            print(
+              '[DetectionService NATIVE] Labels loaded: ${_labels?.length}',
+            );
+          } else if (kDebugMode && !_modelLoaded) {
+            print(
+              '[DetectionService NATIVE] TFLite Model FAILED to load via wrapper.',
             );
           }
         }
-
-        return results;
-      } catch (e, st) {
-        if (kDebugMode) {
-          print('[DetectionService] ERROR in postprocessing: $e');
-          print('[DetectionService] Stack trace: $st');
-        }
-
-        // Return empty results on error, don't throw
-        return [];
       }
     } catch (e, stackTrace) {
+      _modelLoaded = false; // General catch-all ensures _modelLoaded is false
+      if (kDebugMode) {
+        print('[DetectionService] Error loading model: $e\n$stackTrace');
+      }
+      rethrow;
+    } finally {
+      _isLoadingModel = false;
+      if (kDebugMode)
+        print('[DetectionService] Finished model loading attempt.');
+    }
+  }
+
+  Future<List<DetectionResult>> detect({
+    required Uint8List imageBytes,
+    required String plantId,
+  }) async {
+    if (kDebugMode) {
       print(
-        '[DetectionService] Error during detection for plant $plantId: $e\n$stackTrace',
+        '[DetectionService] detect called for plant $plantId. Image bytes length: ${imageBytes.length}',
       );
-      // Remove progress controller handling/emission
-      rethrow; // Re-throw the exception so PlantService knows it failed
+    }
+
+    if (!_modelLoaded && !_isLoadingModel) {
+      if (kDebugMode) print('[DetectionService] Dart _modelLoaded is false. Attempting to load model...');
+      await loadModel(); // This will now throw if loading fails or state is inconsistent
+    } else if (_isLoadingModel) {
+      if (kDebugMode)
+        print('[DetectionService] Model loading already in progress.');
+      return Future.error(Exception('Model loading already in progress.'));
+    }
+    
+    if (_labels == null) { // Labels check is also crucial
+        throw Exception(
+          "Detection failed: Labels are null. Ensure loadModel() succeeded and loaded labels.",
+        );
+    }
+
+    if (!_modelLoaded) {
+      // This check is crucial. loadModel() should set _modelLoaded or throw.
+      // If we reach here and _modelLoaded is false, it means loadModel() completed without error 
+      // but failed to set the flag (which shouldn't happen with the new logic) OR it was called while _isLoadingModel was true and that path didn't resolve _modelLoaded.
+      // The new error in loadModel should prevent this path if loadModel was actually attempted and failed with inconsistency.
+      if (kDebugMode) print('[DetectionService WEB] CRITICAL PRE-INFERENCE CHECK: _modelLoaded is false before attempting inference. This indicates a problem in loadModel logic.');
+      throw Exception('TF.js model is not loaded. _modelLoaded is false prior to inference attempt.');
+    }
+
+    try {
+      if (kIsWeb) {
+        if (kDebugMode) print('[DetectionService WEB] Running TF.js inference. Dart _modelLoaded is true.');
+        
+        // Re-check window.loadedTfjsModel directly before calling runTFJSModelOnImageData
+        var jsModelInstance = js_util.getProperty(js_util.globalThis, 'loadedTfjsModel');
+        if (jsModelInstance == null) {
+          if (kDebugMode) print('[DetectionService WEB] CRITICAL ERROR: Just before calling runTFJSModelOnImageData, window.loadedTfjsModel is NULL. Dart _modelLoaded: $_modelLoaded');
+          throw Exception('TF.js model (window.loadedTfjsModel) became null just before inference, despite Dart thinking it was loaded. State inconsistency.');
+        }
+        if (kDebugMode) {
+          String jsModelDartType = jsModelInstance.runtimeType.toString();
+          String jsModelJsType = "unknown";
+          try {
+            if (js_util.hasProperty(jsModelInstance, 'constructor') && js_util.getProperty(jsModelInstance, 'constructor') != null) {
+                jsModelJsType = js_util.getProperty(js_util.getProperty(jsModelInstance, 'constructor'), 'name')?.toString() ?? "null_constructor_name";
+            } else {
+              jsModelJsType = "no_constructor_property";
+            }
+          } catch (e) {
+            jsModelJsType = "error_getting_js_type: $e";
+          }
+          print('[DetectionService WEB] Pre-inference check: window.loadedTfjsModel seems OK. Dart type: $jsModelDartType, JS type: $jsModelJsType');
+        }
+
+        final completer = Completer<List<DetectionResult>>();
+        // Ensure imageBytes is Uint8List. Determine content type if possible, default to jpeg/png.
+        final blob = html.Blob([imageBytes], 'image/jpeg'); 
+        final imageUrl = html.Url.createObjectUrlFromBlob(blob);
+
+        try {
+          js.context.callMethod('runTFJSModelOnImageData', [
+            imageUrl,
+            js.allowInterop((dynamic errorMsg, dynamic classIndex, dynamic confidence) {
+              html.Url.revokeObjectUrl(imageUrl); // Clean up ASAP
+
+              if (errorMsg != null) {
+                if (kDebugMode) print('[DetectionService WEB] TF.js inference error: $errorMsg');
+                completer.completeError(Exception('TF.js inference error: $errorMsg'));
+              } else {
+                // Ensure classIndex and confidence are not null and are of expected types
+                if (classIndex == null || confidence == null) {
+                  if (kDebugMode) print('[DetectionService WEB] TF.js inference error: Received null for classIndex or confidence.');
+                  completer.completeError(Exception('TF.js inference returned null for classIndex or confidence.'));
+                  return;
+                }
+
+                int idx = classIndex as int;
+                double conf = (confidence as num).toDouble();
+
+                if (idx >= 0 && idx < _labels!.length) {
+                  String diseaseName = _labels![idx];
+                  if (kDebugMode) print('[DetectionService WEB] TF.js inference success: $diseaseName, Confidence: $conf');
+                  completer.complete([
+                    DetectionResult(
+                      diseaseName: diseaseName.replaceAll('_', ' '), 
+                      confidence: conf,
+                      boundingBox: null, // TF.js model might not provide this
+                    )
+                  ]);
+                } else {
+                  if (kDebugMode) print('[DetectionService WEB] TF.js inference error: Invalid class index $idx (Labels count: ${_labels!.length})');
+                  completer.completeError(Exception('TF.js inference returned invalid class index: $idx'));
+                }
+              }
+            })
+          ]);
+        } catch (e) {
+          html.Url.revokeObjectUrl(imageUrl); 
+          if (kDebugMode) print('[DetectionService WEB] Synchronous error calling runTFJSModelOnImageData: $e');
+          completer.completeError(Exception('Error calling TF.js function: $e'));
+        }
+        return completer.future;
+      } else {
+        if (_interpreterWrapper == null ||
+            !_interpreterWrapper!.isModelLoaded) {
+          throw Exception(
+            "TFLite interpreter wrapper is not initialized or model not loaded for non-web platform.",
+          );
+        }
+        if (kDebugMode)
+          print(
+            '[DetectionService NATIVE] Preprocessing for TFLite using wrapper...',
+          );
+
+        final img.Image? decodedImage = img.decodeImage(imageBytes);
+        if (decodedImage == null) {
+          throw Exception('Failed to decode image for TFLite.');
+        }
+
+        final inputTensor = _interpreterWrapper!.getInputTensor(0);
+        final inputShape = inputTensor.shape;
+        final inputType = inputTensor.type;
+        final inputHeight = inputShape[1];
+        final inputWidth = inputShape[2];
+
+        final img.Image resizedImage = img.copyResize(
+          decodedImage,
+          width: inputWidth,
+          height: inputHeight,
+        );
+
+        Object inputBuffer;
+        if (inputType == TfliteDataTypeWrapper.uint8) {
+          final Uint8List buffer = Uint8List(1 * inputHeight * inputWidth * 3);
+          int bufferIndex = 0;
+          for (int y = 0; y < inputHeight; y++) {
+            for (int x = 0; x < inputWidth; x++) {
+              final pixel = resizedImage.getPixel(x, y);
+              buffer[bufferIndex++] = pixel.r.toInt();
+              buffer[bufferIndex++] = pixel.g.toInt();
+              buffer[bufferIndex++] = pixel.b.toInt();
+            }
+          }
+          inputBuffer = buffer;
+        } else if (inputType == TfliteDataTypeWrapper.float32) {
+          final Float32List buffer = Float32List(
+            1 * inputHeight * inputWidth * 3,
+          );
+          int bufferIndex = 0;
+          for (int y = 0; y < inputHeight; y++) {
+            for (int x = 0; x < inputWidth; x++) {
+              final pixel = resizedImage.getPixel(x, y);
+              buffer[bufferIndex++] = pixel.r.toInt() / 255.0;
+              buffer[bufferIndex++] = pixel.g.toInt() / 255.0;
+              buffer[bufferIndex++] = pixel.b.toInt() / 255.0;
+            }
+          }
+          inputBuffer = buffer;
+        } else {
+          throw Exception(
+            '[DetectionService NATIVE] Unsupported TFLite input tensor type via wrapper: $inputType',
+          );
+        }
+
+        if (kDebugMode)
+          print(
+            '[DetectionService NATIVE] Running TFLite inference via wrapper...',
+          );
+
+        final outputTensor = _interpreterWrapper!.getOutputTensor(0);
+        final outputShape = outputTensor.shape;
+        final outputType = outputTensor.type;
+
+        Object outputBuffer;
+        if (outputType == TfliteDataTypeWrapper.float32) {
+          outputBuffer = List.generate(
+            outputShape[0],
+            (_) => List.filled(outputShape[1], 0.0),
+          );
+        } else if (outputType == TfliteDataTypeWrapper.uint8) {
+          outputBuffer = List.generate(
+            outputShape[0],
+            (_) => List.filled(outputShape[1], 0),
+          );
+        } else {
+          throw Exception(
+            '[DetectionService NATIVE] Unsupported TFLite output tensor type via wrapper: $outputType',
+          );
+        }
+
+        _interpreterWrapper!.run(inputBuffer, outputBuffer);
+        if (kDebugMode)
+          print(
+            '[DetectionService NATIVE] TFLite inference complete via wrapper.',
+          );
+
+        List<DetectionResult> detectionResults = [];
+        if (outputBuffer is List && outputBuffer.isNotEmpty) {
+          List<dynamic> scoresRaw = outputBuffer.first as List<dynamic>;
+          List<double> probabilities;
+
+          if (scoresRaw.first is double) {
+            probabilities = scoresRaw.cast<double>();
+          } else if (scoresRaw.first is int) {
+            probabilities =
+                scoresRaw.cast<int>().map((s) => s.toDouble() / 255.0).toList();
+          } else {
+            throw Exception(
+              'Unexpected TFLite score type from wrapper output: ${scoresRaw.first.runtimeType}',
+            );
+          }
+
+          if (kDebugMode)
+            print(
+              '[DetectionService NATIVE] Probabilities (from wrapper): $probabilities',
+            );
+
+          if (_labels == null || _labels!.isEmpty) {
+            throw Exception("Labels are not loaded for TFLite model.");
+          }
+
+          double maxConfidence = 0.0;
+          int maxIndex = -1;
+          for (int i = 0; i < probabilities.length; i++) {
+            if (probabilities[i] > maxConfidence) {
+              maxConfidence = probabilities[i];
+              maxIndex = i;
+            }
+          }
+
+          if (maxIndex != -1 && maxIndex < _labels!.length) {
+            detectionResults.add(
+              DetectionResult(
+                diseaseName: _labels![maxIndex].replaceAll('_', ' '),
+                confidence: maxConfidence,
+                boundingBox: null,
+              ),
+            );
+          } else if (maxIndex != -1) {
+            if (kDebugMode)
+              print(
+                "[DetectionService NATIVE] Warning: maxIndex $maxIndex out of bounds for labels (${_labels!.length}).",
+              );
+            detectionResults.add(
+              DetectionResult(
+                diseaseName: "Unknown (label index mismatch)",
+                confidence: maxConfidence,
+                boundingBox: null,
+              ),
+            );
+          }
+        }
+
+        if (detectionResults.isEmpty) {
+          if (kDebugMode)
+            print(
+              "[DetectionService NATIVE] No disease detected or low confidence.",
+            );
+          detectionResults.add(
+            DetectionResult(
+              diseaseName: "Healthy / Not Detected",
+              confidence: 0.0,
+              boundingBox: null,
+            ),
+          );
+        }
+        return detectionResults;
+      }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print(
+          '[DetectionService] Error during detection for $plantId: $e\n$stackTrace',
+        );
+      }
+      throw Exception('Detection failed: $e');
+    } finally {
+      if (kDebugMode)
+        print('[DetectionService] Finished detection attempt for $plantId.');
     }
   }
 
   void dispose() {
-    _interpreter?.close();
+    if (kDebugMode) print('[DetectionService] Disposing...');
+    if (kIsWeb) {
+      if (kDebugMode)
+        print(
+          '[DetectionService WEB] TF.js model resources disposed (simulated).',
+        );
+    } else {
+      _interpreterWrapper?.close();
+      _interpreterWrapper = null;
+      if (kDebugMode)
+        print(
+          '[DetectionService NATIVE] TFLite interpreter (via wrapper) closed.',
+        );
+    }
     _modelLoaded = false;
-    if (kDebugMode) print('[DetectionService] TFLite interpreter disposed.');
-    // Remove progress controller clearing
-    // _progressControllers.values.forEach((controller) => controller.close());
-    // _progressControllers.clear();
-    // if (kDebugMode) print('[DetectionService] Cleared progress controllers.');
+    _labels = null;
+    if (kDebugMode) print('[DetectionService] All resources disposed.');
+  }
+
+  // Map to store active analysis progress streams by plant ID
+  final Map<String, StreamController<AnalysisProgress>> _progressStreams = {};
+
+  /// Returns a stream of analysis progress for the given plant ID.
+  /// The stream will provide updates about the analysis progress.
+  Stream<AnalysisProgress>? getProgressStream(String plantId) {
+    if (!_progressStreams.containsKey(plantId)) {
+      if (kDebugMode)
+        print(
+          '[DetectionService] No active progress stream for plant ID: $plantId',
+        );
+      return null;
+    }
+    return _progressStreams[plantId]!.stream;
+  }
+
+  /// Starts tracking analysis progress for a plant.
+  /// Returns a stream of analysis progress updates.
+  Stream<AnalysisProgress> startProgressTracking(String plantId) {
+    if (_progressStreams.containsKey(plantId)) {
+      if (kDebugMode)
+        print(
+          '[DetectionService] Reusing existing progress stream for plant ID: $plantId',
+        );
+      return _progressStreams[plantId]!.stream;
+    }
+
+    final controller = StreamController<AnalysisProgress>.broadcast();
+    _progressStreams[plantId] = controller;
+    if (kDebugMode)
+      print(
+        '[DetectionService] Created new progress stream for plant ID: $plantId',
+      );
+
+    return controller.stream;
+  }
+
+  /// Updates the analysis progress for a specific plant.
+  void updateProgress(String plantId, AnalysisProgress progress) {
+    if (!_progressStreams.containsKey(plantId)) {
+      if (kDebugMode)
+        print(
+          '[DetectionService] Cannot update progress: No active stream for plant ID: $plantId',
+        );
+      return;
+    }
+
+    _progressStreams[plantId]!.add(progress);
+    if (kDebugMode)
+      print(
+        '[DetectionService] Updated progress for plant ID: $plantId - ${progress.stage} ${progress.progress}',
+      );
+
+    // Close the stream if analysis is complete or failed
+    if (progress.stage == AnalysisStage.completed ||
+        progress.stage == AnalysisStage.failed) {
+      if (kDebugMode)
+        print(
+          '[DetectionService] Closing progress stream for plant ID: $plantId',
+        );
+      _progressStreams[plantId]!.close();
+      _progressStreams.remove(plantId);
+    }
   }
 
 }
+
+// The Uint8List.reshape and Float32List.reshape extensions are part of dart:typed_data
+// and tflite_flutter also provides them. Since tflite_flutter is conditionally imported,
+// for non-web, these extensions will be available. For web, this part of the code (TFLite block)
+// is not executed. No explicit use of .reshape() is present in this file, so linter errors
+// related to reshape should not occur.

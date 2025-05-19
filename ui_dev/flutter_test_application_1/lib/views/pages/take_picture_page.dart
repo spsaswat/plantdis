@@ -1,8 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter_test_application_1/services/plant_service.dart';
-import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 
 class TakePicturePage extends StatefulWidget {
@@ -223,71 +222,50 @@ class _TakePicturePageState extends State<TakePicturePage>
       _showErrorSnackBar('Camera is not initialized');
       return;
     }
+    // Prevent taking multiple pictures if one is already being processed or a tap is in progress
+    if (_cameraController!.value.isTakingPicture) {
+      return;
+    }
 
     try {
-      if (!_cameraController!.value.isTakingPicture && !_isUploading) {
-        setState(() {
-          _isUploading = true;
-          _errorMessage = '';
-        });
+      // Ensure the camera is not already taking a picture
+      // This state is managed internally by cameraController,
+      // but an explicit check doesn't hurt.
 
-        final XFile image = await _cameraController!.takePicture();
+      // No need for _isUploading state here anymore as WidgetTree will handle upload status
+      // setState(() {
+      //   _isUploading = true;
+      //   _errorMessage = '';
+      // });
 
-        try {
-          final result = await _plantService.uploadPlantImage(
-            image,
-            notes: 'Captured from camera app',
-          );
+      final XFile imageFile = await _cameraController!.takePicture();
 
-          if (!mounted) return;
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => SegmentPage(
-                    imgSrc: result['downloadUrl'],
-                    id: result['imageId'],
-                    plantId: result['plantId'],
-                  ),
-            ),
-          );
-        } catch (e) {
-          if (!mounted) return;
-          setState(() {
-            _errorMessage = 'Error uploading image: $e';
-          });
-          _showErrorSnackBar('Error uploading image: $e');
-        }
-      } else {
-        _showErrorSnackBar('Already taking or uploading a picture.');
+      // Pop the navigator and return the XFile
+      if (mounted) {
+        Navigator.of(context).pop(imageFile);
       }
     } catch (e) {
-      debugPrint('Error taking picture: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Error taking picture: $e';
-        });
-        _showErrorSnackBar('Error taking picture: $e');
+      if (kDebugMode) {
+        print('Error taking picture: $e');
       }
-    } finally {
       if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
+        // setState(() {
+        //   _isUploading = false; // Reset if error occurs before popping
+        //   _errorMessage = 'Failed to take picture: ${e.toString()}';
+        // });
+        _showErrorSnackBar('Failed to take picture: ${e.toString()}');
+        // Optionally, pop with null if an error occurs to signify failure
+        // Navigator.of(context).pop(null);
       }
     }
+    // No finally block needed here for _isUploading anymore
   }
 
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
+    }
   }
 }
