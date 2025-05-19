@@ -1,8 +1,5 @@
 import 'package:camera/camera.dart';
-import 'package:cross_file_image/cross_file_image.dart';
-import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 
@@ -55,27 +52,26 @@ class _WidgetTreeState extends State<WidgetTree> {
           builder: (context, selectedPage, child) {
             return selectedPage == 0
                 ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton(
-                  heroTag: 'upload_image',
-                  child: Icon(Icons.photo_library),
-                  tooltip: 'Upload from Gallery',
-                  onPressed: () => _pickImageFromGallery(),
-                ),
-                SizedBox(height: 10),
-                FloatingActionButton(
-                  heroTag: 'take_picture',
-                  child: Icon(Icons.add_a_photo),
-                  tooltip: 'Take Picture',
-                  onPressed: () => _showCamera(),
-                ),
-              ],
-            )
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'upload_image',
+                      child: Icon(Icons.photo_library),
+                      tooltip: 'Upload from Gallery',
+                      onPressed: () => _pickImageFromGallery(),
+                    ),
+                    SizedBox(height: 10),
+                    FloatingActionButton(
+                      heroTag: 'take_picture',
+                      child: Icon(Icons.add_a_photo),
+                      tooltip: 'Take Picture',
+                      onPressed: () => _showCamera(),
+                    ),
+                  ],
+                )
                 : SizedBox();
           },
         ),
-
 
         bottomNavigationBar: NavBarWidget(),
       ),
@@ -93,11 +89,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         imageQuality: 85,
       );
 
-      if (pickedFile == null) {
-        // User cancelled the picker
-        return;
-      }
-
+      if (pickedFile == null) return;
       if (!mounted) return;
 
       setState(() {
@@ -107,75 +99,52 @@ class _WidgetTreeState extends State<WidgetTree> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
       try {
-        final result = await _plantService.uploadPlantImage(
-          pickedFile,
+        final result = await _plantService.uploadAndAnalyzeImage(
+          image: pickedFile,
           notes: 'Uploaded from gallery',
         );
 
         if (!mounted) return;
-
-        Navigator.of(context).pop(); // Close loading dialog
-
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SegmentPage(
-              imgSrc: result['downloadUrl'],
-              id: result['imageId'],
-              plantId: result['plantId'],
-            ),
-          ),
-        );
-      } catch (uploadError) {
-        if (!mounted) return;
-
         Navigator.of(context).pop();
 
+        if (result.containsKey('plantId')) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => SegmentPage(
+                    imgSrc: result['downloadUrl'],
+                    id: result['imageId'],
+                    plantId: result['plantId'],
+                  ),
+            ),
+          );
+        } else {
+          _showErrorDialog(
+            'Upload and analysis completed but result was unexpected.',
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
         _showErrorDialog(
-          'Error uploading image: $uploadError\n\nPlease try again later.',
+          'Error during upload/analysis: ${e.toString()}\n\nPlease try again.',
         );
       }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
-        'Error picking image: $e\n\nPlease make sure you have granted gallery access (Mobile) or file selection (Web) permissions.',
+        'Error picking image: ${e.toString()}\n\nPlease check permissions.',
       );
     }
   }
 
-
-
-
-
   Future<void> _showCamera() async {
     try {
-      // Check if camera is allowed on this connection
-      // if (kIsWeb && !WebUtils.isCameraAllowed) {
-      //   _showErrorDialog(
-      //     'Camera access requires HTTPS or localhost. Please access the app using a secure connection.',
-      //   );
-      //   return;
-      // }
-
-      // // Request camera permission first if on web
-      // if (kIsWeb) {
-      //   try {
-      //     await WebUtils.requestCameraPermission();
-      //   } catch (e) {
-      //     _showErrorDialog(
-      //       'Camera permission denied. Please allow camera access in your browser settings.',
-      //     );
-      //     return;
-      //   }
-      // }
-
       final cameras = await availableCameras();
 
       if (cameras.isEmpty) {
@@ -183,7 +152,6 @@ class _WidgetTreeState extends State<WidgetTree> {
         return;
       }
 
-      // Try to get the back camera first, fall back to the first available camera
       final camera = cameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
@@ -191,30 +159,63 @@ class _WidgetTreeState extends State<WidgetTree> {
 
       if (!mounted) return;
 
-      final result = await Navigator.push(
+      final XFile? capturedImageFile = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => TakePicturePage(camera: camera),
         ),
       );
 
-      if (result != null && mounted) {
-        setState(() {
-          xfile = result as XFile;
-          showImageViewer(
+      if (capturedImageFile == null) return;
+      if (!mounted) return;
+
+      setState(() {
+        xfile = capturedImageFile;
+      });
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      try {
+        final result = await _plantService.uploadAndAnalyzeImage(
+          image: capturedImageFile,
+          notes: 'Captured from camera',
+        );
+
+        if (!mounted) return;
+        Navigator.of(context).pop();
+
+        if (result.containsKey('plantId')) {
+          Navigator.push(
             context,
-            Image(image: XFileImage(xfile!)).image,
-            swipeDismissible: true,
-            doubleTapZoomable: true,
-            onViewerDismissed: () {},
+            MaterialPageRoute(
+              builder:
+                  (context) => SegmentPage(
+                    imgSrc: result['downloadUrl'],
+                    id: result['imageId'],
+                    plantId: result['plantId'],
+                  ),
+            ),
           );
-          database.uploadImage(xfile!);
-        });
+        } else {
+          _showErrorDialog(
+            'Capture and analysis completed but result was unexpected.',
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        _showErrorDialog(
+          'Error during capture/analysis: ${e.toString()}\n\nPlease try again.',
+        );
       }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
-        'Error accessing camera: $e\n\nPlease make sure you have granted camera permissions and are using HTTPS.',
+        'Error accessing camera: ${e.toString()}\n\nPlease ensure permissions are granted and using HTTPS if on web.',
       );
     }
   }

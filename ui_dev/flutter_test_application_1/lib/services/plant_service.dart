@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+// Added for Uint8List
 import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,280 +9,217 @@ import '../models/plant_model.dart';
 import '../models/image_model.dart';
 import '../models/detection_result.dart'; // Import DetectionResult model
 import '../utils/storage_utils.dart';
-import './detection_service.dart'; // Import DetectionService
-import 'package:flutter/material.dart';
+import './inference_service.dart'; // Added for InferenceService
 import 'dart:async';
 
 class PlantService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final DetectionService _detectionService = DetectionService();
+  final InferenceService _inferenceService = InferenceService(); // Added
 
   // Collection references
   CollectionReference get _plants => _firestore.collection('plants');
   CollectionReference get _images => _firestore.collection('images');
   CollectionReference get _users => _firestore.collection('users');
 
-  /// Upload a new plant image and create associated records
-  Future<Map<String, dynamic>> uploadPlantImage(
-    XFile image, {
+  /// Uploads an image, creates associated records, triggers analysis via InferenceService,
+  /// and updates Firestore with the results.
+  Future<Map<String, dynamic>> uploadAndAnalyzeImage({
+    required XFile image, // Still taking XFile for convenience from UI
     String? notes,
     String? existingPlantId,
   }) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('User not authenticated');
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
 
-      final String plantId = existingPlantId ?? StorageUtils.generatePlantId();
-      final String imageId = StorageUtils.generateImageId();
+    final String plantId = existingPlantId ?? StorageUtils.generatePlantId();
+    final String imageId = StorageUtils.generateImageId();
 
-      // Determine extension
-      String extension;
-      if (kIsWeb) {
-        final mimeType = await image.mimeType;
-        if (mimeType == 'image/png') {
-          extension = 'png';
-        } else if (mimeType == 'image/jpeg') {
-          extension = 'jpg';
-        } else {
-          throw Exception(
-            'Invalid image format. Supported formats: jpg, jpeg, png',
-          );
-        }
+    // Read bytes from XFile
+    final Uint8List imageBytes = await image.readAsBytes();
+    final String imageName =
+        image.name; // For content type or metadata if needed
+
+    // Determine extension for content type
+    String extension;
+    if (kIsWeb) {
+      final mimeType = image.mimeType; // XFile provides mimeType
+      if (mimeType == 'image/png') {
+        extension = 'png';
+      } else if (mimeType == 'image/jpeg') {
+        extension = 'jpg';
       } else {
-        extension = StorageUtils.getFileExtension(image.path);
-        if (!StorageUtils.isValidImageExtension(extension)) {
+        // Fallback or throw error for unsupported web types
+        extension = imageName.split('.').last.toLowerCase();
+        if (!['jpg', 'jpeg', 'png'].contains(extension)) {
           throw Exception(
-            'Invalid image format. Supported formats: jpg, jpeg, png',
+            'Invalid image format on web. Supported: jpg, jpeg, png. Got: $mimeType',
           );
         }
       }
-
-      // Prepare storage path
-      String storagePath = StorageUtils.getOriginalImagePath(
-        user.uid,
-        plantId,
-        imageId,
-        extension,
-      );
-
-      Reference storageRef = _storage.ref().child(storagePath);
-      UploadTask uploadTask;
-      io.File? localFile; // To hold the file for analysis
-
-      if (kIsWeb) {
-        final bytes = await image.readAsBytes();
-        uploadTask = storageRef.putData(
-          bytes,
-          SettableMetadata(
-            contentType: StorageUtils.getContentType(extension),
-            customMetadata: {
-              'plantId': plantId,
-              'imageId': imageId,
-              'userId': user.uid,
-              'uploadTime': DateTime.now().toIso8601String(),
-            },
-          ),
-        );
-        // For web, we don't have a direct io.File, analysis might need adjustment
-        // or we assume analysis is triggered differently for web.
-        // For now, localFile remains null for web uploads.
-      } else {
-        localFile = io.File(image.path);
-        uploadTask = storageRef.putFile(
-          localFile,
-          SettableMetadata(
-            contentType: StorageUtils.getContentType(extension),
-            customMetadata: {
-              'plantId': plantId,
-              'imageId': imageId,
-              'userId': user.uid,
-              'uploadTime': DateTime.now().toIso8601String(),
-            },
-          ),
+    } else {
+      extension = StorageUtils.getFileExtension(image.path);
+      if (!StorageUtils.isValidImageExtension(extension)) {
+        throw Exception(
+          'Invalid image format on mobile. Supported: jpg, jpeg, png',
         );
       }
+    }
+    String contentType = StorageUtils.getContentType(extension);
 
-      TaskSnapshot taskSnapshot = await uploadTask;
-      String downloadUrl = await taskSnapshot.ref.getDownloadURL();
+    // Prepare storage path
+    String storagePath = StorageUtils.getOriginalImagePath(
+      user.uid,
+      plantId,
+      imageId,
+      extension,
+    );
+    Reference storageRef = _storage.ref().child(storagePath);
 
-      // Create Firestore document
-      ImageModel imageModel = ImageModel(
-        imageId: imageId,
+    // Upload image bytes
+    if (kDebugMode)
+      print('[PlantService] Uploading image bytes to $storagePath...');
+    UploadTask uploadTask = storageRef.putData(
+      imageBytes,
+      SettableMetadata(
+        contentType: contentType,
+        customMetadata: {
+          'plantId': plantId,
+          'imageId': imageId,
+          'userId': user.uid,
+          'uploadTime': DateTime.now().toIso8601String(),
+          'originalName': imageName,
+        },
+      ),
+    );
+
+    TaskSnapshot taskSnapshot = await uploadTask;
+    String downloadUrl = await taskSnapshot.ref.getDownloadURL();
+    if (kDebugMode) print('[PlantService] Image uploaded to $downloadUrl');
+
+    // Create ImageModel Firestore document
+    ImageModel imageModel = ImageModel(
+      imageId: imageId,
+      plantId: plantId,
+      userId: user.uid,
+      originalUrl: downloadUrl,
+      processedUrls: {},
+      uploadTime: DateTime.now(),
+      metadata: {
+        'notes': notes,
+        'originalName': imageName,
+        'contentType': contentType,
+      },
+    );
+    await _images.doc(imageId).set(imageModel.toMap());
+    if (kDebugMode) print('[PlantService] ImageModel created for $imageId');
+
+    // Create or update PlantModel, set status to 'processing' initially
+    if (existingPlantId == null) {
+      PlantModel plantModel = PlantModel(
         plantId: plantId,
         userId: user.uid,
-        originalUrl: downloadUrl,
-        processedUrls: {},
-        uploadTime: DateTime.now(),
-        metadata: {'notes': notes},
+        createdAt: DateTime.now(),
+        status: 'processing', // Initial status
+        images: [imageId],
+      );
+      await _plants.doc(plantId).set(plantModel.toMap());
+      await _plants.doc(plantId).update({'lastAnalyzedImageId': imageId});
+      await _users
+          .doc(user.uid)
+          .update({
+            'plants': FieldValue.arrayUnion([plantId]),
+          })
+          .catchError(
+            (e) => print("Error updating user's plant list: $e"),
+          ); // Optional: catch error
+      if (kDebugMode)
+        print('[PlantService] New PlantModel created for $plantId');
+    } else {
+      await _plants.doc(plantId).update({
+        'images': FieldValue.arrayUnion([imageId]),
+        'status': 'processing', // Re-set status for new analysis
+        'analysisError': FieldValue.delete(), // Clear previous error
+        'analysisResults': FieldValue.delete(), // Clear previous results
+      });
+      if (kDebugMode)
+        print('[PlantService] Existing PlantModel updated for $plantId');
+    }
+
+    // Trigger analysis via InferenceService and update PlantModel with results
+    if (kDebugMode)
+      print(
+        '[PlantService] Triggering analysis for $plantId via InferenceService...',
+      );
+    try {
+      await _plants.doc(plantId).update({
+        'status': 'analyzing',
+      }); // Update status before async call
+
+      DetectionResult? analysisResult = await _inferenceService.analyzeImage(
+        imageBytes: imageBytes,
+        plantId: plantId,
       );
 
-      await _images.doc(imageId).set(imageModel.toMap());
-
-      // Create or update PlantModel before triggering analysis
-      if (existingPlantId == null) {
-        PlantModel plantModel = PlantModel(
-          plantId: plantId,
-          userId: user.uid,
-          createdAt: DateTime.now(),
-          status: 'processing', // Set initial status to processing
-          images: [imageId],
-          // analysisResults: null, // Explicitly null initially
-        );
-        await _plants.doc(plantId).set(plantModel.toMap());
-        await _users.doc(user.uid).update({
-          'plants': FieldValue.arrayUnion([plantId]),
-        });
-      } else {
-        // If adding to existing plant, ensure its status indicates processing might occur
-        // This logic might need refinement depending on how re-analysis is handled.
-        await _plants.doc(plantId).update({
-          'images': FieldValue.arrayUnion([imageId]),
-          'status':
-              'processing', // Update status if a new image triggers processing
-        });
-      }
-
-      // Trigger analysis only if we have a local file (i.e., not web for now)
-      if (localFile != null) {
-        // Use unawaited here if we don't need to wait for analysis completion in this function
-        _runAnalysis(plantId, imageId, localFile);
-      } else if (kIsWeb) {
-        // Handle web: Maybe trigger a cloud function or mark as needs manual analysis?
-        print("Web upload completed, analysis needs separate trigger.");
-        await _plants.doc(plantId).update({
-          'status': 'pending_web_analysis', // Indicate special status for web
-        });
-      }
-
-      return {
-        'plantId': plantId,
-        'imageId': imageId,
-        'downloadUrl': downloadUrl,
-      };
-    } catch (e) {
-      print('Error uploading plant image: $e');
-      throw Exception('Failed to upload plant image: $e');
-    }
-  }
-
-  /// Runs the ML model analysis on the uploaded image file.
-  Future<void> _runAnalysis(
-    String plantId,
-    String imageId,
-    io.File imageFile,
-  ) async {
-    List<DetectionResult>? detectionResults;
-    dynamic analysisError;
-
-    if (kDebugMode)
-      print('[_runAnalysis] Starting for plant: $plantId, image: $imageId');
-    try {
-      // 1. Ensure model is loaded
-      await _detectionService.loadModel();
-      if (!_detectionService.isModelLoaded) {
-        throw Exception('Model failed to load before analysis.');
-      }
-
-      // 2. Update status to analyzing (before starting detection)
-      await _plants.doc(plantId).update({'status': 'analyzing'});
-
-      // 3. Perform detection (Await the result)
-      detectionResults = await _detectionService.detect(imageFile, plantId);
-
-      // If detect completes without error, proceed to update Firestore with results
-      if (kDebugMode)
-        print('[_runAnalysis] Detection completed for plant: $plantId');
-    } catch (e, stackTrace) {
-      if (kDebugMode)
-        print(
-          '[_runAnalysis] Error during analysis execution for plant $plantId: $e\n$stackTrace',
-        );
-      analysisError = e; // Store the error
-      // NOTE: Firestore status update happens in the finally block
-    }
-
-    // 4. Update Firestore based on success or failure
-    try {
-      if (analysisError != null) {
-        // Update status to error
-        await _plants.doc(plantId).update({
-          'status': 'error',
-          'analysisError': analysisError.toString(),
-        });
+      if (analysisResult != null) {
         if (kDebugMode)
-          print('[_runAnalysis] Updated plant $plantId status to error.');
-      } else if (detectionResults != null) {
-        // Format and save successful results
-        Map<String, dynamic> analysisData = {};
-        if (detectionResults.isNotEmpty) {
-          final topResult = detectionResults.first;
-          if (kDebugMode) {
-            print(
-              '[_runAnalysis] Top detection result: ${topResult.diseaseName} with confidence ${topResult.confidence}',
-            );
-          }
-          analysisData = {
-            'detectedDisease': topResult.diseaseName,
-            'confidence': topResult.confidence,
-            'detectionTimestamp': DateTime.now().toIso8601String(),
-            'fullDetectionResults':
-                detectionResults.map((r) => r.toMap()).toList(), // Use .toMap()
-          };
-        } else {
-          if (kDebugMode) {
-            print(
-              '[_runAnalysis] Detection results array is empty! Using fallback result.',
-            );
-          }
-          analysisData = {
-            'detectedDisease': 'No disease detected',
-            'confidence': 0.0,
-            'detectionTimestamp': DateTime.now().toIso8601String(),
-          };
-        }
-        if (kDebugMode) {
           print(
-            '[_runAnalysis] Updating Firestore document for plant $plantId with analysis data: $analysisData',
+            '[PlantService] Inference complete for $plantId. Result: ${analysisResult.diseaseName}',
           );
+        Map<String, dynamic> analysisData = {
+          'detectedDisease': analysisResult.diseaseName,
+          'confidence': analysisResult.confidence,
+          'detectionTimestamp': DateTime.now().toIso8601String(),
+          // If your DetectionResult has more fields like a list of all results, map them here.
+          // 'fullDetectionResults': (analysisResult.fullResults ?? []).map((r) => r.toMap()).toList(),
+        };
+        if (analysisResult.boundingBox != null) {
+          analysisData['boundingBox'] = analysisResult.boundingBox!.toJson();
         }
+
         await _plants.doc(plantId).update({
           'status': 'completed',
           'analysisResults': analysisData,
-          'lastAnalyzedImageId': imageId,
-          'lastAnalyzedTimestamp': FieldValue.serverTimestamp(),
+          'analysisError': null, // Clear any previous error on success
         });
-        // Verify the update was successful by reading the document back
-        if (kDebugMode) {
-          try {
-            final updatedDoc = await _plants.doc(plantId).get();
-            final data = updatedDoc.data() as Map<String, dynamic>?;
-            print(
-              '[_runAnalysis] Verification - updated document: status=${data?['status']}, analysisResults=${data?['analysisResults']}',
-            );
-          } catch (e) {
-            print('[_runAnalysis] Error verifying document update: $e');
-          }
-        }
         if (kDebugMode)
-          print('[_runAnalysis] Updated plant $plantId status to completed.');
+          print(
+            '[PlantService] Plant $plantId status updated to COMPLETED with results.',
+          );
       } else {
-        // Should not happen if error handling is correct, but as a fallback:
+        if (kDebugMode)
+          print(
+            '[PlantService] Inference returned null (no result/error) for $plantId.',
+          );
         await _plants.doc(plantId).update({
           'status': 'error',
-          'analysisError': 'Unknown state after analysis.',
+          'analysisError': 'Analysis did not return a valid result.',
         });
         if (kDebugMode)
-          print('[_runAnalysis] Plant $plantId ended in unknown state.');
+          print('[PlantService] Plant $plantId status updated to ERROR.');
       }
-    } catch (updateError) {
-      if (kDebugMode)
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
         print(
-          '[_runAnalysis] CRITICAL: Failed to update plant $plantId final status: $updateError',
+          '[PlantService] Error during analysis call or Firestore update for $plantId: $e\n$stackTrace',
         );
-      // Consider additional error handling/logging here
+      }
+      await _plants
+          .doc(plantId)
+          .update({
+            'status': 'error',
+            'analysisError': 'Failed to complete analysis: ${e.toString()}',
+          })
+          .catchError((updateError) {
+            if (kDebugMode)
+              print(
+                '[PlantService] CRITICAL: Failed to update plant $plantId to error state: $updateError',
+              );
+          });
     }
+
+    return {'plantId': plantId, 'imageId': imageId, 'downloadUrl': downloadUrl};
   }
 
   /// Save a processed image
@@ -557,55 +495,63 @@ class PlantService {
   /// Real-time stream of PlantModel list with error fallback for missing composite index.
   Stream<List<PlantModel>> userPlantsStream() {
     final user = _auth.currentUser;
-    if (user == null) throw Exception('User not authenticated');
-    // Controller to emit plant lists
-    final controller = StreamController<List<PlantModel>>();
-    // Attempt with orderBy (requires index)
-    _plants
-        .where('userId', isEqualTo: user.uid)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .listen(
-          (snapshot) {
-            // Map documents to models
-            final list =
-                snapshot.docs
-                    .map(
-                      (doc) => PlantModel.fromMap(
-                        doc.data() as Map<String, dynamic>,
-                      ),
-                    )
-                    .toList();
-            controller.add(list);
-          },
-          onError: (error) {
-            // Fallback: missing index -> listen without orderBy and sort in memory
-            print(
-              'userPlantsStream: index error, falling back without orderBy: $error',
-            );
-            _plants
-                .where('userId', isEqualTo: user.uid)
-                .snapshots()
-                .listen(
-                  (snap) {
-                    final list =
-                        snap.docs
-                            .map(
-                              (doc) => PlantModel.fromMap(
-                                doc.data() as Map<String, dynamic>,
-                              ),
-                            )
-                            .toList();
-                    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                    controller.add(list);
-                  },
-                  onError: (e) {
-                    // If fallback also fails, log but do not propagate error
-                    print('userPlantsStream fallback error: $e');
-                  },
-                );
-          },
-        );
+    if (user == null) {
+      // Return a stream that emits an error if the user is not authenticated.
+      return Stream.error(Exception('User not authenticated'));
+    }
+
+    final controller = StreamController<List<PlantModel>>.broadcast();
+
+    void fetchData(bool withOrderBy) {
+      Query query = _plants.where('userId', isEqualTo: user.uid);
+      if (withOrderBy) {
+        query = query.orderBy('createdAt', descending: true);
+      }
+
+      query.snapshots().listen(
+        (snapshot) {
+          final list =
+              snapshot.docs
+                  .map(
+                    (doc) =>
+                        PlantModel.fromMap(doc.data() as Map<String, dynamic>),
+                  )
+                  .toList();
+          if (!withOrderBy && snapshot.docs.isNotEmpty) {
+            // Sort in memory if not ordered by Firestore
+            list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          }
+          if (!controller.isClosed) controller.add(list);
+        },
+        onError: (error) {
+          if (withOrderBy &&
+              (error.toString().contains('failed-precondition') ||
+                  error.toString().contains('requires an index'))) {
+            if (kDebugMode)
+              print(
+                'userPlantsStream: Index error, falling back without orderBy: $error',
+              );
+            fetchData(false); // Attempt fallback without orderBy
+          } else {
+            if (kDebugMode)
+              print(
+                'userPlantsStream: Stream error (orderBy: $withOrderBy): $error',
+              );
+            if (!controller.isClosed) controller.addError(error);
+            // Optionally close the controller on error, or let it continue trying if that makes sense.
+            // controller.close();
+          }
+        },
+        onDone: () {
+          // if (kDebugMode) print('userPlantsStream: Stream (orderBy: $withOrderBy) done.');
+          // Don't close the controller here as snapshots() streams are continuous unless an error occurs
+          // that isn't handled by a retry (like the index fallback).
+        },
+      );
+    }
+
+    fetchData(true); // Initial attempt with orderBy
+
     return controller.stream;
   }
 }

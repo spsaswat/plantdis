@@ -40,7 +40,7 @@ class _CardWidgetState extends State<CardWidget> {
   void initState() {
     super.initState();
     _heroTag = widget.imageId ?? widget.plantId + UniqueKey().toString();
-    if (widget.plantId != null && widget.imageId != null) {
+    if (widget.imageId != null) {
       _imageUrlFuture = _fetchImageUrl(widget.plantId, widget.imageId!);
     }
   }
