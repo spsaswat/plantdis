@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/gemini_service.dart';
 import '../services/openrouter_service.dart';
 import '../../chat/chat_guard.dart'; // Import ChatGuard
+import '../services/chat_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -12,11 +13,12 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
-  final List<String> _messages = ["Hi! How can I help you?"];
-  final List<bool> _isUserMessage = [false]; // false for AI, true for user
   bool _isLoading = false;
   late String _selectedModel;
-  bool _debugMode = false; // For showing ChatGuard debugging info
+  bool _chatGuardEnabled = false; // Start with ChatGuard OFF 
+
+  // Get the instance of ChatService
+  final ChatService _chatService = ChatService();
 
   final List<String> _models = [
     "gemini-1.5-pro",
@@ -67,35 +69,38 @@ class _ChatPageState extends State<ChatPage> {
                                 });
                               }
                             },
-                            items:
-                                _models.map<DropdownMenuItem<String>>((
-                                  String model,
-                                ) {
-                                  return DropdownMenuItem<String>(
-                                    value: model,
-                                    child: Text(model),
-                                  );
-                                }).toList(),
+                            items: _models.map<DropdownMenuItem<String>>((
+                              String model,
+                            ) {
+                              return DropdownMenuItem<String>(
+                                value: model,
+                                child: Text(model),
+                              );
+                            }).toList(),
                           ),
                         ),
+                        // Spider/ChatGuard button
                         IconButton(
                           icon: Icon(
-                            _debugMode
-                                ? Icons.bug_report
-                                : Icons.bug_report_outlined,
-                            color: _debugMode ? Colors.green : Colors.grey,
+                            Icons.bug_report,
+                            color: _chatGuardEnabled ? Colors.green : Colors.grey,
                           ),
                           onPressed: () {
                             setState(() {
-                              _debugMode = !_debugMode;
+                              _chatGuardEnabled = !_chatGuardEnabled;
                             });
                           },
-                          tooltip: 'Toggle debug mode',
+                          tooltip: 'Toggle ChatGuard filtering',
+                        ),
+                        // Clear button
+                        IconButton(
+                          icon: Icon(Icons.delete_outline),
+                          onPressed: _clearChat,
+                          tooltip: 'Clear chat history',
                         ),
                       ],
                     ),
                   ),
-
                   Expanded(
                     flex: 8,
                     child: Container(
@@ -108,9 +113,11 @@ class _ChatPageState extends State<ChatPage> {
                         padding: const EdgeInsets.all(5.0),
                         child: ListView.builder(
                           shrinkWrap: true,
-                          itemCount: _messages.length + (_isLoading ? 1 : 0),
+                          itemCount: _chatService.messages.length +
+                              (_isLoading ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (_isLoading && index == _messages.length) {
+                            if (_isLoading &&
+                                index == _chatService.messages.length) {
                               // Show loading indicator
                               return ListTile(
                                 leading: CircleAvatar(
@@ -136,24 +143,23 @@ class _ChatPageState extends State<ChatPage> {
                             return ListTile(
                               leading: CircleAvatar(
                                 backgroundColor:
-                                    index >= _isUserMessage.length ||
-                                            !_isUserMessage[index]
+                                    index >= _chatService.isUserMessage.length ||
+                                            !_chatService.isUserMessage[index]
                                         ? Colors.red
                                         : Colors.green,
                                 child:
-                                    index >= _isUserMessage.length ||
-                                            !_isUserMessage[index]
+                                    index >= _chatService.isUserMessage.length ||
+                                            !_chatService.isUserMessage[index]
                                         ? Text('A')
                                         : Text('U'),
                               ),
-                              title: Text(_messages[index]),
+                              title: Text(_chatService.messages[index]),
                             );
                           },
                         ),
                       ),
                     ),
                   ),
-
                   Expanded(
                     child: Container(
                       width: double.infinity,
@@ -184,14 +190,13 @@ class _ChatPageState extends State<ChatPage> {
                                 backgroundColor: Colors.teal,
                               ),
                               icon: Icon(Icons.send),
-                              onPressed:
-                                  _isLoading
-                                      ? null
-                                      : () {
-                                        if (_controller.text.isNotEmpty) {
-                                          _handleSubmitted(_controller.text);
-                                        }
-                                      },
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      if (_controller.text.isNotEmpty) {
+                                        _handleSubmitted(_controller.text);
+                                      }
+                                    },
                             ),
                           ],
                         ),
@@ -207,44 +212,48 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // Add clear chat content function
+  void _clearChat() {
+    setState(() {
+      _chatService.clearMessages();
+    });
+  }
+
   void _handleSubmitted(String text) async {
     // Add user message
     setState(() {
-      _messages.add(text);
-      _isUserMessage.add(true);
+      _chatService.addMessage(text, true);
       _controller.clear();
       _isLoading = true; // Show loading state
     });
 
     try {
-      // Check if the message is on-topic using ChatGuard
-      double relevanceScore = ChatGuard.getRelevanceScore(text);
+      // Only apply ChatGuard filtering when enabled
+      if (_chatGuardEnabled) {
+        // Check if the message is on-topic using ChatGuard
+        double relevanceScore = ChatGuard.getRelevanceScore(text);
 
-      // In debug mode, show the ChatGuard analysis
-      if (_debugMode) {
-        setState(() {
-          _messages.add(ChatGuard.getDebugInfo(text));
-          _isUserMessage.add(false);
-        });
+        if (ChatGuard.isOutOfScope(text)) {
+          // Message is off-topic, show the appropriate response
+          setState(() {
+            _chatService.addMessage(
+              ChatGuard.getOutOfScopeReply(_selectedModel, relevanceScore),
+              false,
+            );
+            _isLoading = false; // Hide loading state
+          });
+          return; // Exit early - don't call the LLM
+        }
       }
 
-      if (ChatGuard.isOutOfScope(text)) {
-        // Message is off-topic, show the appropriate response based on the model and relevance score
-        setState(() {
-          _messages.add(
-            ChatGuard.getOutOfScopeReply(_selectedModel, relevanceScore),
-          );
-          _isUserMessage.add(false);
-          _isLoading = false; // Hide loading state
-        });
-        return; // Exit early - don't call the LLM
-      }
-
-      // Proceed with normal flow - message is on-topic
+      // Proceed with normal flow - message is on-topic or ChatGuard is disabled
       String answer;
 
       if (_selectedModel.startsWith("gemini")) {
-        answer = await _geminiService.getAnswer(text);
+        // Pass ChatGuard status to GeminiService
+        // When ChatGuard is enabled, treat as plant-related question
+        // When ChatGuard is disabled, treat as general question
+        answer = await _geminiService.getAnswer(text, isPlantRelated: _chatGuardEnabled);
       } else if (_selectedModel.startsWith("openrouter")) {
         String modelName;
         if (_selectedModel == "openrouter-Llama4-Scout") {
@@ -261,15 +270,13 @@ class _ChatPageState extends State<ChatPage> {
 
       // Add AI response
       setState(() {
-        _messages.add(answer);
-        _isUserMessage.add(false);
+        _chatService.addMessage(answer, false);
         _isLoading = false; // Hide loading state
       });
     } catch (e) {
       // Handle errors
       setState(() {
-        _messages.add("Sorry, an error occurred: $e");
-        _isUserMessage.add(false);
+        _chatService.addMessage("Sorry, an error occurred: $e", false);
         _isLoading = false; // Hide loading state
       });
     }

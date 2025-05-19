@@ -5,6 +5,7 @@ import 'dart:math'; // Keep Random if needed for other logic, or remove if not.
 import 'package:flutter_test_application_1/models/detection_result.dart';
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:flutter_test_application_1/services/detection_service.dart'; // Use the correct service
+// import 'package:flutter_test_application_1/services/segmentation_service.dart'; // Not used directly by InferenceService
 
 /// Service to handle ML model inference for plant disease detection.
 /// Provides progress feedback via stream during analysis.
@@ -26,12 +27,8 @@ class InferenceService {
   }) async {
     try {
       _updateProgress(AnalysisStage.preprocessing, 0.1, "Preparing model...");
-      // Ensure model is loaded (loadModel itself is idempotent)
       // DetectionService.loadModel() is called within DetectionService.detect() if not loaded.
-      // However, explicit loading here can be useful if you want to catch loading errors separately.
-      // For simplicity, relying on DetectionService.detect() to handle it.
-      // await _detectionService.loadModel();
-
+      
       _updateProgress(AnalysisStage.detecting, 0.4, "Analyzing image...");
       // Call the updated detect method in DetectionService
       List<DetectionResult> results = await _detectionService.detect(
@@ -57,7 +54,7 @@ class InferenceService {
         // Return a placeholder or specific result for "not detected"
         return DetectionResult(
           diseaseName: "Healthy / Not Detected",
-          confidence: 0.0, // Or a very low confidence if appropriate
+          confidence: 0.0, 
           boundingBox: null,
         );
       }
@@ -82,7 +79,6 @@ class InferenceService {
 
   /// Simulates analysis (kept for potential testing/fallback)
   /// This method would also need to be updated if it relies on File type directly.
-  /// For now, leaving it as is, but be aware if you use it.
   Future<void> simulateAnalysis({String plantId = "simulated_plant"}) async {
     final _random = Random(); // Make it local if only used here
     try {
@@ -130,12 +126,12 @@ class InferenceService {
     String? message,
   ]) {
     final String stageMessage =
-        message ?? ''; // Use provided message or derive one
+        message ?? ''; 
     _progressController.add(
       AnalysisProgress(
         stage: stage,
         progress: progress,
-        message: stageMessage, // Use the AnalysisProgress model's message field
+        message: stageMessage, 
         errorMessage: stage == AnalysisStage.failed ? stageMessage : null,
       ),
     );
