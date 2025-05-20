@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data'; // For Uint8List
-import 'dart:io' as io;    // For File operations on mobile, conditionally used
+import 'dart:io' as io; // For File operations on mobile, conditionally used
 
 import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,8 +12,8 @@ import '../models/plant_model.dart';
 import '../models/image_model.dart';
 import '../models/detection_result.dart';
 import '../utils/storage_utils.dart';
-import './inference_service.dart'; 
-import './segmentation_service.dart'; 
+import './inference_service.dart';
+import './segmentation_service.dart';
 // import 'package:flutter/material.dart'; // Removed as it did not seem directly used by PlantService logic
 
 class PlantService {
@@ -122,9 +122,7 @@ class PlantService {
           .update({
             'plants': FieldValue.arrayUnion([plantId]),
           })
-          .catchError(
-            (e) => print("Error updating user's plant list: $e"),
-          );
+          .catchError((e) => print("Error updating user's plant list: $e"));
       if (kDebugMode)
         print('[PlantService] New PlantModel created for $plantId');
     } else {
@@ -138,77 +136,132 @@ class PlantService {
         print('[PlantService] Existing PlantModel updated for $plantId');
     }
 
-    if (kDebugMode)
-      print(
-        '[PlantService] Triggering analysis for $plantId...',
-      );
+    if (kDebugMode) print('[PlantService] Triggering analysis for $plantId...');
     try {
-      await _plants.doc(plantId).update({
-        'status': 'analyzing',
-      });
+      await _plants.doc(plantId).update({'status': 'analyzing'});
 
       Uint8List bytesToAnalyze = imageBytes;
       io.File? tempOriginalFileForSeg;
       io.File? segmentedFile;
       String? segmentationUrl;
 
-      if (!kIsWeb) { // Only attempt segmentation on non-web platforms
-        if (kDebugMode) print('[PlantService] Attempting segmentation for $plantId on native platform...');
+      if (!kIsWeb) {
+        // Only attempt segmentation on non-web platforms
+        if (kDebugMode)
+          print(
+            '[PlantService NATIVE] Attempting segmentation for $plantId, original imageBytes length: ${imageBytes.length}',
+          );
         try {
-          await _segmentationService.loadModel();
-          
-          // Create a temporary file from imageBytes to pass to segmentation service
-          final tempDir = await io.Directory.systemTemp.createTemp('plant_img_seg_');
-          // Try to retain original extension for the temp file if possible, helps some libraries
-          tempOriginalFileForSeg = io.File('${tempDir.path}/$imageId.$extension');
-          await tempOriginalFileForSeg.writeAsBytes(imageBytes);
-          if (kDebugMode) print('[PlantService] Wrote temp file for segmentation: ${tempOriginalFileForSeg.path}');
-
-          segmentedFile = await _segmentationService.segment(tempOriginalFileForSeg); // Assumes segment() takes io.File
-
-          if (segmentedFile != null && await segmentedFile.exists()) {
-            if (kDebugMode) print('[PlantService] Segmentation successful: ${segmentedFile.path}');
-            bytesToAnalyze = await segmentedFile.readAsBytes(); // Use segmented image bytes for detection
-            
-            // Upload segmented image
-            segmentationUrl = await saveProcessedImage(
-              segmentedFile, 
-              plantId, 
-              imageId, // original imageId to associate with
-              'segmentation' // processType
-            );
-            if (kDebugMode) print('[PlantService] Uploaded segmentation image: $segmentationUrl');
-            // Update the ImageModel with the URL of the processed (segmented) image
-            await _images.doc(imageId).update({'processedUrls.segmentation': segmentationUrl});
-
+          await _segmentationService
+              .loadModel(); // Ensure model is loaded (idempotent)
+          if (!_segmentationService.isModelLoaded) {
+            if (kDebugMode)
+              print(
+                '[PlantService NATIVE] Segmentation model failed to load. Skipping segmentation.',
+              );
+            // bytesToAnalyze remains original imageBytes
           } else {
-            if (kDebugMode) print('[PlantService] Segmentation did not return a valid file, using original image.');
+            final tempDir = await io.Directory.systemTemp.createTemp(
+              'plant_img_seg_',
+            );
+            tempOriginalFileForSeg = io.File(
+              '${tempDir.path}/$imageId.$extension',
+            );
+            await tempOriginalFileForSeg.writeAsBytes(imageBytes);
+            if (kDebugMode)
+              print(
+                '[PlantService NATIVE] Wrote temp file for segmentation: ${tempOriginalFileForSeg.path}',
+              );
+
+            segmentedFile = await _segmentationService.segment(
+              tempOriginalFileForSeg,
+            );
+
+            if (segmentedFile != null && await segmentedFile.exists()) {
+              final segmentedBytesLength = await segmentedFile.length();
+              if (kDebugMode)
+                print(
+                  '[PlantService NATIVE] Segmentation successful. Segmented file: ${segmentedFile.path}, size: $segmentedBytesLength bytes',
+                );
+              bytesToAnalyze = await segmentedFile.readAsBytes();
+              if (kDebugMode)
+                print(
+                  '[PlantService NATIVE] Using segmented image bytes for analysis. Length: ${bytesToAnalyze.length}',
+                );
+
+              try {
+                segmentationUrl = await saveProcessedImage(
+                  segmentedFile,
+                  plantId,
+                  imageId,
+                  'segmentation',
+                );
+                if (kDebugMode)
+                  print(
+                    '[PlantService NATIVE] Uploaded segmentation image: $segmentationUrl',
+                  );
+                await _images.doc(imageId).update({
+                  'processedUrls.segmentation': segmentationUrl,
+                });
+              } catch (e) {
+                if (kDebugMode)
+                  print(
+                    '[PlantService NATIVE] Failed to upload segmented image: $e',
+                  );
+                // Continue with analysis even if upload of segmented image fails
+              }
+            } else {
+              if (kDebugMode)
+                print(
+                  '[PlantService NATIVE] Segmentation returned null or file does not exist. Using original image bytes for analysis.',
+                );
+              // bytesToAnalyze remains original imageBytes by default
+            }
           }
-        } catch (e,s) {
-          if (kDebugMode) print('[PlantService] Segmentation failed or was skipped during execution: $e\n$s');
+        } catch (e, s) {
+          if (kDebugMode)
+            print(
+              '[PlantService NATIVE] Segmentation process failed or was skipped: $e\n$s',
+            );
           // Fallback to original image bytes if segmentation fails
         } finally {
-          // Clean up temporary files
           try {
-            if (tempOriginalFileForSeg != null && await tempOriginalFileForSeg.exists()) {
+            if (tempOriginalFileForSeg != null &&
+                await tempOriginalFileForSeg.exists()) {
+              if (kDebugMode)
+                print(
+                  '[PlantService NATIVE] Deleting temp original file: ${tempOriginalFileForSeg.path}',
+                );
               await tempOriginalFileForSeg.delete();
-              // Only delete parent if we are sure it's empty and we created it uniquely for this file.
-              // The createTemp gives a unique directory, so it should be safe.
-              await tempOriginalFileForSeg.parent.delete(); 
+              await tempOriginalFileForSeg.parent.delete();
             }
-            // If segmentedFile is also temporary and not managed by SegmentationService, handle its deletion.
-            // This example assumes segmentedFile might be in a cache or a path that doesn't need explicit deletion here
-            // or that its lifecycle is managed by _segmentationService.
+            // Note: segmentedFile might be in a cache or a path that SegmentationService itself manages.
+            // If segmentedFile is also a temp file in a directory we created, it should be cleaned up too.
+            // For now, assuming it's handled or its path is managed by SegmentationService if it's not the one we created.
           } catch (e) {
-            if (kDebugMode) print('[PlantService] Error cleaning up temp file(s) for segmentation: $e');
+            if (kDebugMode)
+              print(
+                '[PlantService NATIVE] Error cleaning up temp file(s) for segmentation: $e',
+              );
           }
         }
+      } else {
+        if (kDebugMode)
+          print('[PlantService WEB] Skipping segmentation for web platform.');
       }
       // --- End Segmentation Step ---
 
+      if (kDebugMode)
+        print(
+          '[PlantService] Bytes to analyze length for InferenceService: ${bytesToAnalyze.length}',
+        );
       DetectionResult? analysisResult = await _inferenceService.analyzeImage(
         imageBytes: bytesToAnalyze,
         plantId: plantId,
+        isSegmented:
+            segmentedFile != null &&
+            await (segmentedFile?.exists() ??
+                false), // Pass segmentation status
       );
 
       if (analysisResult != null) {
@@ -226,14 +279,16 @@ class PlantService {
         if (analysisResult.boundingBox != null) {
           analysisData['boundingBox'] = analysisResult.boundingBox!.toJson();
         }
-        if (segmentationUrl != null) { // Add segmentation URL to results if it was generated and uploaded
-           analysisData['segmentationUrl'] = segmentationUrl;
+        if (segmentationUrl != null) {
+          // Add segmentation URL to results if it was generated and uploaded
+          analysisData['segmentationUrl'] = segmentationUrl;
         }
 
         await _plants.doc(plantId).update({
           'status': 'completed',
           'analysisResults': analysisData,
-          'analysisError': FieldValue.delete(), // Clear any previous error on success
+          'analysisError':
+              FieldValue.delete(), // Clear any previous error on success
         });
         if (kDebugMode)
           print(
@@ -275,7 +330,7 @@ class PlantService {
 
   // This method is from the 'main' branch logic, retained for uploading processed images like segmentation results.
   Future<String> saveProcessedImage(
-    io.File processedImage, 
+    io.File processedImage,
     String plantId,
     String originalImageId,
     String processType,
@@ -284,7 +339,8 @@ class PlantService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      final String extension = 'jpg'; // Assuming processed images are saved as JPEG, adjust if necessary
+      final String extension =
+          'jpg'; // Assuming processed images are saved as JPEG, adjust if necessary
 
       String storagePath = StorageUtils.getProcessedImagePath(
         user.uid,
@@ -311,7 +367,10 @@ class PlantService {
       // This is now handled in the main analysis flow if segmentationUrl is produced and we update ImageModel there.
       return downloadUrl;
     } catch (e) {
-      if (kDebugMode) print('[PlantService] Error saving processed image ($processType) for $originalImageId: $e');
+      if (kDebugMode)
+        print(
+          '[PlantService] Error saving processed image ($processType) for $originalImageId: $e',
+        );
       throw Exception('Failed to save processed image: $e');
     }
   }
@@ -320,26 +379,37 @@ class PlantService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
     try {
-      QuerySnapshot querySnapshot = await _plants
-          .where('userId', isEqualTo: user.uid)
-          .orderBy('createdAt', descending: true)
-          .limit(limit)
-          .get();
+      QuerySnapshot querySnapshot =
+          await _plants
+              .where('userId', isEqualTo: user.uid)
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .get();
       return querySnapshot.docs
           .map((doc) => PlantModel.fromMap(doc.data() as Map<String, dynamic>))
           .toList();
     } catch (e) {
       if (e.toString().contains('failed-precondition') ||
           e.toString().contains('requires an index')) {
-        if (kDebugMode) print('[PlantService] Index not available for getUserPlants, using fallback query without orderBy.');
-        QuerySnapshot querySnapshot = await _plants
-            .where('userId', isEqualTo: user.uid)
-            .limit(limit)
-            .get();
-        var plants = querySnapshot.docs
-            .map((doc) => PlantModel.fromMap(doc.data() as Map<String, dynamic>))
-            .toList();
-        plants.sort((a, b) => b.createdAt.compareTo(a.createdAt)); // Manual sort for fallback
+        if (kDebugMode)
+          print(
+            '[PlantService] Index not available for getUserPlants, using fallback query without orderBy.',
+          );
+        QuerySnapshot querySnapshot =
+            await _plants
+                .where('userId', isEqualTo: user.uid)
+                .limit(limit)
+                .get();
+        var plants =
+            querySnapshot.docs
+                .map(
+                  (doc) =>
+                      PlantModel.fromMap(doc.data() as Map<String, dynamic>),
+                )
+                .toList();
+        plants.sort(
+          (a, b) => b.createdAt.compareTo(a.createdAt),
+        ); // Manual sort for fallback
         return plants;
       } else {
         if (kDebugMode) print('[PlantService] Error getting user plants: $e');
@@ -352,15 +422,17 @@ class PlantService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
     try {
-      QuerySnapshot querySnapshot = await _images
-          .where('plantId', isEqualTo: plantId)
-          .orderBy('uploadTime', descending: true)
-          .get();
+      QuerySnapshot querySnapshot =
+          await _images
+              .where('plantId', isEqualTo: plantId)
+              .orderBy('uploadTime', descending: true)
+              .get();
       return querySnapshot.docs
           .map((doc) => ImageModel.fromMap(doc.data() as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      if (kDebugMode) print('[PlantService] Error getting plant images for $plantId: $e');
+      if (kDebugMode)
+        print('[PlantService] Error getting plant images for $plantId: $e');
       rethrow;
     }
   }
@@ -378,21 +450,38 @@ class PlantService {
       for (var image in images) {
         try {
           await _images.doc(image.imageId).delete(); // Delete image doc
-          
-          String fileExtension = image.metadata?['contentType']?.split('/').last ?? 
-                                 StorageUtils.getFileExtension(image.originalUrl); // Guess extension
+
+          String fileExtension =
+              image.metadata?['contentType']?.split('/').last ??
+              StorageUtils.getFileExtension(
+                image.originalUrl,
+              ); // Guess extension
           if (fileExtension == 'jpeg') fileExtension = 'jpg'; // Normalize
-          if (fileExtension.isEmpty) fileExtension = 'jpg'; // Default if still empty
+          if (fileExtension.isEmpty)
+            fileExtension = 'jpg'; // Default if still empty
 
           // Delete original image from storage
           try {
-            String originalPath = StorageUtils.getOriginalImagePath(user.uid, plantId, image.imageId, fileExtension);
-            await _storage.ref().child(originalPath).delete().catchError((error) {
-              if (kDebugMode) print('[PlantService] Storage deletion (original) for ${image.imageId} error: $error. Continuing.');
+            String originalPath = StorageUtils.getOriginalImagePath(
+              user.uid,
+              plantId,
+              image.imageId,
+              fileExtension,
+            );
+            await _storage.ref().child(originalPath).delete().catchError((
+              error,
+            ) {
+              if (kDebugMode)
+                print(
+                  '[PlantService] Storage deletion (original) for ${image.imageId} error: $error. Continuing.',
+                );
               return null;
             });
           } catch (e) {
-            if (kDebugMode) print('[PlantService] Storage deletion (original) for ${image.imageId} failed: $e. Continuing.');
+            if (kDebugMode)
+              print(
+                '[PlantService] Storage deletion (original) for ${image.imageId} failed: $e. Continuing.',
+              );
           }
 
           // Delete processed images from storage
@@ -405,13 +494,22 @@ class PlantService {
               // For now, we'll skip deleting processed images from storage if only URL is known.
               // If entry.value is a full gs:// path, Firebase SDK might handle it.
               // Let's assume for now these are URLs and we can't reliably delete them without storage paths.
-              if (kDebugMode) print('[PlantService] Skipping deletion of processed image (URL: ${entry.value}) for ${image.imageId} due to missing direct storage path info.');
+              if (kDebugMode)
+                print(
+                  '[PlantService] Skipping deletion of processed image (URL: ${entry.value}) for ${image.imageId} due to missing direct storage path info.',
+                );
             } catch (e) {
-              if (kDebugMode) print('[PlantService] Error attempting to delete processed image for ${image.imageId} from storage: $e');
+              if (kDebugMode)
+                print(
+                  '[PlantService] Error attempting to delete processed image for ${image.imageId} from storage: $e',
+                );
             }
           }
         } catch (e) {
-          if (kDebugMode) print('[PlantService] Error deleting data for image ${image.imageId}: $e. Continuing.');
+          if (kDebugMode)
+            print(
+              '[PlantService] Error deleting data for image ${image.imageId}: $e. Continuing.',
+            );
         }
       }
     } catch (e) {
@@ -430,7 +528,8 @@ class PlantService {
         'analysisResults': results,
       });
     } catch (e) {
-      if (kDebugMode) print('[PlantService] Error updating plant analysis for $plantId: $e');
+      if (kDebugMode)
+        print('[PlantService] Error updating plant analysis for $plantId: $e');
       rethrow;
     }
   }
@@ -448,10 +547,15 @@ class PlantService {
       }
       query.snapshots().listen(
         (snapshot) {
-          final list = snapshot.docs
-              .map((doc) => PlantModel.fromMap(doc.data() as Map<String, dynamic>))
-              .toList();
-          if (!withOrderBy && snapshot.docs.isNotEmpty) { // Sort in memory if not ordered by Firestore
+          final list =
+              snapshot.docs
+                  .map(
+                    (doc) =>
+                        PlantModel.fromMap(doc.data() as Map<String, dynamic>),
+                  )
+                  .toList();
+          if (!withOrderBy && snapshot.docs.isNotEmpty) {
+            // Sort in memory if not ordered by Firestore
             list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           }
           if (!controller.isClosed) controller.add(list);
@@ -460,15 +564,22 @@ class PlantService {
           if (withOrderBy &&
               (error.toString().contains('failed-precondition') ||
                   error.toString().contains('requires an index'))) {
-            if (kDebugMode) print('[PlantService] userPlantsStream: Index error, falling back without orderBy: $error');
+            if (kDebugMode)
+              print(
+                '[PlantService] userPlantsStream: Index error, falling back without orderBy: $error',
+              );
             fetchData(false); // Attempt fallback
           } else {
-            if (kDebugMode) print('[PlantService] userPlantsStream: Stream error (orderBy: $withOrderBy): $error');
+            if (kDebugMode)
+              print(
+                '[PlantService] userPlantsStream: Stream error (orderBy: $withOrderBy): $error',
+              );
             if (!controller.isClosed) controller.addError(error);
           }
         },
       );
     }
+
     fetchData(true); // Initial attempt with orderBy
     return controller.stream;
   }
