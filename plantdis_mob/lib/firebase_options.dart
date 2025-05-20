@@ -5,11 +5,6 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:PlantDis/firebase_options.dart';
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
- import 'firebase_options.dart';
 // ...
 //  await Firebase.initializeApp(
 //    options: DefaultFirebaseOptions.currentPlatform,

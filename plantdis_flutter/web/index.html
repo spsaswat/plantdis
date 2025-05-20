@@ -29,7 +29,89 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>plantdis_flutter</title>
+  <title>PlantDis - A Plant Disease Detector</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+  <script>
+    let loadedTfjsModel; // Global variable to store the loaded TF.js model
+
+    async function loadTFJSModel(modelPath) {
+      if (loadedTfjsModel) {
+        console.log('TF.js model already loaded.');
+        return true; // Indicate model is ready
+      }
+      try {
+        console.log('Attempting to load TF.js model from:', modelPath);
+        loadedTfjsModel = await tf.loadLayersModel(modelPath);
+        console.log('TF.js model loaded successfully.');
+        return true; // Indicate success
+      } catch (error) {
+        console.error('Error loading TF.js model:', error);
+        loadedTfjsModel = null; // Ensure it's null on error
+        throw error; // Rethrow for Dart to catch
+      }
+    }
+
+    async function runTFJSModelOnImageData(imageDataUrl, callback) {
+      if (!loadedTfjsModel) {
+        console.error('TF.js model not loaded. Call loadTFJSModel first.');
+        // Callback signature: (errorMessage, classIndex, confidence)
+        callback('Model not loaded', null, null);
+        return;
+      }
+      try {
+        const img = new Image();
+        img.src = imageDataUrl;
+
+        img.onload = async () => {
+          let tensor;
+          try {
+            tensor = tf.tidy(() => {
+              const pixels = tf.browser.fromPixels(img);
+              // Ensure these dimensions match your model's expected input
+              const resized = pixels.resizeNearestNeighbor([224, 224]); 
+              const floatTensor = resized.toFloat();
+              const normalized = floatTensor.div(tf.scalar(255.0));
+              return normalized.expandDims();
+            });
+
+            const prediction = loadedTfjsModel.predict(tensor);
+            const values = await prediction.data();
+
+            // Dispose tensors to free up memory
+            tensor.dispose();
+            prediction.dispose();
+
+            let maxVal = -Infinity;
+            let maxIndex = -1;
+            for (let i = 0; i < values.length; i++) {
+              if (values[i] > maxVal) {
+                maxVal = values[i];
+                maxIndex = i;
+              }
+            }
+            // Success callback: (null for error, classIndex, confidence)
+            callback(null, maxIndex, maxVal);
+          } catch (e) {
+            console.error('Error during TF.js tensor processing/prediction:', e);
+            if (tensor) tensor.dispose();
+            callback(e.toString(), null, null);
+          } finally {
+             img.onload = null; 
+             img.onerror = null;
+          }
+        };
+        img.onerror = () => {
+          console.error('Error loading image for TF.js processing from URL:', imageDataUrl);
+          callback('Image load error', null, null);
+          img.onload = null;
+          img.onerror = null;
+        };
+      } catch (error) {
+        console.error('TF.js Error in runTFJSModelOnImageData:', error);
+        callback(error.toString(), null, null);
+      }
+    }
+  </script>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -37,6 +119,7 @@
        application. For more information, see:
        https://developers.google.com/web/fundamentals/primers/service-workers -->
   <script>
+    // Service Worker Setup
     var serviceWorkerVersion = null;
     var scriptLoaded = false;
     function loadMainDartJs() {

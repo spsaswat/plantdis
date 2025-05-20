@@ -30,7 +30,7 @@ class AnalysisProgressWidget extends StatelessWidget {
                       value: value,
                       strokeWidth: 8,
                       color: colorScheme.primary,
-                      backgroundColor: colorScheme.surfaceVariant,
+                      backgroundColor: colorScheme.surfaceContainerHighest,
                     ),
                   ),
                   Text(

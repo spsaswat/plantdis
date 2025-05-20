@@ -49,7 +49,7 @@ class UIUtils {
         Future.delayed(Duration(seconds: timeoutSeconds), () {
           if (Navigator.of(dialogContext).canPop()) {
             Navigator.of(dialogContext).pop();
-            completer.complete();
+            if (!completer.isCompleted) completer.complete(); // Check if already completed
           }
         });
 
@@ -82,8 +82,10 @@ class UIUtils {
         );
       },
     );
-
-    return completer.future; // 确保 await 会在 auto-close 后继续
+    // Ensure the future completes even if the dialog is dismissed by other means
+    // or if the pop above doesn't trigger the completer quickly enough.
+    // However, simply returning completer.future is usually sufficient as the pop should complete it.
+    return completer.future; 
   }
 
   /// Shows a confirmation dialog with customizable actions

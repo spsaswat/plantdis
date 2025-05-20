@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/views/widgets/image_card.dart';
-import 'package:flutter_test_application_1/services/database_service.dart';
 
 class ImageGrid extends StatefulWidget {
   final List<Map<String, dynamic>> images;
