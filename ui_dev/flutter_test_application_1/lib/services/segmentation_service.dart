@@ -32,6 +32,10 @@ class SegmentationService {
   /// Check if the model is loaded
   bool get isModelLoaded => _modelLoaded;
 
+  /// Store the list of masks
+  List<List<List<double>>>? _rawMasks;
+  List<List<List<double>>>? get rawMasks => _rawMasks; // Public getter
+
   /// Asynchronously load the ONNX model.
   Future<void> loadModel() async {
     print('[SegmentationService] >> loadModel() ENTRY');
@@ -93,8 +97,65 @@ class SegmentationService {
     return [...r, ...g, ...b];
   }
 
+  Future<File> _generateUnionMask(List<List<List<double>>> rawMasks, img.Image decoded) async {
+    final int Hm = rawMasks[0].length;
+    final int Wm = rawMasks[0][0].length;
+
+    final union = List.generate(Hm, (_) => List<bool>.filled(Wm, false));
+    for (var m2d in rawMasks) {
+      for (int y = 0; y < Hm; y++) {
+        for (int x = 0; x < Wm; x++) {
+          if (m2d[y][x] > 0.5) union[y][x] = true;
+        }
+      }
+    }
+
+    final img.Image maskImg = img.Image(width: Wm, height: Hm);
+    for (int y = 0; y < Hm; y++) {
+      for (int x = 0; x < Wm; x++) {
+        if (union[y][x]) {
+          maskImg.setPixel(x, y, decoded.getPixel(x, y));
+        } else {
+          maskImg.setPixelRgba(x, y, 0, 0, 0, 255);
+        }
+      }
+    }
+
+    final outFile = File('${Directory.systemTemp.path}/mask_union.png');
+    await outFile.writeAsBytes(img.encodePng(maskImg));
+    return outFile;
+  }
+
+  Future<List<File>> _generateSingleMasks(List<List<List<double>>> rawMasks, img.Image decoded) async {
+    final int Hm = rawMasks[0].length;
+    final int Wm = rawMasks[0][0].length;
+    final List<File> maskFiles = [];
+
+    for (int i = 0; i < rawMasks.length; i++) {
+      final m2d = rawMasks[i];
+      final img.Image maskImg = img.Image(width: Wm, height: Hm);
+
+      for (int y = 0; y < Hm; y++) {
+        for (int x = 0; x < Wm; x++) {
+          if (m2d[y][x] > 0.5) {
+            maskImg.setPixel(x, y, decoded.getPixel(x, y));
+          } else {
+            maskImg.setPixelRgba(x, y, 0, 0, 0, 255);
+          }
+        }
+      }
+
+      final outFile = File('${Directory.systemTemp.path}/mask_$i.png');
+      await outFile.writeAsBytes(img.encodePng(maskImg));
+      maskFiles.add(outFile);
+    }
+
+    return maskFiles;
+  }
+
+
   /// Run the segmentation model on the input image file and return the output mask as a PNG file.
-  Future<File> segment(File inputFile) async {
+  Future<File> segment(File inputFile, {bool useUnionMask = true}) async {
     if (!_modelLoaded) {
       if (kDebugMode) print('[SegmentationService] Model not loaded, loading now...');
       await loadModel();
@@ -136,53 +197,43 @@ class SegmentationService {
 
       // 5. Convert masks to a list of 2D arrays
       final List<List<List<double>>> rawMasks = masks4D.map((det) {
-        // det 是 List 长度=1，det[0] 就是 H×W 的二维 mask
+        // det is a List of length 1, det[0] is the H×W 2D mask
         final mask2dDyn = (det as List)[0];
         return (mask2dDyn as List)
             .map<List<double>>((row) => (row as List).cast<double>())
             .toList();
       }).toList();
+      _rawMasks = rawMasks;
 
-      // For each mask, convert to a 2D array of bools
-      final int Hm = rawMasks[0].length;
-      final int Wm = rawMasks[0][0].length;
-      final union = List.generate(Hm, (_) => List<bool>.filled(Wm, false));
-      for (var m2d in rawMasks) {
-        for (int y = 0; y < Hm; y++) {
-          for (int x = 0; x < Wm; x++) {
-            if (m2d[y][x] > 0.5) union[y][x] = true;
-          }
-        }
+      // 6. Post-process using union mask or individual masks
+      if (useUnionMask) {
+      final outFile = await _generateUnionMask(rawMasks, decoded);
+      if (kDebugMode) {
+        print('[SegmentationService] Union mask saved: ${outFile.path}');
       }
-
-      // Draw the union mask
-      final img.Image maskImg = img.Image(width: Wm, height: Hm);
-      for (int y = 0; y < Hm; y++) {
-        for (int x = 0; x < Wm; x++) {
-          if (union[y][x]) {
-            maskImg.setPixel(x, y, decoded.getPixel(x, y));
-          } else {
-            maskImg.setPixelRgba(x, y, 0, 0, 0, 255);
-          }
-        }
-      }
-      await File('${Directory.systemTemp.path}/mask_union.png')
-          .writeAsBytes(img.encodePng(maskImg));
-
-
-      // 6. Save the mask image to temporary directory
-      final outDir = Directory.systemTemp;
-      final outFile = File('${outDir.path}/seg_${DateTime.now().millisecondsSinceEpoch}.png');
-      await outFile.writeAsBytes(img.encodePng(maskImg));
-
       // 7. Realase resources
       inputOrt.release();
       runOptions.release();
 
-      if (kDebugMode) print('[SegmentationService] Segmentation done, the result image is in: ${outFile.path}');
-
       // 8. Return the output mask file
       return outFile;
+    } else {
+      final outFiles = await _generateSingleMasks(rawMasks, decoded);
+      if (outFiles.isEmpty) throw Exception('No mask files generated.');
+      if (kDebugMode) {
+        print('[SegmentationService] Individual mask files:');
+        for (final f in outFiles) {
+          print("  '${f.path}',");
+        }
+      }
+      // 7. Realase resources
+      inputOrt.release();
+      runOptions.release();
+
+      // 8. Return the output mask files
+      return outFiles.first; // Return the first mask file for now
+    }
+
     } catch (e, st) {
       if (kDebugMode) {
         print('[SegmentationService] Error during segmentation: $e');
