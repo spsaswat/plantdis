@@ -6,7 +6,7 @@ The objective of the project is to identify plant disease by using image of a pl
 <h2 align="center"> Mobile App Demo </h2>
 <br>
 <p align="center">
-  <img src="https://github.com/spsaswat/plantdis/raw/main/op_m_readme/Plantdis%20Demo%20App.gif" alt="Plantdis Demo App" width="800" height="600">
+  <img src="https://github.com/spsaswat/plantdis/raw/main/op_m_readme/output_compressed.gif" alt="Plantdis Demo App">
 </p>
 
 <h2 align="center"> Desktop App Demo </h2>
