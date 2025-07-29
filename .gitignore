@@ -1,6 +1,56 @@
-# for ignoring all h5 files
+# Ignore HDF5 files
 *.h5
 
+# IDE files
 .idea
-
 .vscode
+*.iml
+
+# Flutter/Dart pubspec lock files anywhere
+**/pubspec.lock
+
+# Documents
+S1 2025 Reflection Template.docx
+tl25-poster-pitch.pdf
+tf25-reflections.pdf
+PlantDis - A Plant Disease Detector.pdf
+
+# Miscellaneous hidden/system files
+.cursor
+.roo
+.coderabbit.yaml
+.taskmasterconfig
+
+# JSON artifacts (confirm if always to ignore)
+ARTIFICACT_CUMULATIVE_SUMMARIES.json
+ARTIFACT_DEPENDENCY_MAP.json
+ARTIFACT_FILE_MANIFEST.json
+
+# Specific folders (recursive)
+**/concept_maps/
+**/tasks/
+
+# Log, temp, backup, cache files
+*.log
+*.tmp
+*.bak
+*.cache
+
+# Python
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+venv/
+.env
+coverage.xml
+test_results.xml
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# Flutter/Dart specific
+pubspec.lock
+.dart_tool/
+.flutter-plugins-dependencies
