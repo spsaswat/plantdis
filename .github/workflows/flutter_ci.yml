@@ -3,11 +3,14 @@ name: PlantDis Flutter CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'ui_dev/flutter_test_application_1/**'
+      - '.github/workflows/flutter_ci.yml'
   pull_request:
     branches: [main]
-  paths:
-    - 'ui_dev/flutter_test_application_1/**'
-    - '.github/workflows/flutter_ci.yml'
+    paths:
+      - 'ui_dev/flutter_test_application_1/**'
+      - '.github/workflows/flutter_ci.yml'
   workflow_dispatch: # Allows manual triggering of the workflow
 
 jobs:
