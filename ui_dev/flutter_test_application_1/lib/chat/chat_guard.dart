@@ -363,7 +363,6 @@ class ChatGuard {
     'coffee',
     'tea',
     'cacao',
-    'rice',
     'wheat',
     'barley',
     'oat',

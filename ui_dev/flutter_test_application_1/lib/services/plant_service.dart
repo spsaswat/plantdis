@@ -177,7 +177,7 @@ class PlantService {
               tempOriginalFileForSeg,
             );
 
-            if (segmentedFile != null && await segmentedFile.exists()) {
+            if (await segmentedFile.exists()) {
               final segmentedBytesLength = await segmentedFile.length();
               if (kDebugMode)
                 print(
@@ -260,7 +260,7 @@ class PlantService {
         plantId: plantId,
         isSegmented:
             segmentedFile != null &&
-            await (segmentedFile?.exists() ??
+            await (segmentedFile.exists() ??
                 false), // Pass segmentation status
       );
 

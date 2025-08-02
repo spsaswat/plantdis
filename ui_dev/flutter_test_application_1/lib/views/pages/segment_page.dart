@@ -205,7 +205,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
                           // Check for segmentation result in analysisResults
                           if (hasResults &&
-                              analysisResults!['segmentationUrl'] != null)
+                              analysisResults['segmentationUrl'] != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 15.0),
                               child: Card(
@@ -227,7 +227,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                           5.0,
                                         ),
                                         child: Image.network(
-                                          analysisResults!['segmentationUrl'],
+                                          analysisResults['segmentationUrl'],
                                           width: double.infinity,
                                           fit: BoxFit.cover,
                                         ),
