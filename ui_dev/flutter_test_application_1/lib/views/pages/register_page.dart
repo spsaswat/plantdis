@@ -196,29 +196,35 @@ class _RegisterPageState extends State<RegisterPage> {
         controllerPwd.text,
       );
 
-      navigateToHome();
+      // 检查Widget是否仍然挂载
+      if (mounted) {
+        navigateToHome();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("User Registered Successfully"),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.fixed,
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("User Registered Successfully"),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.toString();
-      });
+      // 检查Widget是否仍然挂载
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Registration failed: ${e.toString()}"),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Registration failed: ${e.toString()}"),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

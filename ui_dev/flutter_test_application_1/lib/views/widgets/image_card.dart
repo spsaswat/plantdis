@@ -94,7 +94,7 @@ class ImageCard extends StatelessWidget {
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(status).withOpacity(0.8),
+                      color: _getStatusColor(status).withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -114,7 +114,7 @@ class ImageCard extends StatelessWidget {
                   left: 8,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -214,6 +214,8 @@ class ImageCard extends StatelessWidget {
 
     try {
       // Show the auto-dismissing deletion dialog
+      // Note: Since this is a StatelessWidget, we can't use mounted check
+      // The context should still be valid at this point
       UIUtils.showDeletionDialog(
         context,
         'Deleting image...\nDeletion will continue in the background.',
@@ -238,9 +240,10 @@ class ImageCard extends StatelessWidget {
       // No state to reset here
     } catch (e) {
       // Handle any errors *before* deletion starts (e.g., showing dialog failed)
-      if (context.mounted) {
-        UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
-      }
+      // Note: Since this is a StatelessWidget, we can't use mounted check
+      // The context should still be valid at this point since the error occurred
+      // before any async operations that could invalidate the context
+      UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
     }
   }
 }

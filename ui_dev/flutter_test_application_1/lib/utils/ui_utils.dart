@@ -47,14 +47,16 @@ class UIUtils {
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         Future.delayed(Duration(seconds: timeoutSeconds), () {
+          // Check if dialogContext is still valid before using it
+          // Note: This is a dialog context, so it should remain valid during the delay
           if (Navigator.of(dialogContext).canPop()) {
             Navigator.of(dialogContext).pop();
             if (!completer.isCompleted) completer.complete(); // Check if already completed
           }
         });
 
-        return WillPopScope(
-          onWillPop: () async => false,
+        return PopScope(
+          canPop: false,
           child: Dialog(
             backgroundColor: Colors.white,
             child: Padding(

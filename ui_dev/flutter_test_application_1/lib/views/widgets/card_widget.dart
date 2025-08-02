@@ -84,11 +84,13 @@ class _CardWidgetState extends State<CardWidget> {
 
     try {
       // Show the auto-dismissing deletion dialog
-      UIUtils.showDeletionDialog(
-        context,
-        'Deleting item...\nDeletion will continue in the background.',
-        timeoutSeconds: 3, // Show briefly
-      );
+      if (mounted) {
+        UIUtils.showDeletionDialog(
+          context,
+          'Deleting item...\nDeletion will continue in the background.',
+          timeoutSeconds: 3, // Show briefly
+        );
+      }
 
       // Notify parent immediately to refresh the list
       if (widget.onDelete != null) {
@@ -110,7 +112,7 @@ class _CardWidgetState extends State<CardWidget> {
       }
     } catch (e) {
       // Handle any errors *before* deletion starts (e.g., showing dialog failed)
-      if (context.mounted) {
+      if (mounted) {
         UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
       }
       // Ensure state is reset even if dialog fails
@@ -247,7 +249,7 @@ class _CardWidgetState extends State<CardWidget> {
                   icon: Icon(
                     Icons.delete_outline,
                     color:
-                        _isDeleting ? Colors.grey : Colors.red.withOpacity(0.7),
+                        _isDeleting ? Colors.grey : Colors.red.withValues(alpha: 0.7),
                   ),
                   // Disable button while _isDeleting is true
                   onPressed: _isDeleting ? null : () => _confirmDelete(context),

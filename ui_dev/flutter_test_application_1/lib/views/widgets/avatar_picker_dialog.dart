@@ -63,8 +63,10 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
 
       // 获取下载链接并返回
       final downloadUrl = await storageRef.getDownloadURL();
-      widget.onAvatarSelected(downloadUrl);
-      Navigator.of(context).pop();
+      if (mounted) {
+        widget.onAvatarSelected(downloadUrl);
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       setState(() {
         _error = 'Failed to upload image: $e';
