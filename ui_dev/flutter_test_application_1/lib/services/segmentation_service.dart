@@ -1,6 +1,5 @@
 import 'dart:io';
-import 'dart:convert';
-import 'dart:math';
+
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart';      // kDebugMode
@@ -191,7 +190,7 @@ class SegmentationService {
       if (kDebugMode) print('=== SegService outputs count = ${outputs.length} ===');
 
       // 4. Extract masks from outputs
-      final raw = outputs[0]!.value as List;
+      // final raw = outputs[0]!.value as List; // Unused variable
       final masks4D = outputs[3]!.value as List;
       if (kDebugMode) print('[SegSvc] masks4D length = ${masks4D.length}');
 

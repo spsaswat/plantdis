@@ -260,8 +260,7 @@ class PlantService {
         plantId: plantId,
         isSegmented:
             segmentedFile != null &&
-            await (segmentedFile.exists() ??
-                false), // Pass segmentation status
+            await segmentedFile.exists(), // Pass segmentation status
       );
 
       if (analysisResult != null) {
@@ -487,7 +486,7 @@ class PlantService {
           // Delete processed images from storage
           for (var entry in image.processedUrls.entries) {
             try {
-              String processType = entry.key;
+              // String processType = entry.key; // Unused variable
               // String processedFileExtension = 'jpg'; // Assuming processed are jpg
               // String processedPath = StorageUtils.getProcessedImagePath(user.uid, plantId, image.imageId, processType, processedFileExtension);
               // Deleting by URL is not directly possible, need to reconstruct path or store paths.

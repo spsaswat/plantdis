@@ -8,7 +8,7 @@ import 'package:flutter_test_application_1/models/plant_model.dart'; // Import P
 import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
 import 'dart:async'; // Import for TimeoutException
-import 'dart:io' as io;
+
 import '../services/openrouter_service.dart';
 
 class SegmentPage extends StatefulWidget {
@@ -565,11 +565,13 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<void> _deletePlant(BuildContext context) async {
     try {
       // Show the auto-dismissing deletion dialog
-      UIUtils.showDeletionDialog(
-        context,
-        'Deleting analysis...\nDeletion will continue in the background.',
-        timeoutSeconds: 3, // Show briefly
-      );
+      if (mounted) {
+        UIUtils.showDeletionDialog(
+          context,
+          'Deleting analysis...\nDeletion will continue in the background.',
+          timeoutSeconds: 3, // Show briefly
+        );
+      }
 
       // Start deletion in background immediately
       _plantService.deletePlant(widget.plantId).catchError((e) {
@@ -581,14 +583,14 @@ class _SegmentPageState extends State<SegmentPage> {
       if (Navigator.of(context).canPop()) {
         Future.delayed(Duration(milliseconds: 50), () {
           // Small delay before pop
-          if (context.mounted && Navigator.of(context).canPop()) {
+          if (mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
           }
         });
       }
     } catch (e) {
       // Handle any errors *before* deletion starts (e.g., showing dialog failed)
-      if (context.mounted) {
+      if (mounted) {
         UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
       }
     }

@@ -1,7 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'package:flutter_test_application_1/services/plant_service.dart';
+
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 
 class TakePicturePage extends StatefulWidget {
@@ -16,10 +16,10 @@ class _TakePicturePageState extends State<TakePicturePage>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
   Future<void>? _initializeCameraControllerFuture;
-  final PlantService _plantService = PlantService();
-  bool _isUploading = false;
+  // final PlantService _plantService = PlantService(); // Unused field
+  // bool _isUploading = false; // Unused field
   String _errorMessage = '';
-  bool _hasPermission = false;
+  // bool _hasPermission = false; // Unused field
 
   @override
   void initState() {
@@ -79,7 +79,7 @@ class _TakePicturePageState extends State<TakePicturePage>
           .then((_) {
             if (mounted) {
               setState(() {
-                _hasPermission = true;
+                // _hasPermission = true; // Unused field
                 _errorMessage = '';
               });
             }
@@ -120,10 +120,12 @@ class _TakePicturePageState extends State<TakePicturePage>
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        _disposeCamera();
-        return true;
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          _disposeCamera();
+        }
       },
       child: Scaffold(
         appBar: AppbarWidget(),
@@ -135,18 +137,7 @@ class _TakePicturePageState extends State<TakePicturePage>
   }
 
   Widget _buildFloatingActionButton() {
-    if (_isUploading) {
-      return Container(
-        width: 56.0,
-        height: 56.0,
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.secondary,
-          shape: BoxShape.circle,
-        ),
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3.0),
-      );
-    }
+    // Removed unused _isUploading logic since the field is not used
 
     return FloatingActionButton(
       child: const Icon(Icons.camera),

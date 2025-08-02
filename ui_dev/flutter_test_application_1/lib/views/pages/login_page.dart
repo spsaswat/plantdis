@@ -180,29 +180,35 @@ class _LoginPageState extends State<LoginPage> {
         controllerPwd.text,
       );
 
-      navigateToHome();
+      // 检查Widget是否仍然挂载
+      if (mounted) {
+        navigateToHome();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Login Successful"),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.fixed,
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Login Successful"),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.toString();
-      });
+      // 检查Widget是否仍然挂载
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Login Failed: ${e.toString()}"),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Login Failed: ${e.toString()}"),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
