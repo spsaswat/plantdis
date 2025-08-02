@@ -94,7 +94,7 @@ class InferenceService {
   /// Simulates analysis (kept for potential testing/fallback)
   /// This method would also need to be updated if it relies on File type directly.
   Future<void> simulateAnalysis({String plantId = "simulated_plant"}) async {
-    final _random = Random(); // Make it local if only used here
+    //final _random = Random(); // Make it local if only used here
     try {
       _updateProgress(
         AnalysisStage.preprocessing,

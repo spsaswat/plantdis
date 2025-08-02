@@ -3,11 +3,9 @@ import 'detection_service.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
 
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
-import 'package:flutter_test_application_1/models/detection_result.dart';
 import 'package:image/image.dart' as img;
 
 // MOBILE-ONLY imports
@@ -93,7 +91,7 @@ class MobileDetectionService implements DetectionService {
 
     final inputTensor = _interpreterWrapper!.getInputTensor(0);
     final inputShape = inputTensor.shape;
-    final inputType = inputTensor.type;
+    //final inputType = inputTensor.type;
     final inputHeight = inputShape[1];
     final inputWidth = inputShape[2];
 
