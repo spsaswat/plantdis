@@ -6,19 +6,18 @@ import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  late final GoogleSignIn _googleSignIn;
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final UserService _userService = UserService();
 
   AuthService() {
-    // Initialize GoogleSignIn with web configuration if needed
-    if (kIsWeb) {
-      _googleSignIn = GoogleSignIn(
-        clientId:
-            '748587653216-3fdjn59qrs56gh3qpojkgcna1tuobn4j.apps.googleusercontent.com',
-        scopes: ['email', 'profile'],
-      );
-    } else {
-      _googleSignIn = GoogleSignIn();
+    _initializeGoogleSignIn();
+  }
+
+  Future<void> _initializeGoogleSignIn() async {
+    try {
+      await _googleSignIn.initialize();
+    } catch (e) {
+      print('Error initializing Google Sign In: $e');
     }
   }
 
@@ -78,21 +77,22 @@ class AuthService {
   // Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Begin interactive sign-in process
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      // Use the new authenticate method for 7.1.1+
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.authenticate();
 
       if (googleUser == null) {
         // User canceled the sign-in flow
         return null;
       }
 
-      // Obtain auth details from request
+      // Get authentication for Firebase - using legacy method for compatibility
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      // Create new credential for user
+      // Create Firebase credential
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+        accessToken: null, // 7.1.1 doesn't provide accessToken in same way
         idToken: googleAuth.idToken,
       );
 
