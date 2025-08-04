@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test_application_1/services/user_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
 
