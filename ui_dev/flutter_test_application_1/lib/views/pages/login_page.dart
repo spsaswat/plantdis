@@ -180,7 +180,7 @@ class _LoginPageState extends State<LoginPage> {
         controllerPwd.text,
       );
 
-      // 检查Widget是否仍然挂载
+      // Check if widget is still mounted
       if (mounted) {
         navigateToHome();
 
@@ -193,7 +193,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } catch (e) {
-      // 检查Widget是否仍然挂载
+      // Check if widget is still mounted
       if (mounted) {
         setState(() {
           _isLoading = false;

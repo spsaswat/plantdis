@@ -25,7 +25,7 @@ class InferenceService {
   Future<DetectionResult?> analyzeImage({
     required Uint8List imageBytes,
     required String plantId,
-    required bool isSegmented, // <<< --- 这里是关键修改 (THIS IS THE KEY CHANGE)
+    required bool isSegmented, // <<< --- This is the key change
   }) async {
     try {
       if (kDebugMode) {
