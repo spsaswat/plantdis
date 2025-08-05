@@ -61,7 +61,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
         SettableMetadata(contentType: 'image/jpeg'),
       );
 
-      // 获取下载链接并返回
+      // Get download URL and return
       final downloadUrl = await storageRef.getDownloadURL();
       if (mounted) {
         widget.onAvatarSelected(downloadUrl);

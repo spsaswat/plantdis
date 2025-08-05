@@ -196,7 +196,7 @@ class _RegisterPageState extends State<RegisterPage> {
         controllerPwd.text,
       );
 
-      // 检查Widget是否仍然挂载
+      // Check if widget is still mounted
       if (mounted) {
         navigateToHome();
 
@@ -209,7 +209,7 @@ class _RegisterPageState extends State<RegisterPage> {
         );
       }
     } catch (e) {
-      // 检查Widget是否仍然挂载
+      // Check if widget is still mounted
       if (mounted) {
         setState(() {
           _isLoading = false;
