@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/data/notifiers.dart';
 import 'package:flutter_test_application_1/views/pages/welcome_page.dart';
-
+import '../../utils/web_utils.dart';
 import '../pages/settings_page.dart';
 
 class DrawerWidget extends StatelessWidget {
@@ -13,44 +13,52 @@ class DrawerWidget extends StatelessWidget {
       child: Column(
         children: [
           DrawerHeader(
-            child: SizedBox(
-              child: Image.asset(
-                'assets/images/appn_banner.png',
-                color: Colors.white,
-                colorBlendMode: BlendMode.darken,
+            padding: EdgeInsets.zero,
+            child: GestureDetector(
+              onTap: () => web_utils.launchAPPNWebsite(context),
+              child: Padding(
+                // EdgeInsets.symmetric is perfect for applying horizontal (left/right)
+                // or vertical (top/bottom) padding.
+                padding: const EdgeInsets.symmetric(horizontal: 16.0), // Adds 16 pixels of space on both left and right
+                child: Image.asset(
+                  'assets/images/appn_banner.png',
+                  fit: BoxFit.contain, // Keep contain, as it's working well
+                ),
               ),
             ),
           ),
           ListTile(
-            leading: Icon(Icons.settings),
-            title: Text("Settings"),
+            leading: const Icon(Icons.settings),
+            title: const Text("Settings"),
             onTap:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) {
-                      return SettingsPage(title: "Settings");
+                      return const SettingsPage();
                     },
                   ),
                 ),
           ),
 
           ListTile(
-            leading: Icon(Icons.info_outline_rounded),
-            title: Text("About Us"),
-            onTap: () => debugPrint("[Display Devs?]"),
+            leading: const Icon(Icons.info_outline_rounded),
+            title: const Text("About Us"),
+            onTap: () => web_utils.launchPlantDisWebsite(context),
           ),
 
+          const Spacer(),
+
           ListTile(
-            leading: Icon(Icons.logout_outlined),
-            title: Text("Logout"),
+            leading: const Icon(Icons.logout_outlined),
+            title: const Text("Logout"),
             onTap: () {
               selectedPageNotifier.value = 0;
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
                   builder: (context) {
-                    return WelcomePage();
+                    return const WelcomePage();
                   },
                 ),
               );
