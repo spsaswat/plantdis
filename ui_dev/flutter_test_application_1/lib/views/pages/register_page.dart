@@ -46,14 +46,14 @@ class _RegisterPageState extends State<RegisterPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       spacing: 25.0,
                       children: [
-                        HeroWidget(title: "Register"),
+                        const HeroWidget(title: "Register"),
 
                         if (_errorMessage != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red),
+                              style: const TextStyle(color: Colors.red),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -92,8 +92,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            textStyle: TextStyle(
+                            minimumSize: const Size(double.infinity, 50),
+                            textStyle: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
@@ -102,7 +102,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               _isLoading ? null : () => onRegisterPressed(),
                           child:
                               _isLoading
-                                  ? SizedBox(
+                                  ? const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
@@ -110,14 +110,14 @@ class _RegisterPageState extends State<RegisterPage> {
                                       color: Colors.white,
                                     ),
                                   )
-                                  : Text("Register"),
+                                  : const Text("Register"),
                         ),
 
-                        Row(
+                        const Row(
                           children: [
                             Expanded(child: Divider()),
                             Padding(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 16.0,
                               ),
                               child: Text(
@@ -161,7 +161,7 @@ class _RegisterPageState extends State<RegisterPage> {
       context,
       MaterialPageRoute(
         builder: (context) {
-          return WidgetTree();
+          return const WidgetTree();
         },
       ),
       (route) => false,
@@ -201,7 +201,7 @@ class _RegisterPageState extends State<RegisterPage> {
         navigateToHome();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text("User Registered Successfully"),
             duration: Duration(seconds: 2),
             behavior: SnackBarBehavior.fixed,
@@ -219,7 +219,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Registration failed: ${e.toString()}"),
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red,
           ),

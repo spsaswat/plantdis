@@ -49,10 +49,10 @@ class _ProcessingPageState extends State<ProcessingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppbarWidget(),
+      appBar: const AppbarWidget(),
       body:
           _displayedPlants.isEmpty
-              ? Center(
+              ? const Center(
                 child: Text(
                   "No plants currently processing.",
                   style: TextStyle(color: Colors.grey),

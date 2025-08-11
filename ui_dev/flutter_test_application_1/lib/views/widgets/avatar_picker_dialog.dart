@@ -8,10 +8,10 @@ class AvatarPickerDialog extends StatefulWidget {
   final Function(String) onAvatarSelected;
 
   const AvatarPickerDialog({
-    Key? key,
+    super.key,
     this.currentAvatarUrl,
     required this.onAvatarSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<AvatarPickerDialog> createState() => _AvatarPickerDialogState();
@@ -92,10 +92,10 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                 'Choose Profile Picture',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               if (_error != null) ...[
-                Text(_error!, style: TextStyle(color: Colors.red)),
-                SizedBox(height: 16),
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 16),
               ],
               Wrap(
                 spacing: 16,
@@ -122,7 +122,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                       backgroundColor: Colors.grey[200],
                       child:
                           _isUploading
-                              ? CircularProgressIndicator()
+                              ? const CircularProgressIndicator()
                               : Icon(
                                 Icons.add_photo_alternate,
                                 size: 30,
@@ -132,10 +132,10 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                   ),
                 ],
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('Cancel'),
+                child: const Text('Cancel'),
               ),
             ],
           ),

@@ -45,12 +45,12 @@ class SegmentHero extends StatelessWidget {
 
           // Display segmentation result if available
           if (segmentationFile != null) ...[
-            SizedBox(height: 10),
-            Text(
+            const SizedBox(height: 10),
+            const Text(
               "Segmentation Result",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-            SizedBox(height: 5),
+            const SizedBox(height: 5),
             AspectRatio(
               aspectRatio: 16 / 9,
               child: GestureDetector(

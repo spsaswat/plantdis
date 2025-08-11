@@ -19,7 +19,7 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
@@ -57,7 +57,7 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
 
-          home: WelcomePage(),
+          home: const WelcomePage(),
         );
       },
     );
