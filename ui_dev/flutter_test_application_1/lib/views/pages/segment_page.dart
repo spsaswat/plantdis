@@ -68,7 +68,7 @@ class _SegmentPageState extends State<SegmentPage> {
         stream: _firestore.collection('plants').doc(widget.plantId).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -89,7 +89,7 @@ class _SegmentPageState extends State<SegmentPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   Text('Error loading plant data: ${snapshot.error}'),
                   // Optional: Add a retry button if appropriate
                 ],
@@ -97,58 +97,28 @@ class _SegmentPageState extends State<SegmentPage> {
             );
           }
 
+          // This is the part of your StreamBuilder that detects missing data
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(30.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.info_outline, // Changed icon
-                      size: 60,
-                      color: Colors.blueGrey, // Changed color
-                    ),
-                    SizedBox(height: 25),
-                    Text(
-                      'Plant Data Unavailable', // Changed title
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 15),
-                    Text(
-                      'This plant data (ID: ${widget.plantId}) cannot be displayed. It might have been deleted or is still processing.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[400], // Adjusted color
-                        height: 1.4, // Added line height
-                      ),
-                    ),
-                    SizedBox(height: 30),
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.arrow_back),
-                      label: Text('Go Back'),
-                      style: ElevatedButton.styleFrom(
-                        // Use primary color for button background
-                        foregroundColor: Colors.white, // White text
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                      ),
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                    ),
-                  ],
-                ),
+            // This is the new, important part.
+            // We use WidgetsBinding to safely navigate *after* the build is complete.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                // Show a quick message to the user.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("This item has been deleted."),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                // Navigate back to the previous screen (the results list).
+                Navigator.of(context).pop();
+              }
+            });
+
+            // While waiting for navigation, show a simple loading indicator.
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
               ),
             );
           }
@@ -462,7 +432,7 @@ class _SegmentPageState extends State<SegmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'AI Suggestion',
                 style: KTextStyle.titleTealText,
               ),

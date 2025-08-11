@@ -1,59 +1,27 @@
-// import 'dart:async';
-// import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-// // Web-specific imports
-// import 'dart:html' as html;
-// import 'dart:js' as js;
+class web_utils {
+  // This is now a static method, callable from anywhere in the app.
+  // We pass BuildContext so it can show a SnackBar if needed.
+  static Future<void> launchPlantDisWebsite(BuildContext context) async {
+    final Uri url = Uri.parse('https://plantdis.github.io/');
+    _launch(context, url);
+  }
 
-// class WebUtils {
-//   static Future<void> requestCameraPermission() async {
-//     if (!kIsWeb) return;
+  static Future<void> launchAPPNWebsite(BuildContext context) async {
+    final Uri url = Uri.parse('https://www.plantphenomics.org.au/');
+    _launch(context, url);
+  }
 
-//     try {
-//       // Call the JS function we defined in index.html
-//       await js.context.callMethod('requestCameraPermission');
-//     } catch (e) {
-//       throw Exception('Camera permission denied: $e');
-//     }
-//   }
-
-//   static bool get isHttps {
-//     if (!kIsWeb) return true; // Non-web platforms are always "secure"
-
-//     // Use the JS variable we set in index.html
-//     if (js.context.hasProperty('isOnLocalhost')) {
-//       final isLocalhost = js.context['isOnLocalhost'];
-//       if (isLocalhost == true) return true;
-//     }
-
-//     // Check protocol as fallback
-//     return html.window.location.protocol == 'https:';
-//   }
-
-//   // Force allow camera on localhost regardless of protocol
-//   static bool get isCameraAllowed {
-//     if (!kIsWeb) return true;
-
-//     // Use the JS variable we set in index.html
-//     if (js.context.hasProperty('isOnLocalhost')) {
-//       final isLocalhost = js.context['isOnLocalhost'];
-//       if (isLocalhost == true) return true;
-//     }
-
-//     return isHttps;
-//   }
-
-//   // Get fallback image as data URL
-//   static String? getFallbackImageUrl(String imageName) {
-//     if (!kIsWeb) return null;
-
-//     if (js.context.hasProperty('fallbackImages')) {
-//       final fallbackImages = js.context['fallbackImages'];
-//       if (fallbackImages != null && fallbackImages.hasProperty(imageName)) {
-//         return fallbackImages[imageName] as String?;
-//       }
-//     }
-
-//     return null;
-//   }
-// }
+  // A private helper function to avoid code duplication within this class.
+  static Future<void> _launch(BuildContext context, Uri url) async {
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not launch $url')),
+        );
+      }
+    }
+  }
+}
