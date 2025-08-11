@@ -10,7 +10,7 @@ class NavBarWidget extends StatelessWidget {
       valueListenable: selectedPageNotifier,
       builder: (context, selectedPage, child) {
         return NavigationBar(
-          destinations: [
+          destinations: const [
             NavigationDestination(icon: Icon(Icons.home), label: "Home"),
             NavigationDestination(
               icon: Icon(Icons.chat_rounded),

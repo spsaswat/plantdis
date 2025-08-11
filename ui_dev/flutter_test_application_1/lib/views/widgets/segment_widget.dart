@@ -7,10 +7,10 @@ class SegmentWidget extends StatelessWidget {
   final String title;
 
   const SegmentWidget({
-    Key? key,
+    super.key,
     required this.segmentationFile,
     this.title = 'Segmentation Result',
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,9 +22,9 @@ class SegmentWidget extends StatelessWidget {
           children: [
             Text(
               title,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             GestureDetector(
               onTap: () {
                 showImageViewer(

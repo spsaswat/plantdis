@@ -661,8 +661,7 @@ class ChatGuard {
     }
 
     String debugInfo =
-        '[Debug: Score ${score.toStringAsFixed(2)}, ' +
-        'Matched ${matchCount}/${words.length}: ${matchedWords.join(', ')}';
+        '[Debug: Score ${score.toStringAsFixed(2)}, ' 'Matched $matchCount/${words.length}: ${matchedWords.join(', ')}';
 
     if (patternMatches.isNotEmpty) {
       debugInfo += ', ${patternMatches.join(', ')}';

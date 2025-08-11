@@ -9,7 +9,7 @@ import 'dart:async'; // Import for TimeoutException
 import '../../data/constants.dart';
 
 class CardWidget extends StatefulWidget {
-  CardWidget({
+  const CardWidget({
     super.key,
     required this.title,
     required this.description,
@@ -130,7 +130,7 @@ class _CardWidgetState extends State<CardWidget> {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(vertical: 5.0),
+      padding: const EdgeInsets.symmetric(vertical: 5.0),
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
         color: widget.completed ? null : Colors.white12,
@@ -169,7 +169,7 @@ class _CardWidgetState extends State<CardWidget> {
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
-                          return Center(
+                          return const Center(
                             child: SizedBox(
                               width: 20,
                               height: 20,

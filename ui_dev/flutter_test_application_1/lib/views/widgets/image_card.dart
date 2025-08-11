@@ -10,12 +10,12 @@ class ImageCard extends StatelessWidget {
   final bool showDetails;
 
   const ImageCard({
-    Key? key,
+    super.key,
     required this.imageData,
     this.onDelete,
     this.onTap,
     this.showDetails = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +30,7 @@ class ImageCard extends StatelessWidget {
 
     return Card(
       elevation: 4,
-      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
@@ -65,7 +65,7 @@ class ImageCard extends StatelessWidget {
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
                                 color: Colors.grey[200],
-                                child: Center(
+                                child: const Center(
                                   child: Icon(
                                     Icons.error_outline,
                                     color: Colors.red,
@@ -92,14 +92,14 @@ class ImageCard extends StatelessWidget {
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       _getStatusText(status),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
@@ -118,9 +118,9 @@ class ImageCard extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.white),
+                      icon: const Icon(Icons.delete, color: Colors.white),
                       iconSize: 20,
-                      constraints: BoxConstraints(minWidth: 36, minHeight: 36),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       padding: EdgeInsets.zero,
                       onPressed: () => _confirmDelete(context, imageId),
                     ),
@@ -136,14 +136,14 @@ class ImageCard extends StatelessWidget {
                   children: [
                     Text(
                       plantType,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Uploaded: ${_formatDate(uploadTime)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
@@ -224,7 +224,7 @@ class ImageCard extends StatelessWidget {
 
       // Notify parent immediately to refresh the list
       // Add a small delay so the dialog has a chance to appear briefly
-      Future.delayed(Duration(milliseconds: 50), () {
+      Future.delayed(const Duration(milliseconds: 50), () {
         if (onDelete != null) {
           onDelete!();
         }

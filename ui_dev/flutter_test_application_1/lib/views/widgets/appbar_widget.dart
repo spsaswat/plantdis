@@ -24,19 +24,19 @@ class AppbarWidget extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return AppBar(
       backgroundColor: Colors.green,
-      title: Text("Plant Disease Detector"),
+      title: const Text("Plant Disease Detector"),
       centerTitle: true,
       actions: [
         IconButton(
-          padding: EdgeInsets.all(5.0),
-          icon: Icon(Icons.energy_savings_leaf_sharp),
+          padding: const EdgeInsets.all(5.0),
+          icon: const Icon(Icons.energy_savings_leaf_sharp),
           onPressed: _launchWebsite,
         ),
         ValueListenableBuilder(
           valueListenable: isDarkModeNotifier,
           builder: (context, isDarkMode, child) {
             return IconButton(
-              padding: EdgeInsets.all(5.0),
+              padding: const EdgeInsets.all(5.0),
               icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
               onPressed: () async {
                 isDarkModeNotifier.value = !isDarkModeNotifier.value;

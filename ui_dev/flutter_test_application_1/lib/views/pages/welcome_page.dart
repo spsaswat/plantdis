@@ -42,22 +42,22 @@ class _WelcomePageState extends State<WelcomePage> {
                           width: double.infinity,
                         ),
 
-                        Text("PlantDis", style: KTextStyle.appTitle),
+                        const Text("PlantDis", style: KTextStyle.appTitle),
 
                         if (_errorMessage != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red),
+                              style: const TextStyle(color: Colors.red),
                               textAlign: TextAlign.center,
                             ),
                           ),
 
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            textStyle: TextStyle(
+                            minimumSize: const Size(double.infinity, 50),
+                            textStyle: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
@@ -67,18 +67,18 @@ class _WelcomePageState extends State<WelcomePage> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) {
-                                  return LoginPage();
+                                  return const LoginPage();
                                 },
                               ),
                             );
                           },
-                          child: Text("Login"),
+                          child: const Text("Login"),
                         ),
 
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            textStyle: TextStyle(
+                            minimumSize: const Size(double.infinity, 50),
+                            textStyle: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                             ),
@@ -88,19 +88,19 @@ class _WelcomePageState extends State<WelcomePage> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) {
-                                  return RegisterPage();
+                                  return const RegisterPage();
                                 },
                               ),
                             );
                           },
-                          child: Text("Register"),
+                          child: const Text("Register"),
                         ),
 
-                        Row(
+                        const Row(
                           children: [
                             Expanded(child: Divider()),
                             Padding(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 16.0,
                               ),
                               child: Text(
@@ -131,13 +131,13 @@ class _WelcomePageState extends State<WelcomePage> {
 
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            textStyle: TextStyle(
+                            minimumSize: const Size(double.infinity, 50),
+                            textStyle: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          icon: Icon(Icons.person_outline),
+                          icon: const Icon(Icons.person_outline),
                           label:
                               _isGuestSignInLoading
                                   ? SizedBox(
@@ -150,7 +150,7 @@ class _WelcomePageState extends State<WelcomePage> {
                                       ),
                                     ),
                                   )
-                                  : Text("Continue as Guest"),
+                                  : const Text("Continue as Guest"),
                           onPressed:
                               _isGuestSignInLoading ? null : _signInAsGuest,
                         ),
@@ -188,7 +188,7 @@ class _WelcomePageState extends State<WelcomePage> {
       context,
       MaterialPageRoute(
         builder: (context) {
-          return WidgetTree();
+          return const WidgetTree();
         },
       ),
       (route) => false,

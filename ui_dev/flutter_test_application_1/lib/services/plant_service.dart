@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data'; // For Uint8List
+// For Uint8List
 import 'dart:io' as io; // For File operations on mobile, conditionally used
 
 import 'package:camera/camera.dart';
@@ -72,8 +72,9 @@ class PlantService {
     );
     Reference storageRef = _storage.ref().child(storagePath);
 
-    if (kDebugMode)
+    if (kDebugMode) {
       print('[PlantService] Uploading image bytes to $storagePath...');
+    }
     UploadTask uploadTask = storageRef.putData(
       imageBytes,
       SettableMetadata(
@@ -123,8 +124,9 @@ class PlantService {
             'plants': FieldValue.arrayUnion([plantId]),
           })
           .catchError((e) => print("Error updating user's plant list: $e"));
-      if (kDebugMode)
+      if (kDebugMode) {
         print('[PlantService] New PlantModel created for $plantId');
+      }
     } else {
       await _plants.doc(plantId).update({
         'images': FieldValue.arrayUnion([imageId]),
@@ -132,8 +134,9 @@ class PlantService {
         'analysisError': FieldValue.delete(),
         'analysisResults': FieldValue.delete(),
       });
-      if (kDebugMode)
+      if (kDebugMode) {
         print('[PlantService] Existing PlantModel updated for $plantId');
+      }
     }
 
     if (kDebugMode) print('[PlantService] Triggering analysis for $plantId...');
@@ -147,18 +150,20 @@ class PlantService {
 
       if (!kIsWeb) {
         // Only attempt segmentation on non-web platforms
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '[PlantService NATIVE] Attempting segmentation for $plantId, original imageBytes length: ${imageBytes.length}',
           );
+        }
         try {
           await _segmentationService
               .loadModel(); // Ensure model is loaded (idempotent)
           if (!_segmentationService.isModelLoaded) {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService NATIVE] Segmentation model failed to load. Skipping segmentation.',
               );
+            }
             // bytesToAnalyze remains original imageBytes
           } else {
             final tempDir = await io.Directory.systemTemp.createTemp(
@@ -168,10 +173,11 @@ class PlantService {
               '${tempDir.path}/$imageId.$extension',
             );
             await tempOriginalFileForSeg.writeAsBytes(imageBytes);
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService NATIVE] Wrote temp file for segmentation: ${tempOriginalFileForSeg.path}',
               );
+            }
 
             segmentedFile = await _segmentationService.segment(
               tempOriginalFileForSeg,
@@ -179,15 +185,17 @@ class PlantService {
 
             if (await segmentedFile.exists()) {
               final segmentedBytesLength = await segmentedFile.length();
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService NATIVE] Segmentation successful. Segmented file: ${segmentedFile.path}, size: $segmentedBytesLength bytes',
                 );
+              }
               bytesToAnalyze = await segmentedFile.readAsBytes();
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService NATIVE] Using segmented image bytes for analysis. Length: ${bytesToAnalyze.length}',
                 );
+              }
 
               try {
                 segmentationUrl = await saveProcessedImage(
@@ -196,42 +204,47 @@ class PlantService {
                   imageId,
                   'segmentation',
                 );
-                if (kDebugMode)
+                if (kDebugMode) {
                   print(
                     '[PlantService NATIVE] Uploaded segmentation image: $segmentationUrl',
                   );
+                }
                 await _images.doc(imageId).update({
                   'processedUrls.segmentation': segmentationUrl,
                 });
               } catch (e) {
-                if (kDebugMode)
+                if (kDebugMode) {
                   print(
                     '[PlantService NATIVE] Failed to upload segmented image: $e',
                   );
+                }
                 // Continue with analysis even if upload of segmented image fails
               }
             } else {
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService NATIVE] Segmentation returned null or file does not exist. Using original image bytes for analysis.',
                 );
+              }
               // bytesToAnalyze remains original imageBytes by default
             }
           }
         } catch (e, s) {
-          if (kDebugMode)
+          if (kDebugMode) {
             print(
               '[PlantService NATIVE] Segmentation process failed or was skipped: $e\n$s',
             );
+          }
           // Fallback to original image bytes if segmentation fails
         } finally {
           try {
             if (tempOriginalFileForSeg != null &&
                 await tempOriginalFileForSeg.exists()) {
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService NATIVE] Deleting temp original file: ${tempOriginalFileForSeg.path}',
                 );
+              }
               await tempOriginalFileForSeg.delete();
               await tempOriginalFileForSeg.parent.delete();
             }
@@ -239,22 +252,25 @@ class PlantService {
             // If segmentedFile is also a temp file in a directory we created, it should be cleaned up too.
             // For now, assuming it's handled or its path is managed by SegmentationService if it's not the one we created.
           } catch (e) {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService NATIVE] Error cleaning up temp file(s) for segmentation: $e',
               );
+            }
           }
         }
       } else {
-        if (kDebugMode)
+        if (kDebugMode) {
           print('[PlantService WEB] Skipping segmentation for web platform.');
+        }
       }
       // --- End Segmentation Step ---
 
-      if (kDebugMode)
+      if (kDebugMode) {
         print(
           '[PlantService] Bytes to analyze length for InferenceService: ${bytesToAnalyze.length}',
         );
+      }
       DetectionResult? analysisResult = await _inferenceService.analyzeImage(
         imageBytes: bytesToAnalyze,
         plantId: plantId,
@@ -264,10 +280,11 @@ class PlantService {
       );
 
       if (analysisResult != null) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '[PlantService] Inference complete for $plantId. Result: ${analysisResult.diseaseName}',
           );
+        }
         Map<String, dynamic> analysisData = {
           'detectedDisease': analysisResult.diseaseName,
           'confidence': analysisResult.confidence,
@@ -289,21 +306,24 @@ class PlantService {
           'analysisError':
               FieldValue.delete(), // Clear any previous error on success
         });
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '[PlantService] Plant $plantId status updated to COMPLETED with results.',
           );
+        }
       } else {
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '[PlantService] Inference returned null (no result/error) for $plantId.',
           );
+        }
         await _plants.doc(plantId).update({
           'status': 'error',
           'analysisError': 'Analysis did not return a valid result.',
         });
-        if (kDebugMode)
+        if (kDebugMode) {
           print('[PlantService] Plant $plantId status updated to ERROR.');
+        }
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -318,10 +338,11 @@ class PlantService {
             'analysisError': 'Failed to complete analysis: ${e.toString()}',
           })
           .catchError((updateError) {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService] CRITICAL: Failed to update plant $plantId to error state: $updateError',
               );
+            }
           });
     }
     return {'plantId': plantId, 'imageId': imageId, 'downloadUrl': downloadUrl};
@@ -338,7 +359,7 @@ class PlantService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
-      final String extension =
+      const String extension =
           'jpg'; // Assuming processed images are saved as JPEG, adjust if necessary
 
       String storagePath = StorageUtils.getProcessedImagePath(
@@ -366,10 +387,11 @@ class PlantService {
       // This is now handled in the main analysis flow if segmentationUrl is produced and we update ImageModel there.
       return downloadUrl;
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         print(
           '[PlantService] Error saving processed image ($processType) for $originalImageId: $e',
         );
+      }
       throw Exception('Failed to save processed image: $e');
     }
   }
@@ -390,10 +412,11 @@ class PlantService {
     } catch (e) {
       if (e.toString().contains('failed-precondition') ||
           e.toString().contains('requires an index')) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '[PlantService] Index not available for getUserPlants, using fallback query without orderBy.',
           );
+        }
         QuerySnapshot querySnapshot =
             await _plants
                 .where('userId', isEqualTo: user.uid)
@@ -430,8 +453,9 @@ class PlantService {
           .map((doc) => ImageModel.fromMap(doc.data() as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         print('[PlantService] Error getting plant images for $plantId: $e');
+      }
       rethrow;
     }
   }
@@ -456,8 +480,9 @@ class PlantService {
                 image.originalUrl,
               ); // Guess extension
           if (fileExtension == 'jpeg') fileExtension = 'jpg'; // Normalize
-          if (fileExtension.isEmpty)
+          if (fileExtension.isEmpty) {
             fileExtension = 'jpg'; // Default if still empty
+          }
 
           // Delete original image from storage
           try {
@@ -470,17 +495,19 @@ class PlantService {
             await _storage.ref().child(originalPath).delete().catchError((
               error,
             ) {
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService] Storage deletion (original) for ${image.imageId} error: $error. Continuing.',
                 );
+              }
               return null;
             });
           } catch (e) {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService] Storage deletion (original) for ${image.imageId} failed: $e. Continuing.',
               );
+            }
           }
 
           // Delete processed images from storage
@@ -493,22 +520,25 @@ class PlantService {
               // For now, we'll skip deleting processed images from storage if only URL is known.
               // If entry.value is a full gs:// path, Firebase SDK might handle it.
               // Let's assume for now these are URLs and we can't reliably delete them without storage paths.
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService] Skipping deletion of processed image (URL: ${entry.value}) for ${image.imageId} due to missing direct storage path info.',
                 );
+              }
             } catch (e) {
-              if (kDebugMode)
+              if (kDebugMode) {
                 print(
                   '[PlantService] Error attempting to delete processed image for ${image.imageId} from storage: $e',
                 );
+              }
             }
           }
         } catch (e) {
-          if (kDebugMode)
+          if (kDebugMode) {
             print(
               '[PlantService] Error deleting data for image ${image.imageId}: $e. Continuing.',
             );
+          }
         }
       }
     } catch (e) {
@@ -527,8 +557,9 @@ class PlantService {
         'analysisResults': results,
       });
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         print('[PlantService] Error updating plant analysis for $plantId: $e');
+      }
       rethrow;
     }
   }
@@ -563,16 +594,18 @@ class PlantService {
           if (withOrderBy &&
               (error.toString().contains('failed-precondition') ||
                   error.toString().contains('requires an index'))) {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService] userPlantsStream: Index error, falling back without orderBy: $error',
               );
+            }
             fetchData(false); // Attempt fallback
           } else {
-            if (kDebugMode)
+            if (kDebugMode) {
               print(
                 '[PlantService] userPlantsStream: Stream error (orderBy: $withOrderBy): $error',
               );
+            }
             if (!controller.isClosed) controller.addError(error);
           }
         },

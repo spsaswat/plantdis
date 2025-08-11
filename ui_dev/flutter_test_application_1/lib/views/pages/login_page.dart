@@ -44,14 +44,14 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       spacing: 25.0,
                       children: [
-                        HeroWidget(title: "Login"),
+                        const HeroWidget(title: "Login"),
 
                         if (_errorMessage != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red),
+                              style: const TextStyle(color: Colors.red),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -85,8 +85,8 @@ class _LoginPageState extends State<LoginPage> {
 
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            textStyle: TextStyle(
+                            minimumSize: const Size(double.infinity, 50),
+                            textStyle: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
@@ -94,7 +94,7 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: _isLoading ? null : () => onLoginPressed(),
                           child:
                               _isLoading
-                                  ? SizedBox(
+                                  ? const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
@@ -102,14 +102,14 @@ class _LoginPageState extends State<LoginPage> {
                                       color: Colors.white,
                                     ),
                                   )
-                                  : Text("Get Started"),
+                                  : const Text("Get Started"),
                         ),
 
-                        Row(
+                        const Row(
                           children: [
                             Expanded(child: Divider()),
                             Padding(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 16.0,
                               ),
                               child: Text(
@@ -154,7 +154,7 @@ class _LoginPageState extends State<LoginPage> {
       context,
       MaterialPageRoute(
         builder: (context) {
-          return WidgetTree();
+          return const WidgetTree();
         },
       ),
       (route) => false,
@@ -185,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
         navigateToHome();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text("Login Successful"),
             duration: Duration(seconds: 2),
             behavior: SnackBarBehavior.fixed,
@@ -203,7 +203,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Login Failed: ${e.toString()}"),
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red,
           ),
