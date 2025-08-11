@@ -1,7 +1,7 @@
 // lib/services/inference_service.dart
 
 import 'dart:async';
-import 'dart:typed_data'; // Added for Uint8List
+// Added for Uint8List
 
 
 import 'package:flutter/foundation.dart'; // Import for kDebugMode
@@ -60,7 +60,7 @@ class InferenceService {
           "No significant findings.",
         );
         // Return a placeholder or specific result for "not detected"
-        return DetectionResult(
+        return const DetectionResult(
           diseaseName: "Healthy / Not Detected",
           confidence: 0.0,
           boundingBox: null,

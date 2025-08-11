@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_test_application_1/utils/web_utils.dart';
 
 import '../../data/constants.dart';
 import '../../data/notifiers.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, required this.title});
 
+  final String title;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }

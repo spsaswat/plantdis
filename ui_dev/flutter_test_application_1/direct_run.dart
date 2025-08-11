@@ -6,11 +6,11 @@ void main(List<String> args) async {
   print('===== Flutter Direct Runner =====');
   
   // Configuration
-  final flutterRoot = 'C:\\flutter';
-  final dartSdkPath = '$flutterRoot\\bin\\cache\\dart-sdk';
-  final dartExe = '$dartSdkPath\\bin\\dart.exe';
-  final flutterToolsSnapshot = '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
-  final packageConfig = '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
+  const flutterRoot = 'C:\\flutter';
+  const dartSdkPath = '$flutterRoot\\bin\\cache\\dart-sdk';
+  const dartExe = '$dartSdkPath\\bin\\dart.exe';
+  const flutterToolsSnapshot = '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
+  const packageConfig = '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
   final workingDirectory = Directory.current.path;
   final androidSdkPath = Platform.environment['ANDROID_SDK_ROOT'] ?? 'C:\\Users\\polis\\AppData\\Local\\Android\\Sdk';
   final adbPath = '$androidSdkPath\\platform-tools\\adb.exe';
@@ -46,7 +46,7 @@ void main(List<String> args) async {
     print('Waiting for emulator to start and be ready (this may take a few minutes)...');
     bool emulatorReady = false;
     for (var i = 0; i < 120; i++) {  // Try for 2 minutes
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
       final checkResult = await Process.run(adbPath, ['devices']);
       final output = checkResult.stdout.toString();
       
@@ -61,7 +61,7 @@ void main(List<String> args) async {
           emulatorReady = true;
           print('Emulator is ready!');
           // Give it a few more seconds to fully initialize
-          await Future.delayed(Duration(seconds: 10));
+          await Future.delayed(const Duration(seconds: 10));
           break;
         }
       }

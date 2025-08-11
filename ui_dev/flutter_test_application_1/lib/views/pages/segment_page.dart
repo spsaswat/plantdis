@@ -63,7 +63,7 @@ class _SegmentPageState extends State<SegmentPage> {
     const double lowConfidenceThreshold = 0.1; // 10%
 
     return Scaffold(
-      appBar: AppbarWidget(),
+      appBar: const AppbarWidget(),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: _firestore.collection('plants').doc(widget.plantId).snapshots(),
         builder: (context, snapshot) {
@@ -88,7 +88,7 @@ class _SegmentPageState extends State<SegmentPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
                   const SizedBox(height: 20),
                   Text('Error loading plant data: ${snapshot.error}'),
                   // Optional: Add a retry button if appropriate
@@ -97,28 +97,58 @@ class _SegmentPageState extends State<SegmentPage> {
             );
           }
 
-          // This is the part of your StreamBuilder that detects missing data
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            // This is the new, important part.
-            // We use WidgetsBinding to safely navigate *after* the build is complete.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                // Show a quick message to the user.
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("This item has been deleted."),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-                // Navigate back to the previous screen (the results list).
-                Navigator.of(context).pop();
-              }
-            });
-
-            // While waiting for navigation, show a simple loading indicator.
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(30.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.info_outline, // Changed icon
+                      size: 60,
+                      color: Colors.blueGrey, // Changed color
+                    ),
+                    const SizedBox(height: 25),
+                    const Text(
+                      'Plant Data Unavailable', // Changed title
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 15),
+                    Text(
+                      'This plant data (ID: ${widget.plantId}) cannot be displayed. It might have been deleted or is still processing.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[400], // Adjusted color
+                        height: 1.4, // Added line height
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Go Back'),
+                      style: ElevatedButton.styleFrom(
+                        // Use primary color for button background
+                        foregroundColor: Colors.white, // White text
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -185,13 +215,13 @@ class _SegmentPageState extends State<SegmentPage> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Center(
+                                      const Center(
                                         child: Text(
                                           "Segmentation Result",
                                           style: KTextStyle.titleTealText,
                                         ),
                                       ),
-                                      SizedBox(height: 15),
+                                      const SizedBox(height: 15),
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(
                                           5.0,
@@ -210,7 +240,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
                           Container(
                             width: double.infinity,
-                            padding: EdgeInsets.symmetric(vertical: 10.0),
+                            padding: const EdgeInsets.symmetric(vertical: 10.0),
                             child: Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(15.0),
@@ -218,26 +248,26 @@ class _SegmentPageState extends State<SegmentPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   spacing: 5.0,
                                   children: [
-                                    Center(
+                                    const Center(
                                       child: Text(
                                         "Analysis Results",
                                         style: KTextStyle.titleTealText,
                                       ),
                                     ),
-                                    SizedBox(height: 10),
+                                    const SizedBox(height: 10),
                                     // Handle different statuses
                                     if (status == 'processing' ||
                                         status == 'analyzing')
                                       ListTile(
-                                        leading: CircularProgressIndicator(
+                                        leading: const CircularProgressIndicator(
                                           strokeWidth: 2,
                                         ),
-                                        title: Text('Analysis in progress...'),
-                                        subtitle: Text(
+                                        title: const Text('Analysis in progress...'),
+                                        subtitle: const Text(
                                           'Results will appear here shortly.',
                                         ),
                                         trailing: IconButton(
-                                          icon: Icon(
+                                          icon: const Icon(
                                             Icons.delete_outline,
                                             color: Colors.red,
                                           ),
@@ -248,11 +278,11 @@ class _SegmentPageState extends State<SegmentPage> {
                                       )
                                     else if (status == 'error')
                                       ListTile(
-                                        leading: Icon(
+                                        leading: const Icon(
                                           Icons.error_outline,
                                           color: Colors.red,
                                         ),
-                                        title: Text('Analysis Failed'),
+                                        title: const Text('Analysis Failed'),
                                         subtitle: Text(
                                           analysisErrorMsg ??
                                               'An unknown error occurred.',
@@ -263,7 +293,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                       if (hasResults) ...[
                                         if (detectedDisease ==
                                             'No disease detected')
-                                          ListTile(
+                                          const ListTile(
                                             leading: Icon(
                                               Icons.check_circle_outline,
                                               color: Colors.green,
@@ -306,10 +336,10 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 style: TextButton.styleFrom(
                                                   foregroundColor: Colors.red,
                                                 ),
-                                                icon: Icon(
+                                                icon: const Icon(
                                                   Icons.delete_outline,
                                                 ),
-                                                label: Text('Delete Result'),
+                                                label: const Text('Delete Result'),
                                                 onPressed:
                                                     () =>
                                                         _confirmDelete(context),
@@ -318,7 +348,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                           ),
                                         ),
                                       ] else
-                                        ListTile(
+                                        const ListTile(
                                           leading: Icon(
                                             Icons.info_outline,
                                             color: Colors.grey,
@@ -332,11 +362,11 @@ class _SegmentPageState extends State<SegmentPage> {
                                         ),
                                     ] else // Handle other statuses like 'pending' or unknown
                                       ListTile(
-                                        leading: Icon(
+                                        leading: const Icon(
                                           Icons.hourglass_empty,
                                           color: Colors.grey,
                                         ),
-                                        title: Text('Analysis Pending'),
+                                        title: const Text('Analysis Pending'),
                                         subtitle: Text('Status: $status'),
                                       ),
                                   ],
@@ -393,8 +423,8 @@ class _SegmentPageState extends State<SegmentPage> {
     return Column(
       children: [
         ListTile(
-          leading: Icon(Icons.help_outline, color: Colors.orange),
-          title: Text(
+          leading: const Icon(Icons.help_outline, color: Colors.orange),
+          title: const Text(
             'Low Confidence Result',
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
           ),
@@ -451,7 +481,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
   Future<String> _generateSuggestion(String disease, double confidence) async {
     // 1. If the result is background (not a leaf)
-    if (disease == 'Background_without_leaves') {
+    if (disease == 'Background without leaves') {
       return 'Please upload an image that clearly shows a plant leaf.';
     }
 
@@ -551,7 +581,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
       // Navigate back immediately
       if (Navigator.of(context).canPop()) {
-        Future.delayed(Duration(milliseconds: 50), () {
+        Future.delayed(const Duration(milliseconds: 50), () {
           // Small delay before pop
           if (mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();

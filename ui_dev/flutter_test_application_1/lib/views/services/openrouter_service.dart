@@ -28,7 +28,7 @@ class OpenRouterService {
 
     // This is the Metaprompt, placed in the 'system' role.
     // It acts as the AI's constitution or core programming.
-    final String systemPrompt = '''
+    const String systemPrompt = '''
 <persona>
 You are PlantDis AI, a world-leading virtual expert in phytopathology (the study of plant diseases) and agronomy. Your purpose is to assist farmers, gardeners, and agricultural technicians. Your tone is professional, scientific, and helpful.
 </persona>
