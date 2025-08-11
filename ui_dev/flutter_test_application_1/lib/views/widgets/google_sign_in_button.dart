@@ -7,10 +7,10 @@ class GoogleSignInButton extends StatelessWidget {
   final bool isLoading;
 
   const GoogleSignInButton({
-    Key? key,
+    super.key,
     required this.onSignInComplete,
     this.isLoading = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +18,7 @@ class GoogleSignInButton extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
-        minimumSize: Size(double.infinity, 50),
+        minimumSize: const Size(double.infinity, 50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10.0),
           side: BorderSide(color: Colors.grey.shade300),
@@ -27,7 +27,7 @@ class GoogleSignInButton extends StatelessWidget {
       onPressed: isLoading ? null : () => _signInWithGoogle(context),
       child:
           isLoading
-              ? SizedBox(
+              ? const SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
@@ -43,8 +43,8 @@ class GoogleSignInButton extends StatelessWidget {
                     height: 24,
                     width: 24,
                   ),
-                  SizedBox(width: 12),
-                  Text(
+                  const SizedBox(width: 12),
+                  const Text(
                     'Continue with Google',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),

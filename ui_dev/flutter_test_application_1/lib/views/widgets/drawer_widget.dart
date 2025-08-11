@@ -35,7 +35,7 @@ class DrawerWidget extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) {
-                      return const SettingsPage();
+                      return const SettingsPage(title: 'Settings',);
                     },
                   ),
                 ),

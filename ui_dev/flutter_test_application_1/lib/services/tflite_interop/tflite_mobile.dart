@@ -58,8 +58,9 @@ class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
 
   @override
   void run(Object input, Object output) {
-    if (_interpreter == null || !_loaded)
+    if (_interpreter == null || !_loaded) {
       throw Exception('Mobile TFLite model not loaded or uninitialized.');
+    }
     _interpreter!.run(input, output);
   }
 
@@ -72,15 +73,17 @@ class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
 
   @override
   TensorWrapper getInputTensor(int index) {
-    if (_interpreter == null || !_loaded)
+    if (_interpreter == null || !_loaded) {
       throw Exception('Mobile TFLite model not loaded or uninitialized.');
+    }
     return MobileTensorWrapper(_interpreter!.getInputTensor(index));
   }
 
   @override
   TensorWrapper getOutputTensor(int index) {
-    if (_interpreter == null || !_loaded)
+    if (_interpreter == null || !_loaded) {
       throw Exception('Mobile TFLite model not loaded or uninitialized.');
+    }
     return MobileTensorWrapper(_interpreter!.getOutputTensor(index));
   }
 }

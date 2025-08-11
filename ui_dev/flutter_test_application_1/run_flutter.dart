@@ -7,11 +7,11 @@ import 'dart:io';
 
 void main(List<String> args) async {
   // Configuration
-  final flutterRoot = 'C:\\flutter';
-  final dartSdkPath = '$flutterRoot\\bin\\cache\\dart-sdk';
-  final dartExe = '$dartSdkPath\\bin\\dart.exe';
-  final flutterToolsSnapshot = '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
-  final packageConfig = '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
+  const flutterRoot = 'C:\\flutter';
+  const dartSdkPath = '$flutterRoot\\bin\\cache\\dart-sdk';
+  const dartExe = '$dartSdkPath\\bin\\dart.exe';
+  const flutterToolsSnapshot = '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
+  const packageConfig = '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
   
   // Current directory is the Flutter project
   final workingDirectory = Directory.current.path;

@@ -1,7 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 class StorageUtils {
-  static final _uuid = Uuid();
+  static const _uuid = Uuid();
 
   /// Generates a timestamp-based ID with UUID
   static String generateTimeBasedId(String prefix) {
