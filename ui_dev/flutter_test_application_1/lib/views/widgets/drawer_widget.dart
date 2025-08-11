@@ -22,35 +22,35 @@ class DrawerWidget extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: Icon(Icons.settings),
-            title: Text("Settings"),
+            leading: const Icon(Icons.settings),
+            title: const Text("Settings"),
             onTap:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) {
-                      return SettingsPage(title: "Settings");
+                      return const SettingsPage(title: "Settings");
                     },
                   ),
                 ),
           ),
 
           ListTile(
-            leading: Icon(Icons.info_outline_rounded),
-            title: Text("About Us"),
+            leading: const Icon(Icons.info_outline_rounded),
+            title: const Text("About Us"),
             onTap: () => debugPrint("[Display Devs?]"),
           ),
 
           ListTile(
-            leading: Icon(Icons.logout_outlined),
-            title: Text("Logout"),
+            leading: const Icon(Icons.logout_outlined),
+            title: const Text("Logout"),
             onTap: () {
               selectedPageNotifier.value = 0;
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
                   builder: (context) {
-                    return WelcomePage();
+                    return const WelcomePage();
                   },
                 ),
               );

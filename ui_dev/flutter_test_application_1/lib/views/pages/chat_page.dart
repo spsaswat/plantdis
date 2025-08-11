@@ -53,11 +53,11 @@ class _ChatPageState extends State<ChatPage> {
                     padding: const EdgeInsets.only(bottom: 10.0),
                     child: Row(
                       children: [
-                        Text(
+                        const Text(
                           "Select Model:",
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: DropdownButton<String>(
                             value: _selectedModel,
@@ -94,7 +94,7 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                         // Clear button
                         IconButton(
-                          icon: Icon(Icons.delete_outline),
+                          icon: const Icon(Icons.delete_outline),
                           onPressed: _clearChat,
                           tooltip: 'Clear chat history',
                         ),
@@ -119,7 +119,7 @@ class _ChatPageState extends State<ChatPage> {
                             if (_isLoading &&
                                 index == _chatService.messages.length) {
                               // Show loading indicator
-                              return ListTile(
+                              return const ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: Colors.red,
                                   child: Text('A'),
@@ -150,8 +150,8 @@ class _ChatPageState extends State<ChatPage> {
                                 child:
                                     index >= _chatService.isUserMessage.length ||
                                             !_chatService.isUserMessage[index]
-                                        ? Text('A')
-                                        : Text('U'),
+                                        ? const Text('A')
+                                        : const Text('U'),
                               ),
                               title: Text(_chatService.messages[index]),
                             );
@@ -160,7 +160,8 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                     ),
                   ),
-                  Expanded(
+                  SizedBox(
+                    height: 60.0,
                     child: Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
@@ -174,7 +175,7 @@ class _ChatPageState extends State<ChatPage> {
                             Expanded(
                               child: TextField(
                                 controller: _controller,
-                                decoration: InputDecoration(
+                                decoration: const InputDecoration(
                                   border: InputBorder.none,
                                   hintText: 'Type a message...',
                                 ),
@@ -189,7 +190,7 @@ class _ChatPageState extends State<ChatPage> {
                               style: IconButton.styleFrom(
                                 backgroundColor: Colors.teal,
                               ),
-                              icon: Icon(Icons.send),
+                              icon: const Icon(Icons.send),
                               onPressed: _isLoading
                                   ? null
                                   : () {

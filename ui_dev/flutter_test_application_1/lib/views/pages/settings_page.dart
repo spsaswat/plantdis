@@ -39,14 +39,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       TextField(
                         controller: controller,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                         ),
                         onEditingComplete: () => setState(() {}),
                       ),
                       Text(controller.text),
 
-                      Divider(),
+                      const Divider(),
 
                       Checkbox(
                         value: isChecked,
@@ -58,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
 
                       CheckboxListTile.adaptive(
-                        title: Text("Tile (Check Me!)"),
+                        title: const Text("Tile (Check Me!)"),
                         value: isChecked,
                         onChanged: (bool? value) {
                           setState(() {
@@ -76,7 +76,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         },
                       ),
                       SwitchListTile.adaptive(
-                        title: Text("Tile (Switch Me!)"),
+                        title: const Text("Tile (Switch Me!)"),
                         value: isSwitched,
                         onChanged: (bool value) {
                           setState(() {
@@ -109,13 +109,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       FilledButton(
                         onPressed:
                             () => ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                              const SnackBar(
                                 content: Text("Snack bar Notification"),
                                 duration: Duration(seconds: 3),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             ),
-                        child: Text("Launch Snackbar"),
+                        child: const Text("Launch Snackbar"),
                       ),
 
                       ElevatedButton(
@@ -124,24 +124,24 @@ class _SettingsPageState extends State<SettingsPage> {
                             context: context,
                             builder: (context) {
                               return AlertDialog(
-                                title: Text("Alert Title"),
-                                content: Text("Alert Content"),
+                                title: const Text("Alert Title"),
+                                content: const Text("Alert Content"),
                                 actions: [
                                   FilledButton(
                                     onPressed: () => Navigator.pop(context),
-                                    child: Text("Close"),
+                                    child: const Text("Close"),
                                   ),
                                 ],
                               );
                             },
                           );
                         },
-                        child: Text("Launch Dialog window"),
+                        child: const Text("Launch Dialog window"),
                       ),
 
                       DropdownButton(
                         value: menuItem,
-                        items: [
+                        items: const [
                           DropdownMenuItem(value: "v1", child: Text("Item 1")),
                           DropdownMenuItem(value: "v2", child: Text("Item 2")),
                           DropdownMenuItem(value: "v3", child: Text("Item 3")),

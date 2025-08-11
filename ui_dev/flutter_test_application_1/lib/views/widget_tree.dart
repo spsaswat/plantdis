@@ -17,7 +17,7 @@ import 'widgets/drawer_widget.dart';
 import 'pages/home_page.dart';
 import 'pages/profile_page.dart';
 
-List<Widget> pages = [HomePage(), ChatPage(), ProfilePage()];
+List<Widget> pages = [const HomePage(), const ChatPage(), const ProfilePage()];
 
 class WidgetTree extends StatefulWidget {
   const WidgetTree({super.key});
@@ -36,9 +36,9 @@ class _WidgetTreeState extends State<WidgetTree> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        appBar: AppbarWidget(),
+        appBar: const AppbarWidget(),
 
-        drawer: DrawerWidget(),
+        drawer: const DrawerWidget(),
 
         body: ValueListenableBuilder(
           valueListenable: selectedPageNotifier,
@@ -56,24 +56,24 @@ class _WidgetTreeState extends State<WidgetTree> {
                   children: [
                     FloatingActionButton(
                       heroTag: 'upload_image',
-                      child: Icon(Icons.photo_library),
                       tooltip: 'Upload from Gallery',
                       onPressed: () => _pickImageFromGallery(),
+                      child: const Icon(Icons.photo_library),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                     FloatingActionButton(
                       heroTag: 'take_picture',
-                      child: Icon(Icons.add_a_photo),
                       tooltip: 'Take Picture',
                       onPressed: () => _showCamera(),
+                      child: const Icon(Icons.add_a_photo),
                     ),
                   ],
                 )
-                : SizedBox();
+                : const SizedBox();
           },
         ),
 
-        bottomNavigationBar: NavBarWidget(),
+        bottomNavigationBar: const NavBarWidget(),
       ),
     );
   }
@@ -225,12 +225,12 @@ class _WidgetTreeState extends State<WidgetTree> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('Camera Error'),
+            title: const Text('Camera Error'),
             content: Text(message),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('OK'),
+                child: const Text('OK'),
               ),
             ],
           ),

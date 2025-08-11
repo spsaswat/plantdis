@@ -15,9 +15,9 @@ class UIUtils {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 20),
-                Text(message, style: TextStyle(fontSize: 16)),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                Text(message, style: const TextStyle(fontSize: 16)),
               ],
             ),
           ),

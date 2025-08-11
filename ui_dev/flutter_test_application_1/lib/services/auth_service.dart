@@ -77,17 +77,12 @@ class AuthService {
   Future<UserCredential?> signInWithGoogle() async {
     try {
       // Use the new authenticate method for 7.1.1+
-      final GoogleSignInAccount? googleUser =
+      final GoogleSignInAccount googleUser =
           await _googleSignIn.authenticate();
-
-      if (googleUser == null) {
-        // User canceled the sign-in flow
-        return null;
-      }
 
       // Get authentication for Firebase - using legacy method for compatibility
       final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+          googleUser.authentication;
 
       // Create Firebase credential
       final credential = GoogleAuthProvider.credential(

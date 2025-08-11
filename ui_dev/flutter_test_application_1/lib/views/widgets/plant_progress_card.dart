@@ -83,7 +83,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
           child: Center(
             child: Text(
               'Analysis session for Plant ID ${widget.plantId} not active or already completed.',
-              style: TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
           ),
@@ -139,7 +139,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
                     return Center(
                       child: Text(
                         'Analysis stream for Plant ID ${widget.plantId} closed.',
-                        style: TextStyle(color: Colors.grey),
+                        style: const TextStyle(color: Colors.grey),
                         textAlign: TextAlign.center,
                       ),
                     );
@@ -149,7 +149,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
                     return Center(
                       child: Text(
                         'Stream Error: ${snapshot.error}',
-                        style: TextStyle(color: Colors.red),
+                        style: const TextStyle(color: Colors.red),
                       ),
                     );
                   }
@@ -179,7 +179,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
       future: _imageUrlFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
+          return const Center(
             child: SizedBox(
               width: 20,
               height: 20,
@@ -255,7 +255,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
             context,
           ).textTheme.bodySmall?.copyWith(color: Colors.grey),
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
         AnalysisProgressWidget(progress: progress),
       ],
     );
