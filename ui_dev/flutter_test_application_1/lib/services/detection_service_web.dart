@@ -1,7 +1,6 @@
 // lib/services/detection_service_web.dart
 
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';

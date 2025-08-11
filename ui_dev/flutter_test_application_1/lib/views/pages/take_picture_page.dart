@@ -6,7 +6,7 @@ import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 
 class TakePicturePage extends StatefulWidget {
   final CameraDescription camera;
-  const TakePicturePage({Key? key, required this.camera}) : super(key: key);
+  const TakePicturePage({super.key, required this.camera});
 
   @override
   State<TakePicturePage> createState() => _TakePicturePageState();
@@ -128,7 +128,7 @@ class _TakePicturePageState extends State<TakePicturePage>
         }
       },
       child: Scaffold(
-        appBar: AppbarWidget(),
+        appBar: const AppbarWidget(),
         floatingActionButton: _buildFloatingActionButton(),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
         body: _buildBody(),
@@ -140,11 +140,11 @@ class _TakePicturePageState extends State<TakePicturePage>
     // Removed unused _isUploading logic since the field is not used
 
     return FloatingActionButton(
-      child: const Icon(Icons.camera),
       onPressed:
           _cameraController?.value.isInitialized ?? false
               ? () => _takePicture(context)
               : null,
+      child: const Icon(Icons.camera),
     );
   }
 
@@ -164,7 +164,7 @@ class _TakePicturePageState extends State<TakePicturePage>
             message: 'Camera failed to initialize. Please try again.',
           );
         }
-        return Center(
+        return const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -183,17 +183,17 @@ class _TakePicturePageState extends State<TakePicturePage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 48, color: Colors.red),
-          SizedBox(height: 16),
+          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+          const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Text(
               message ?? _errorMessage,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red),
+              style: const TextStyle(color: Colors.red),
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
               setState(() {
@@ -201,7 +201,7 @@ class _TakePicturePageState extends State<TakePicturePage>
               });
               _initializeCamera();
             },
-            child: Text('Try Again'),
+            child: const Text('Try Again'),
           ),
         ],
       ),

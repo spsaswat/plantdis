@@ -67,7 +67,7 @@ class _ResultsPageState extends State<ResultsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppbarWidget(),
+      appBar: const AppbarWidget(),
       body: Center(
         heightFactor: 1,
         child: SingleChildScrollView(
@@ -80,10 +80,10 @@ class _ResultsPageState extends State<ResultsPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      HeroWidget(title: "Results"),
-                      SizedBox(height: 10.0),
+                      const HeroWidget(title: "Results"),
+                      const SizedBox(height: 10.0),
                       if (_displayedCards.isEmpty)
-                        Text(
+                        const Text(
                           "No results available.",
                           style: TextStyle(color: Colors.grey),
                         )
@@ -98,7 +98,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             plantId: card.plantId,
                             onDelete: _refreshCards,
                           );
-                        }).toList(),
+                        }),
                     ],
                   ),
                 );

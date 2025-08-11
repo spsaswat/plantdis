@@ -69,7 +69,7 @@ class DatabaseService {
                 100.0 *
                 (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
             print("Upload is $progress% complete.");
-            CircularProgressIndicator.adaptive();
+            const CircularProgressIndicator.adaptive();
             break;
           case TaskState.paused:
             print("Upload is paused.");
