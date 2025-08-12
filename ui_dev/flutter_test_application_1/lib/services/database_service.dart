@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_test_application_1/services/user_service.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class DatabaseService {
   final User _user = FirebaseAuth.instance.currentUser!;
@@ -68,20 +69,20 @@ class DatabaseService {
             final progress =
                 100.0 *
                 (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes);
-            print("Upload is $progress% complete.");
+            logger.i("Upload is $progress% complete.");
             const CircularProgressIndicator.adaptive();
             break;
           case TaskState.paused:
-            print("Upload is paused.");
+            logger.i("Upload is paused.");
             break;
           case TaskState.canceled:
-            print("Upload was cancelled");
+            logger.i("Upload was cancelled");
             break;
           case TaskState.error:
-            print("Upload encountered an error");
+            logger.e("Upload encountered an error");
             break;
           case TaskState.success:
-            print("Upload Successful");
+            logger.i("Upload Successful");
             break;
         }
       });
@@ -124,7 +125,7 @@ class DatabaseService {
 
       return imageData;
     } catch (e) {
-      print('Error uploading image: $e');
+      logger.e('Error uploading image: $e');
       throw Exception('Failed to upload image: $e');
     }
   }
@@ -174,7 +175,7 @@ class DatabaseService {
         }).toList();
       }
     } catch (e) {
-      print('Error getting user images: $e');
+      logger.e('Error getting user images: $e');
       throw Exception('Failed to get user images: $e');
     }
   }
@@ -197,7 +198,7 @@ class DatabaseService {
         return doc.data() as Map<String, dynamic>;
       }).toList();
     } catch (e) {
-      print('Error getting images by status: $e');
+      logger.e('Error getting images by status: $e');
       throw Exception('Failed to get images by status: $e');
     }
   }
@@ -215,7 +216,7 @@ class DatabaseService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error updating image analysis: $e');
+      logger.e('Error updating image analysis: $e');
       throw Exception('Failed to update image analysis: $e');
     }
   }
@@ -318,7 +319,9 @@ class DatabaseService {
             .timeout(
               const Duration(seconds: 5),
               onTimeout: () {
-                print('Storage deletion timed out, continuing with operation');
+                logger.w(
+                  'Storage deletion timed out, continuing with operation',
+                );
                 return;
               },
             );
@@ -326,10 +329,12 @@ class DatabaseService {
         // If the file doesn't exist, continue with the deletion process
         if (storageError.toString().contains('object-not-found') ||
             storageError.toString().contains('Not Found')) {
-          print('Warning: Storage file not found, continuing with deletion');
+          logger.w(
+            'Warning: Storage file not found, continuing with operation',
+          );
         } else {
           // Log but continue
-          print('Error deleting from storage: $storageError');
+          logger.e('Error deleting from storage: $storageError');
         }
       }
 
@@ -349,7 +354,7 @@ class DatabaseService {
         }
       }
     } catch (e) {
-      print('Error deleting image: $e');
+      logger.e('Error deleting image: $e');
       throw Exception('Failed to delete image: $e');
     }
   }

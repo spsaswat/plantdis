@@ -36,22 +36,21 @@ class UIUtils {
 
   /// Shows a deletion loading dialog that auto-dismisses.
   static Future<void> showDeletionDialog(
-      BuildContext context,
-      String message, {
-        int timeoutSeconds = 5,
-      }) async {
+    BuildContext context,
+    String message, {
+    int timeoutSeconds = 5,
+  }) async {
     final Completer<void> completer = Completer<void>();
+
+    Timer? timer;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
-        Future.delayed(Duration(seconds: timeoutSeconds), () {
-          // Check if dialogContext is still valid before using it
-          // Note: This is a dialog context, so it should remain valid during the delay
+        timer = Timer(Duration(seconds: timeoutSeconds), () {
           if (Navigator.of(dialogContext).canPop()) {
             Navigator.of(dialogContext).pop();
-            if (!completer.isCompleted) completer.complete(); // Check if already completed
           }
         });
 
@@ -83,11 +82,17 @@ class UIUtils {
           ),
         );
       },
-    );
-    // Ensure the future completes even if the dialog is dismissed by other means
-    // or if the pop above doesn't trigger the completer quickly enough.
-    // However, simply returning completer.future is usually sufficient as the pop should complete it.
-    return completer.future; 
+    ).then((_) {
+      // This part runs when the dialog is dismissed (either by the timer or manually)
+      // We check if the completer hasn't been completed yet to avoid an error.
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+      // We also cancel the timer just in case it's still running.
+      timer?.cancel();
+    });
+
+    return completer.future;
   }
 
   /// Shows a confirmation dialog with customizable actions

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_test_application_1/services/user_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -16,7 +17,7 @@ class AuthService {
     try {
       await _googleSignIn.initialize();
     } catch (e) {
-      print('Error initializing Google Sign In: $e');
+      logger.e('Error initializing Google Sign In: $e');
     }
   }
 
@@ -77,12 +78,10 @@ class AuthService {
   Future<UserCredential?> signInWithGoogle() async {
     try {
       // Use the new authenticate method for 7.1.1+
-      final GoogleSignInAccount googleUser =
-          await _googleSignIn.authenticate();
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
       // Get authentication for Firebase - using legacy method for compatibility
-      final GoogleSignInAuthentication googleAuth =
-          googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       // Create Firebase credential
       final credential = GoogleAuthProvider.credential(
@@ -107,7 +106,7 @@ class AuthService {
 
       return userCredential;
     } catch (e) {
-      print('Exception during Google sign in: $e');
+      logger.e('Exception during Google sign in: $e');
       rethrow;
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
 import 'dart:async'; // Import for TimeoutException
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class ImageCard extends StatelessWidget {
   final Map<String, dynamic> imageData;
@@ -92,7 +93,10 @@ class ImageCard extends StatelessWidget {
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
@@ -120,7 +124,10 @@ class ImageCard extends StatelessWidget {
                     child: IconButton(
                       icon: const Icon(Icons.delete, color: Colors.white),
                       iconSize: 20,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      constraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
+                      ),
                       padding: EdgeInsets.zero,
                       onPressed: () => _confirmDelete(context, imageId),
                     ),
@@ -234,7 +241,7 @@ class ImageCard extends StatelessWidget {
       final databaseService = DatabaseService();
       databaseService.deleteImage(imageId).catchError((e) {
         // Log background errors but don't bother the user
-        print("Background deletion error (ImageCard, ignored): $e");
+        logger.w("Background deletion error (ImageCard, ignored): $e");
       });
 
       // No state to reset here

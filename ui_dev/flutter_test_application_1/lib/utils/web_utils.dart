@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class web_utils {
+class WebUtils {
   // This is now a static method, callable from anywhere in the app.
   // We pass BuildContext so it can show a SnackBar if needed.
   static Future<void> launchPlantDisWebsite(BuildContext context) async {
@@ -18,9 +18,9 @@ class web_utils {
   static Future<void> _launch(BuildContext context, Uri url) async {
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $url')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
       }
     }
   }

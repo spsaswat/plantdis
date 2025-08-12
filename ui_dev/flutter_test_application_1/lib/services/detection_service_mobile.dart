@@ -7,10 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 // MOBILE-ONLY imports
 import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
-
 
 /// This function is called by the conditional import in detection_service.dart
 /// when the platform is NOT web.
@@ -19,7 +19,8 @@ DetectionService getDetectionService() => MobileDetectionService();
 /// Mobile-specific implementation of the DetectionService.
 class MobileDetectionService implements DetectionService {
   // --- Singleton Pattern Start ---
-  static final MobileDetectionService _instance = MobileDetectionService._internal();
+  static final MobileDetectionService _instance =
+      MobileDetectionService._internal();
 
   factory MobileDetectionService() {
     return _instance;
@@ -28,7 +29,8 @@ class MobileDetectionService implements DetectionService {
   MobileDetectionService._internal();
   // --- Singleton Pattern End ---
 
-  static const String _tfliteModelPath = 'assets/models/plant_disease_model.tflite';
+  static const String _tfliteModelPath =
+      'assets/models/plant_disease_model.tflite';
   static const String _tfliteLabelsPath = 'assets/models/labels_village.txt';
 
   TfliteInterpreterWrapper? _interpreterWrapper;
@@ -42,16 +44,24 @@ class MobileDetectionService implements DetectionService {
   Future<void> loadModel() async {
     // This is the NATIVE-ONLY logic from your original file.
     if (isModelLoaded) {
-      if (kDebugMode) print('[DetectionService NATIVE] Model already loaded.');
+      if (kDebugMode) {
+        logger.i('[DetectionService NATIVE] Model already loaded.');
+      }
       return;
     }
     if (_isLoadingModel) {
-      if (kDebugMode) print('[DetectionService NATIVE] Model loading already in progress.');
+      if (kDebugMode) {
+        logger.i(
+          '[DetectionService NATIVE] Model loading already in progress.',
+        );
+      }
       return;
     }
 
     _isLoadingModel = true;
-    if (kDebugMode) print('[DetectionService NATIVE] Starting to load model...');
+    if (kDebugMode) {
+      logger.i('[DetectionService NATIVE] Starting to load model...');
+    }
 
     try {
       _interpreterWrapper = TfliteInterpreterWrapper();
@@ -60,15 +70,25 @@ class MobileDetectionService implements DetectionService {
       await _interpreterWrapper!.loadModel(_tfliteModelPath, options: options);
 
       final rawLabels = await rootBundle.loadString(_tfliteLabelsPath);
-      _labels = rawLabels.split(RegExp(r'\r?\n')).where((e) => e.trim().isNotEmpty).toList();
+      _labels =
+          rawLabels
+              .split(RegExp(r'\r?\n'))
+              .where((e) => e.trim().isNotEmpty)
+              .toList();
 
       if (kDebugMode && isModelLoaded) {
-        print('[DetectionService NATIVE] TFLite Model and Labels loaded successfully.');
+        logger.i(
+          '[DetectionService NATIVE] TFLite Model and Labels loaded successfully.',
+        );
       } else if (kDebugMode) {
-        print('[DetectionService NATIVE] TFLite Model FAILED to load.');
+        logger.w('[DetectionService NATIVE] TFLite Model FAILED to load.');
       }
     } catch (e, stackTrace) {
-      if (kDebugMode) print('[DetectionService NATIVE] Error loading model: $e\n$stackTrace');
+      if (kDebugMode) {
+        logger.e(
+          '[DetectionService NATIVE] Error loading model: $e\n$stackTrace',
+        );
+      }
       rethrow;
     } finally {
       _isLoadingModel = false;
@@ -95,7 +115,11 @@ class MobileDetectionService implements DetectionService {
     final inputHeight = inputShape[1];
     final inputWidth = inputShape[2];
 
-    final img.Image resizedImage = img.copyResize(decodedImage, width: inputWidth, height: inputHeight);
+    final img.Image resizedImage = img.copyResize(
+      decodedImage,
+      width: inputWidth,
+      height: inputHeight,
+    );
 
     // Normalize image and fill input buffer
     final inputBuffer = Float32List(1 * inputHeight * inputWidth * 3);
@@ -113,12 +137,13 @@ class MobileDetectionService implements DetectionService {
     final outputTensor = _interpreterWrapper!.getOutputTensor(0);
     final outputBuffer = List.generate(
       outputTensor.shape[0],
-          (_) => List.filled(outputTensor.shape[1], 0.0),
+      (_) => List.filled(outputTensor.shape[1], 0.0),
     );
 
     _interpreterWrapper!.run(inputBuffer.buffer, outputBuffer);
 
-    List<double> probabilities = (outputBuffer.first as List<dynamic>).cast<double>();
+    List<double> probabilities =
+        (outputBuffer.first as List<dynamic>).cast<double>();
     double maxConfidence = 0.0;
     int maxIndex = -1;
     for (int i = 0; i < probabilities.length; i++) {
@@ -134,7 +159,7 @@ class MobileDetectionService implements DetectionService {
           diseaseName: _labels![maxIndex].replaceAll('_', ' '),
           confidence: maxConfidence,
           boundingBox: null,
-        )
+        ),
       ];
     }
     return []; // Return empty list if no detection
@@ -145,7 +170,7 @@ class MobileDetectionService implements DetectionService {
     _interpreterWrapper?.close();
     _interpreterWrapper = null;
     _labels = null;
-    if (kDebugMode) print('[DetectionService NATIVE] Disposed.');
+    if (kDebugMode) logger.i('[DetectionService NATIVE] Disposed.');
   }
 
   // --- Progress Tracking Implementation ---
@@ -158,7 +183,9 @@ class MobileDetectionService implements DetectionService {
 
   @override
   Stream<AnalysisProgress> startProgressTracking(String plantId) {
-    if (_progressStreams.containsKey(plantId)) return _progressStreams[plantId]!.stream;
+    if (_progressStreams.containsKey(plantId)) {
+      return _progressStreams[plantId]!.stream;
+    }
     final controller = StreamController<AnalysisProgress>.broadcast();
     _progressStreams[plantId] = controller;
     return controller.stream;
@@ -168,7 +195,8 @@ class MobileDetectionService implements DetectionService {
   void updateProgress(String plantId, AnalysisProgress progress) {
     if (!_progressStreams.containsKey(plantId)) return;
     _progressStreams[plantId]!.add(progress);
-    if (progress.stage == AnalysisStage.completed || progress.stage == AnalysisStage.failed) {
+    if (progress.stage == AnalysisStage.completed ||
+        progress.stage == AnalysisStage.failed) {
       _progressStreams[plantId]!.close();
       _progressStreams.remove(plantId);
     }

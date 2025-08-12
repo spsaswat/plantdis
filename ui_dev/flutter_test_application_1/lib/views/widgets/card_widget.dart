@@ -7,6 +7,7 @@ import 'package:flutter_test_application_1/utils/ui_utils.dart';
 import 'dart:async'; // Import for TimeoutException
 
 import '../../data/constants.dart';
+import '../../utils/logger.dart';
 
 class CardWidget extends StatefulWidget {
   const CardWidget({
@@ -52,16 +53,20 @@ class _CardWidgetState extends State<CardWidget> {
           images.where((img) => img.imageId == imageId).firstOrNull;
       return imageMatch?.originalUrl;
     } catch (e) {
-      print('Error fetching image URL for CardWidget ($plantId/$imageId): $e');
+      logger.e(
+        'Error fetching image URL for CardWidget ($plantId/$imageId): $e',
+      );
       return null;
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context) async {
-    if (_isDeleting) return; // Prevent multiple deletion attempts
+  // Modified _confirmDelete to no longer take BuildContext as a parameter
+  // and to use a single `mounted` check after the await call.
+  Future<void> _confirmDelete() async {
+    if (_isDeleting) return;
 
     final bool confirm = await UIUtils.showConfirmationDialog(
-      context: context,
+      context: context, // Access the State's context directly
       title: 'Delete Item',
       message:
           'Are you sure you want to delete this ${widget.completed ? 'result' : 'processing item'}? This action cannot be undone.',
@@ -70,13 +75,21 @@ class _CardWidgetState extends State<CardWidget> {
       confirmColor: Colors.red,
     );
 
+    if (!mounted) {
+      return;
+    }
+
     if (confirm) {
-      _deletePlant(context);
+      await _deletePlant(); // Call without passing context
     }
   }
 
-  Future<void> _deletePlant(BuildContext context) async {
+  // Modified _deletePlant to no longer take BuildContext as a parameter.
+  Future<void> _deletePlant() async {
     if (_isDeleting) return;
+
+    // Save context reference before any async operations
+    final currentContext = context;
 
     setState(() {
       _isDeleting = true;
@@ -86,7 +99,7 @@ class _CardWidgetState extends State<CardWidget> {
       // Show the auto-dismissing deletion dialog
       if (mounted) {
         UIUtils.showDeletionDialog(
-          context,
+          currentContext,
           'Deleting item...\nDeletion will continue in the background.',
           timeoutSeconds: 3, // Show briefly
         );
@@ -100,23 +113,23 @@ class _CardWidgetState extends State<CardWidget> {
       // Start deletion in background immediately
       _plantService.deletePlant(widget.plantId).catchError((e) {
         // Log background errors but don't bother the user
-        print("Background deletion error (CardWidget, ignored): $e");
+        logger.w("Background deletion error (CardWidget, ignored): $e");
       });
 
       // Reset deleting state immediately after triggering background task
-      // The visual feedback is the dialog and the item disappearing from the list.
       if (mounted) {
         setState(() {
           _isDeleting = false;
         });
       }
     } catch (e) {
-      // Handle any errors *before* deletion starts (e.g., showing dialog failed)
+      // This catch block only handles errors from synchronous operations
+      // (like showing dialog or calling onDelete), not from async operations
       if (mounted) {
-        UIUtils.showErrorSnackBar(context, 'Failed to initiate deletion: $e');
-      }
-      // Ensure state is reset even if dialog fails
-      if (mounted) {
+        UIUtils.showErrorSnackBar(
+          currentContext,
+          'Failed to initiate deletion: $e',
+        );
         setState(() {
           _isDeleting = false;
         });
@@ -140,7 +153,9 @@ class _CardWidgetState extends State<CardWidget> {
               widget.completed && _imageUrlFuture != null
                   ? () async {
                     String? resolvedImgSrc = await _imageUrlFuture;
+                    // Use a single mounted check to guard the context usage
                     if (resolvedImgSrc != null && mounted) {
+                      // ignore: use_build_context_synchronously
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -249,10 +264,11 @@ class _CardWidgetState extends State<CardWidget> {
                   icon: Icon(
                     Icons.delete_outline,
                     color:
-                        _isDeleting ? Colors.grey : Colors.red.withValues(alpha: 0.7),
+                        _isDeleting
+                            ? Colors.grey
+                            : Colors.red.withValues(alpha: 0.7),
                   ),
-                  // Disable button while _isDeleting is true
-                  onPressed: _isDeleting ? null : () => _confirmDelete(context),
+                  onPressed: _isDeleting ? null : () => _confirmDelete(),
                   tooltip: 'Delete',
                 ),
               ],

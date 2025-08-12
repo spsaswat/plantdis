@@ -1,8 +1,11 @@
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class TakePicturePage extends StatefulWidget {
   final CameraDescription camera;
@@ -85,7 +88,7 @@ class _TakePicturePageState extends State<TakePicturePage>
             }
           })
           .catchError((error) {
-            print('Camera initialization error: $error');
+            logger.e('Camera initialization error: $error');
             if (mounted) {
               setState(() {
                 _errorMessage =
@@ -122,7 +125,7 @@ class _TakePicturePageState extends State<TakePicturePage>
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           _disposeCamera();
         }
@@ -137,12 +140,10 @@ class _TakePicturePageState extends State<TakePicturePage>
   }
 
   Widget _buildFloatingActionButton() {
-    // Removed unused _isUploading logic since the field is not used
-
     return FloatingActionButton(
       onPressed:
           _cameraController?.value.isInitialized ?? false
-              ? () => _takePicture(context)
+              ? () => _takePicture()
               : null,
       child: const Icon(Icons.camera),
     );
@@ -208,9 +209,11 @@ class _TakePicturePageState extends State<TakePicturePage>
     );
   }
 
-  Future<void> _takePicture(BuildContext context) async {
+  Future<void> _takePicture() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      _showErrorSnackBar('Camera is not initialized');
+      if (mounted) {
+        _showErrorSnackBar('Camera is not initialized');
+      }
       return;
     }
     // Prevent taking multiple pictures if one is already being processed or a tap is in progress
@@ -219,37 +222,24 @@ class _TakePicturePageState extends State<TakePicturePage>
     }
 
     try {
-      // Ensure the camera is not already taking a picture
-      // This state is managed internally by cameraController,
-      // but an explicit check doesn't hurt.
-
-      // No need for _isUploading state here anymore as WidgetTree will handle upload status
-      // setState(() {
-      //   _isUploading = true;
-      //   _errorMessage = '';
-      // });
-
       final XFile imageFile = await _cameraController!.takePicture();
 
-      // Pop the navigator and return the XFile
-      if (mounted) {
-        Navigator.of(context).pop(imageFile);
+      if (!mounted) {
+        return;
       }
+
+      Navigator.of(context).pop(imageFile);
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
       if (kDebugMode) {
-        print('Error taking picture: $e');
+        logger.e('Error taking picture: $e');
       }
-      if (mounted) {
-        // setState(() {
-        //   _isUploading = false; // Reset if error occurs before popping
-        //   _errorMessage = 'Failed to take picture: ${e.toString()}';
-        // });
-        _showErrorSnackBar('Failed to take picture: ${e.toString()}');
-        // Optionally, pop with null if an error occurs to signify failure
-        // Navigator.of(context).pop(null);
-      }
+
+      _showErrorSnackBar('Failed to take picture: ${e.toString()}');
     }
-    // No finally block needed here for _isUploading anymore
   }
 
   void _showErrorSnackBar(String message) {

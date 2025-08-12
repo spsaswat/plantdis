@@ -15,11 +15,13 @@ class DrawerWidget extends StatelessWidget {
           DrawerHeader(
             padding: EdgeInsets.zero,
             child: GestureDetector(
-              onTap: () => web_utils.launchAPPNWebsite(context),
+              onTap: () => WebUtils.launchAPPNWebsite(context),
               child: Padding(
                 // EdgeInsets.symmetric is perfect for applying horizontal (left/right)
                 // or vertical (top/bottom) padding.
-                padding: const EdgeInsets.symmetric(horizontal: 16.0), // Adds 16 pixels of space on both left and right
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                ), // Adds 16 pixels of space on both left and right
                 child: Image.asset(
                   'assets/images/appn_banner.png',
                   fit: BoxFit.contain, // Keep contain, as it's working well
@@ -35,7 +37,7 @@ class DrawerWidget extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) {
-                      return const SettingsPage(title: 'Settings',);
+                      return const SettingsPage(title: 'Settings');
                     },
                   ),
                 ),
@@ -44,7 +46,7 @@ class DrawerWidget extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.info_outline_rounded),
             title: const Text("About Us"),
-            onTap: () => web_utils.launchPlantDisWebsite(context),
+            onTap: () => WebUtils.launchPlantDisWebsite(context),
           ),
 
           const Spacer(),

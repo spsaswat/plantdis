@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 // These imports are WEB-ONLY and are safe here.
 import 'dart:js' as js;
@@ -44,37 +45,70 @@ class WebDetectionService implements DetectionService {
   Future<void> loadModel() async {
     // This is the WEB-ONLY logic from your original file.
     if (_modelLoaded) {
-      if (kDebugMode) print('[DetectionService WEB] Model already loaded.');
+      logger.d('Model already loaded.');
       return;
     }
     if (_isLoadingModel) {
-      if (kDebugMode) print('[DetectionService WEB] Model loading already in progress.');
+      logger.d('[DetectionService WEB] Model loading already in progress.');
       return;
     }
 
     _isLoadingModel = true;
-    if (kDebugMode) print('[DetectionService WEB] Starting to load model...');
+    logger.d('[DetectionService WEB] Starting to load model...');
 
     try {
-      if (kDebugMode) print('[DetectionService WEB] Loading TF.js model and labels...');
+      logger.d('[DetectionService WEB] Loading TF.js model and labels...');
       try {
-        if (js.context['tf'] == null) throw Exception('TensorFlow.js library (tf) not found.');
-        if (js.context['getLoadTFJSModelPromise'] == null) throw Exception('Required JS function getLoadTFJSModelPromise not found.');
+        if (js.context['tf'] == null) {
+          throw Exception('TensorFlow.js library (tf) not found.');
+        }
+        if (js.context['getLoadTFJSModelPromise'] == null) {
+          throw Exception(
+            'Required JS function getLoadTFJSModelPromise not found.',
+          );
+        }
 
-        var loadModelPromise = js_util.callMethod(js_util.globalThis, 'getLoadTFJSModelPromise', [_webModelPath]);
-        if (loadModelPromise == null) throw Exception('JS getLoadTFJSModelPromise did not return a Promise.');
-        if (js_util.getProperty(loadModelPromise, 'then') == null) throw Exception('JS getLoadTFJSModelPromise did not return a valid Promise.');
+        var loadModelPromise = js_util.callMethod(
+          js_util.globalThis,
+          'getLoadTFJSModelPromise',
+          [_webModelPath],
+        );
+        if (loadModelPromise == null) {
+          throw Exception(
+            'JS getLoadTFJSModelPromise did not return a Promise.',
+          );
+        }
+        if (js_util.getProperty(loadModelPromise, 'then') == null) {
+          throw Exception(
+            'JS getLoadTFJSModelPromise did not return a valid Promise.',
+          );
+        }
 
-        bool jsPromiseResolvedValue = await js_util.promiseToFuture<bool>(loadModelPromise);
-        if (kDebugMode) print('[DetectionService WEB] JS promise resolved, returned: $jsPromiseResolvedValue');
+        bool jsPromiseResolvedValue = await js_util.promiseToFuture<bool>(
+          loadModelPromise,
+        );
+        if (kDebugMode) {
+          logger.i(
+            '[DetectionService WEB] JS promise resolved, returned: $jsPromiseResolvedValue',
+          );
+        }
 
         if (jsPromiseResolvedValue) {
-          var jsModel = js_util.getProperty(js_util.globalThis, 'loadedTfjsModel');
+          var jsModel = js_util.getProperty(
+            js_util.globalThis,
+            'loadedTfjsModel',
+          );
           if (jsModel == null) {
             _modelLoaded = false;
-            throw StateError('JS reported model success, but window.loadedTfjsModel is null.');
+            throw StateError(
+              'JS reported model success, but window.loadedTfjsModel is null.',
+            );
           } else {
-            if (kDebugMode) print('[DetectionService WEB] window.loadedTfjsModel is accessible.');
+            if (kDebugMode) {
+              logger.i(
+                '[DetectionService WEB] window.loadedTfjsModel is accessible.',
+              );
+            }
             _modelLoaded = true;
           }
         } else {
@@ -84,21 +118,37 @@ class WebDetectionService implements DetectionService {
 
         if (_modelLoaded) {
           final rawLabels = await rootBundle.loadString(_webLabelsPath);
-          _labels = rawLabels.split(RegExp(r'\r?\n')).where((e) => e.trim().isNotEmpty).toList();
-          if (kDebugMode) print('[DetectionService WEB] Labels loaded: ${_labels?.length}');
+          _labels =
+              rawLabels
+                  .split(RegExp(r'\r?\n'))
+                  .where((e) => e.trim().isNotEmpty)
+                  .toList();
+          if (kDebugMode) {
+            logger.i(
+              '[DetectionService WEB] Labels loaded: ${_labels?.length}',
+            );
+          }
         }
       } catch (e, s) {
         _modelLoaded = false;
-        if (kDebugMode) print('[DetectionService WEB] Error in web model loading block: $e\n$s');
+        if (kDebugMode) {
+          logger.e(
+            '[DetectionService WEB] Error in web model loading block: $e\n$s',
+          );
+        }
         rethrow;
       }
     } catch (e, stackTrace) {
       _modelLoaded = false;
-      if (kDebugMode) print('[DetectionService] Error loading model: $e\n$stackTrace');
+      if (kDebugMode) {
+        logger.e('[DetectionService] Error loading model: $e\n$stackTrace');
+      }
       rethrow;
     } finally {
       _isLoadingModel = false;
-      if (kDebugMode) print('[DetectionService WEB] Finished model loading attempt.');
+      if (kDebugMode) {
+        logger.i('[DetectionService WEB] Finished model loading attempt.');
+      }
     }
   }
 
@@ -109,11 +159,18 @@ class WebDetectionService implements DetectionService {
   }) async {
     // This is the WEB-ONLY detection logic from your original file.
     if (!_modelLoaded) await loadModel();
-    if (!_modelLoaded || _labels == null) throw Exception("Model or labels not loaded.");
+    if (!_modelLoaded || _labels == null) {
+      throw Exception("Model or labels not loaded.");
+    }
 
-    if (kDebugMode) print('[DetectionService WEB] Running TF.js inference.');
-    var jsModelInstance = js_util.getProperty(js_util.globalThis, 'loadedTfjsModel');
-    if (jsModelInstance == null) throw Exception('TF.js model became null before inference.');
+    if (kDebugMode) logger.i('[DetectionService WEB] Running TF.js inference.');
+    var jsModelInstance = js_util.getProperty(
+      js_util.globalThis,
+      'loadedTfjsModel',
+    );
+    if (jsModelInstance == null) {
+      throw Exception('TF.js model became null before inference.');
+    }
 
     final completer = Completer<List<DetectionResult>>();
     final blob = html.Blob([imageBytes], 'image/jpeg');
@@ -122,10 +179,16 @@ class WebDetectionService implements DetectionService {
     try {
       js.context.callMethod('runTFJSModelOnImageData', [
         imageUrl,
-        js.allowInterop((dynamic errorMsg, dynamic classIndex, dynamic confidence) {
+        js.allowInterop((
+          dynamic errorMsg,
+          dynamic classIndex,
+          dynamic confidence,
+        ) {
           html.Url.revokeObjectUrl(imageUrl);
           if (errorMsg != null) {
-            completer.completeError(Exception('TF.js inference error: $errorMsg'));
+            completer.completeError(
+              Exception('TF.js inference error: $errorMsg'),
+            );
           } else {
             int idx = classIndex as int;
             double conf = (confidence as num).toDouble();
@@ -136,13 +199,13 @@ class WebDetectionService implements DetectionService {
                   diseaseName: diseaseName.replaceAll('_', ' '),
                   confidence: conf,
                   boundingBox: null,
-                )
+                ),
               ]);
             } else {
               completer.completeError(Exception('Invalid class index: $idx'));
             }
           }
-        })
+        }),
       ]);
     } catch (e) {
       html.Url.revokeObjectUrl(imageUrl);
@@ -155,7 +218,7 @@ class WebDetectionService implements DetectionService {
   void dispose() {
     _modelLoaded = false;
     _labels = null;
-    if (kDebugMode) print('[DetectionService WEB] Disposed.');
+    if (kDebugMode) logger.i('[DetectionService WEB] Disposed.');
   }
 
   // --- Progress Tracking Implementation ---
@@ -168,7 +231,9 @@ class WebDetectionService implements DetectionService {
 
   @override
   Stream<AnalysisProgress> startProgressTracking(String plantId) {
-    if (_progressStreams.containsKey(plantId)) return _progressStreams[plantId]!.stream;
+    if (_progressStreams.containsKey(plantId)) {
+      return _progressStreams[plantId]!.stream;
+    }
     final controller = StreamController<AnalysisProgress>.broadcast();
     _progressStreams[plantId] = controller;
     return controller.stream;
@@ -178,7 +243,8 @@ class WebDetectionService implements DetectionService {
   void updateProgress(String plantId, AnalysisProgress progress) {
     if (!_progressStreams.containsKey(plantId)) return;
     _progressStreams[plantId]!.add(progress);
-    if (progress.stage == AnalysisStage.completed || progress.stage == AnalysisStage.failed) {
+    if (progress.stage == AnalysisStage.completed ||
+        progress.stage == AnalysisStage.failed) {
       _progressStreams[plantId]!.close();
       _progressStreams.remove(plantId);
     }

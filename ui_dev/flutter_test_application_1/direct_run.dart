@@ -1,29 +1,34 @@
 // A direct Dart script to build and run Flutter apps
 import 'dart:io';
 import 'dart:async';
+import 'lib/utils/logger.dart';
 
 void main(List<String> args) async {
-  print('===== Flutter Direct Runner =====');
-  
+  logger.i('===== Flutter Direct Runner =====');
+
   // Configuration
   const flutterRoot = 'C:\\flutter';
   const dartSdkPath = '$flutterRoot\\bin\\cache\\dart-sdk';
   const dartExe = '$dartSdkPath\\bin\\dart.exe';
-  const flutterToolsSnapshot = '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
-  const packageConfig = '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
+  const flutterToolsSnapshot =
+      '$flutterRoot\\bin\\cache\\flutter_tools.snapshot';
+  const packageConfig =
+      '$flutterRoot\\packages\\flutter_tools\\.dart_tool\\package_config.json';
   final workingDirectory = Directory.current.path;
-  final androidSdkPath = Platform.environment['ANDROID_SDK_ROOT'] ?? 'C:\\Users\\polis\\AppData\\Local\\Android\\Sdk';
+  final androidSdkPath =
+      Platform.environment['ANDROID_SDK_ROOT'] ??
+      'C:\\Users\\polis\\AppData\\Local\\Android\\Sdk';
   final adbPath = '$androidSdkPath\\platform-tools\\adb.exe';
-  
-  print('Checking emulator status...');
-  
+
+  logger.i('Checking emulator status...');
+
   // First check available devices
   final devicesResult = await Process.run(adbPath, ['devices']);
-  print('ADB Devices:');
-  print(devicesResult.stdout);
-  
+  logger.i('ADB Devices:');
+  logger.i(devicesResult.stdout);
+
   if (!devicesResult.stdout.toString().contains('emulator-5554')) {
-    print('Emulator not found. Starting emulator...');
+    logger.i('Emulator not found. Starting emulator...');
     // List available emulators
     final emulatorsResult = await runFlutterCommand(
       dartExe,
@@ -32,54 +37,61 @@ void main(List<String> args) async {
       ['emulators'],
       workingDirectory,
     );
-    print(emulatorsResult.stdout);
-    
+    logger.i(emulatorsResult.stdout);
+
     // Start the Pixel 6 Pro emulator
-    print('Launching Pixel 6 Pro emulator...');
+    logger.i('Launching Pixel 6 Pro emulator...');
     await Process.run('$androidSdkPath\\emulator\\emulator.exe', [
-      '-avd', 
+      '-avd',
       'Pixel_6_Pro_API_35',
       '-no-snapshot-load',
       '-no-boot-anim',
     ]);
-    
-    print('Waiting for emulator to start and be ready (this may take a few minutes)...');
+
+    logger.i(
+      'Waiting for emulator to start and be ready (this may take a few minutes)...',
+    );
     bool emulatorReady = false;
-    for (var i = 0; i < 120; i++) {  // Try for 2 minutes
+    for (var i = 0; i < 120; i++) {
+      // Try for 2 minutes
       await Future.delayed(const Duration(seconds: 2));
       final checkResult = await Process.run(adbPath, ['devices']);
       final output = checkResult.stdout.toString();
-      
+
       if (output.contains('emulator-5554')) {
         // Check if boot is complete
-        final bootCheck = await Process.run(
-          adbPath, 
-          ['shell', 'getprop', 'sys.boot_completed']
-        );
-        
+        final bootCheck = await Process.run(adbPath, [
+          'shell',
+          'getprop',
+          'sys.boot_completed',
+        ]);
+
         if (bootCheck.stdout.toString().trim() == '1') {
           emulatorReady = true;
-          print('Emulator is ready!');
+          logger.i('Emulator is ready!');
           // Give it a few more seconds to fully initialize
           await Future.delayed(const Duration(seconds: 10));
           break;
         }
       }
-      
-      if (i % 15 == 0) {  // Show progress every 30 seconds
-        print('Still waiting for emulator to start... (${i*2} seconds)');
-        print('Current status: ${output.trim()}');
+
+      if (i % 15 == 0) {
+        // Show progress every 30 seconds
+        logger.i('Still waiting for emulator to start... (${i * 2} seconds)');
+        logger.i('Current status: ${output.trim()}');
       }
     }
-    
+
     if (!emulatorReady) {
-      print('Error: Emulator failed to start in time');
-      print('Please try starting the emulator manually using Android Studio');
+      logger.e('Error: Emulator failed to start in time');
+      logger.w(
+        'Please try starting the emulator manually using Android Studio',
+      );
       exit(1);
     }
   }
-  
-  print('Running pub get...');
+
+  logger.i('Running pub get...');
   final pubGetResult = await runFlutterCommand(
     dartExe,
     packageConfig,
@@ -87,13 +99,13 @@ void main(List<String> args) async {
     ['pub', 'get'],
     workingDirectory,
   );
-  
+
   if (pubGetResult.exitCode != 0) {
-    print('Error running pub get');
+    logger.e('Error running pub get');
     exit(1);
   }
-  
-  print('Building and running on emulator...');
+
+  logger.i('Building and running on emulator...');
   final runResult = await runFlutterCommand(
     dartExe,
     packageConfig,
@@ -101,11 +113,11 @@ void main(List<String> args) async {
     ['run', '--no-pub', '-d', 'emulator-5554'],
     workingDirectory,
   );
-  
-  print(runResult.stdout);
+
+  logger.i(runResult.stdout);
   if (runResult.exitCode != 0) {
-    print('Error running app:');
-    print(runResult.stderr);
+    logger.e('Error running app:');
+    logger.e(runResult.stderr);
     exit(1);
   }
 }
@@ -122,17 +134,17 @@ Future<ProcessResult> runFlutterCommand(
     flutterToolsSnapshot,
     ...args,
   ];
-  
-  print('Running: ${args.join(' ')}');
-  
+
+  logger.i('Running: ${args.join(' ')}');
+
   final result = await Process.run(
     dartExe,
     command,
     workingDirectory: workingDirectory,
   );
-  
+
   if (result.stdout.toString().isNotEmpty) {
-    print(result.stdout);
+    logger.i(result.stdout);
   }
   return result;
 }
