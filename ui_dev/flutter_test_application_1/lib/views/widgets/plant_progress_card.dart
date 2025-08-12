@@ -5,6 +5,7 @@ import 'package:flutter_test_application_1/services/detection_service.dart';
 import 'package:flutter_test_application_1/views/widgets/analysis_progress_widget.dart';
 import 'package:flutter_test_application_1/models/image_model.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// A card that displays the analysis progress for a specific plant.
 class PlantProgressCard extends StatefulWidget {
@@ -29,23 +30,23 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
     super.initState();
     _progressStream = _detectionService.getProgressStream(widget.plantId);
     if (_progressStream == null) {
-      print(
+      logger.w(
         '[PlantProgressCard] initState: Progress Stream for plantId ${widget.plantId} not found (null).',
       );
       _streamInitiallyNull = true;
     } else {
-      print(
+      logger.i(
         '[PlantProgressCard] initState: Progress Stream found for plantId ${widget.plantId}.',
       );
     }
 
     if (widget.imageId != null) {
-      print(
+      logger.i(
         '[PlantProgressCard] initState: Fetching image URL for imageId ${widget.imageId}.',
       );
       _imageUrlFuture = _fetchImageUrl(widget.plantId, widget.imageId!);
     } else {
-      print(
+      logger.i(
         '[PlantProgressCard] initState: No imageId provided for plantId ${widget.plantId}.',
       );
     }
@@ -57,17 +58,17 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
       var imageMatch =
           images.where((img) => img.imageId == imageId).firstOrNull;
       if (imageMatch?.originalUrl != null) {
-        print(
+        logger.i(
           '[PlantProgressCard] _fetchImageUrl: Found URL for $plantId/$imageId',
         );
       } else {
-        print(
+        logger.w(
           '[PlantProgressCard] _fetchImageUrl: URL *not* found for $plantId/$imageId',
         );
       }
       return imageMatch?.originalUrl;
     } catch (e) {
-      print(
+      logger.e(
         '[PlantProgressCard] Error fetching image URL for CardWidget ($plantId/$imageId): $e',
       );
       return null;
@@ -117,15 +118,15 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
                 ),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
-                    print(
+                    logger.i(
                       '[PlantProgressCard] build: Received progress update for ${widget.plantId}: ${snapshot.data?.stage} ${snapshot.data?.progress}',
                     );
                   } else if (snapshot.hasError) {
-                    print(
+                    logger.e(
                       '[PlantProgressCard] build: Stream error for ${widget.plantId}: ${snapshot.error}',
                     );
                   } else if (snapshot.connectionState == ConnectionState.done) {
-                    print(
+                    logger.i(
                       '[PlantProgressCard] build: Stream done for ${widget.plantId}.',
                     );
                   }
@@ -188,7 +189,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
           );
         }
         if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-          print(
+          logger.w(
             '[PlantProgressCard] Image FutureBuilder Error/NoData for ${widget.plantId}/${widget.imageId}: Error: ${snapshot.error}, HasData: ${snapshot.hasData}',
           );
           return Container(
@@ -219,7 +220,7 @@ class _PlantProgressCardState extends State<PlantProgressCard> {
             );
           },
           errorBuilder: (context, error, stackTrace) {
-            print(
+            logger.e(
               '[PlantProgressCard] Image.network Error for ${widget.plantId}/${widget.imageId}: $error',
             );
             return Container(

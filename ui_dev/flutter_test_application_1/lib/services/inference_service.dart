@@ -3,11 +3,11 @@
 import 'dart:async';
 // Added for Uint8List
 
-
 import 'package:flutter/foundation.dart'; // Import for kDebugMode
 import 'package:flutter_test_application_1/models/detection_result.dart';
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:flutter_test_application_1/services/detection_service.dart'; // Use the correct service
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// Service to handle ML model inference for plant disease detection.
 /// Provides progress feedback via stream during analysis.
@@ -29,7 +29,7 @@ class InferenceService {
   }) async {
     try {
       if (kDebugMode) {
-        print(
+        logger.i(
           '[InferenceService] Starting analysis. Plant ID: $plantId, Is Segmented: $isSegmented',
         );
       }
@@ -71,14 +71,14 @@ class InferenceService {
       final topResult = results.first;
       _updateProgress(AnalysisStage.completed, 1.0, "Analysis Complete");
       if (kDebugMode) {
-        print(
+        logger.i(
           "[InferenceService] Analysis complete. Top result: ${topResult.diseaseName} (${topResult.confidence.toStringAsFixed(2)}) for plant $plantId",
         );
       }
       return topResult;
     } catch (e) {
       if (kDebugMode) {
-        print(
+        logger.e(
           "[InferenceService] Error during analysis for plant $plantId: $e",
         );
       }
@@ -135,10 +135,10 @@ class InferenceService {
 
   /// Helper to emit a progress update.
   void _updateProgress(
-      AnalysisStage stage,
-      double progress, [
-        String? message,
-      ]) {
+    AnalysisStage stage,
+    double progress, [
+    String? message,
+  ]) {
     final String stageMessage = message ?? '';
     _progressController.add(
       AnalysisProgress(
@@ -155,7 +155,7 @@ class InferenceService {
     _detectionService.dispose();
     _progressController.close();
     if (kDebugMode) {
-      print("[InferenceService] Disposed.");
+      logger.i("[InferenceService] Disposed.");
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
 import './tflite_interface.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 // This function will be called by tflite_wrapper.dart on mobile platforms.
 void initializePlatformSpecificFactories() {
@@ -28,7 +29,7 @@ TfliteDataTypeWrapper _mapTensorType(tfl.TensorType type) {
       return TfliteDataTypeWrapper.int8;
     // Add other cases as needed for tfl.TensorType values
     default:
-      print('[TfliteInterpreterMobile] Warning: Unmapped TensorType: $type');
+      logger.w('[TfliteInterpreterMobile] Warning: Unmapped TensorType: $type');
       return TfliteDataTypeWrapper.unsupported;
   }
 }

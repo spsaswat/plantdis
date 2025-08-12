@@ -8,7 +8,7 @@ import 'package:flutter_test_application_1/models/plant_model.dart'; // Import P
 import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
 import 'dart:async'; // Import for TimeoutException
-
+import 'package:flutter_test_application_1/utils/logger.dart';
 import '../services/openrouter_service.dart';
 
 class SegmentPage extends StatefulWidget {
@@ -81,7 +81,7 @@ class _SegmentPageState extends State<SegmentPage> {
           }
 
           if (snapshot.hasError) {
-            print(
+            logger.e(
               'Error in StreamBuilder for plant ${widget.plantId}: ${snapshot.error}',
             );
             return Center(
@@ -259,10 +259,13 @@ class _SegmentPageState extends State<SegmentPage> {
                                     if (status == 'processing' ||
                                         status == 'analyzing')
                                       ListTile(
-                                        leading: const CircularProgressIndicator(
-                                          strokeWidth: 2,
+                                        leading:
+                                            const CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                        title: const Text(
+                                          'Analysis in progress...',
                                         ),
-                                        title: const Text('Analysis in progress...'),
                                         subtitle: const Text(
                                           'Results will appear here shortly.',
                                         ),
@@ -339,7 +342,9 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 icon: const Icon(
                                                   Icons.delete_outline,
                                                 ),
-                                                label: const Text('Delete Result'),
+                                                label: const Text(
+                                                  'Delete Result',
+                                                ),
                                                 onPressed:
                                                     () =>
                                                         _confirmDelete(context),
@@ -375,14 +380,24 @@ class _SegmentPageState extends State<SegmentPage> {
                             ),
                           ),
                           FutureBuilder<String>(
-                            future: _generateSuggestion(detectedDisease, confidence),
+                            future: _generateSuggestion(
+                              detectedDisease,
+                              confidence,
+                            ),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return _buildAiSuggestionBox('Generating AI suggestion...');
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return _buildAiSuggestionBox(
+                                  'Generating AI suggestion...',
+                                );
                               } else if (snapshot.hasError) {
-                                return _buildAiSuggestionBox('Failed to generate suggestion.');
+                                return _buildAiSuggestionBox(
+                                  'Failed to generate suggestion.',
+                                );
                               } else {
-                                return _buildAiSuggestionBox(snapshot.data ?? 'No suggestion available.');
+                                return _buildAiSuggestionBox(
+                                  snapshot.data ?? 'No suggestion available.',
+                                );
                               }
                             },
                           ),
@@ -462,22 +477,15 @@ class _SegmentPageState extends State<SegmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'AI Suggestion',
-                style: KTextStyle.titleTealText,
-              ),
+              const Text('AI Suggestion', style: KTextStyle.titleTealText),
               const SizedBox(height: 8),
-              Text(
-                suggestion,
-                style: KTextStyle.descriptionText,
-              ),
+              Text(suggestion, style: KTextStyle.descriptionText),
             ],
           ),
         ),
       ),
     );
   }
-
 
   Future<String> _generateSuggestion(String disease, double confidence) async {
     // 1. If the result is background (not a leaf)
@@ -576,7 +584,7 @@ class _SegmentPageState extends State<SegmentPage> {
       // Start deletion in background immediately
       _plantService.deletePlant(widget.plantId).catchError((e) {
         // Log background errors but don't bother the user
-        print("Background deletion error (SegmentPage, ignored): $e");
+        logger.e("Background deletion error (SegmentPage, ignored): $e");
       });
 
       // Navigate back immediately

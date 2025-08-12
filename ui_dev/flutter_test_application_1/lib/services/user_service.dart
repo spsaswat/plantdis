@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -93,7 +94,7 @@ class UserService {
       }
       throw Exception('Failed to get IP address');
     } catch (e) {
-      print('Error getting IP address: $e');
+      logger.e('Error getting IP address: $e');
       return 'unknown';
     }
   }
@@ -137,7 +138,7 @@ class UserService {
 
       return userData;
     } catch (e) {
-      print('Error getting guest session data: $e');
+      logger.e('Error getting guest session data: $e');
       throw Exception('Failed to get guest session data: $e');
     }
   }
@@ -192,7 +193,7 @@ class UserService {
         }
       }
     } catch (e) {
-      print('Error linking accounts by IP: $e');
+      logger.e('Error linking accounts by IP: $e');
     }
   }
 }

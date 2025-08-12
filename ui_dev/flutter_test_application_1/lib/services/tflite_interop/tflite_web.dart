@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import './tflite_interface.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 // This function will be called by tflite_wrapper.dart on web platforms.
 void initializePlatformSpecificFactories() {
@@ -20,7 +21,7 @@ class TfliteInterpreterWeb implements TfliteInterpreterWrapper {
     String modelPath, {
     TfliteInterpreterOptions? options,
   }) async {
-    print(
+    logger.i(
       '[TfliteInterpreterWeb] loadModel called (stub). TF.js part handled elsewhere.',
     );
     // No actual tflite_flutter loading on web
@@ -29,19 +30,21 @@ class TfliteInterpreterWeb implements TfliteInterpreterWrapper {
 
   @override
   void run(Object input, Object output) {
-    print('[TfliteInterpreterWeb] run called (stub). Should not be reached.');
+    logger.w(
+      '[TfliteInterpreterWeb] run called (stub). Should not be reached.',
+    );
     throw UnimplementedError('TFLite run() stub called on web. Use TF.js.');
   }
 
   @override
   void close() {
-    print('[TfliteInterpreterWeb] close called (stub).');
+    logger.i('[TfliteInterpreterWeb] close called (stub).');
     // No tflite_flutter resources to dispose on web
   }
 
   @override
   TensorWrapper getInputTensor(int index) {
-    print(
+    logger.w(
       '[TfliteInterpreterWeb] getInputTensor called (stub). Should not be reached.',
     );
     // Return a dummy tensor wrapper instead of throwing
@@ -50,7 +53,7 @@ class TfliteInterpreterWeb implements TfliteInterpreterWrapper {
 
   @override
   TensorWrapper getOutputTensor(int index) {
-    print(
+    logger.w(
       '[TfliteInterpreterWeb] getOutputTensor called (stub). Should not be reached.',
     );
     // Return a dummy tensor wrapper instead of throwing

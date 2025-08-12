@@ -12,6 +12,7 @@ import '../models/plant_model.dart';
 import '../models/image_model.dart';
 import '../models/detection_result.dart';
 import '../utils/storage_utils.dart';
+import '../utils/logger.dart';
 import './inference_service.dart';
 import './segmentation_service.dart';
 // import 'package:flutter/material.dart'; // Removed as it did not seem directly used by PlantService logic
@@ -73,7 +74,7 @@ class PlantService {
     Reference storageRef = _storage.ref().child(storagePath);
 
     if (kDebugMode) {
-      print('[PlantService] Uploading image bytes to $storagePath...');
+      logger.i('[PlantService] Uploading image bytes to $storagePath...');
     }
     UploadTask uploadTask = storageRef.putData(
       imageBytes,
@@ -90,7 +91,7 @@ class PlantService {
     );
     TaskSnapshot taskSnapshot = await uploadTask;
     String downloadUrl = await taskSnapshot.ref.getDownloadURL();
-    if (kDebugMode) print('[PlantService] Image uploaded to $downloadUrl');
+    if (kDebugMode) logger.i('[PlantService] Image uploaded to $downloadUrl');
 
     ImageModel imageModel = ImageModel(
       imageId: imageId,
@@ -106,7 +107,7 @@ class PlantService {
       },
     );
     await _images.doc(imageId).set(imageModel.toMap());
-    if (kDebugMode) print('[PlantService] ImageModel created for $imageId');
+    if (kDebugMode) logger.i('[PlantService] ImageModel created for $imageId');
 
     if (existingPlantId == null) {
       PlantModel plantModel = PlantModel(
@@ -123,9 +124,9 @@ class PlantService {
           .update({
             'plants': FieldValue.arrayUnion([plantId]),
           })
-          .catchError((e) => print("Error updating user's plant list: $e"));
+          .catchError((e) => logger.e("Error updating user's plant list: $e"));
       if (kDebugMode) {
-        print('[PlantService] New PlantModel created for $plantId');
+        logger.i('[PlantService] New PlantModel created for $plantId');
       }
     } else {
       await _plants.doc(plantId).update({
@@ -135,11 +136,13 @@ class PlantService {
         'analysisResults': FieldValue.delete(),
       });
       if (kDebugMode) {
-        print('[PlantService] Existing PlantModel updated for $plantId');
+        logger.i('[PlantService] Existing PlantModel updated for $plantId');
       }
     }
 
-    if (kDebugMode) print('[PlantService] Triggering analysis for $plantId...');
+    if (kDebugMode) {
+      logger.i('[PlantService] Triggering analysis for $plantId...');
+    }
     try {
       await _plants.doc(plantId).update({'status': 'analyzing'});
 
@@ -151,7 +154,7 @@ class PlantService {
       if (!kIsWeb) {
         // Only attempt segmentation on non-web platforms
         if (kDebugMode) {
-          print(
+          logger.i(
             '[PlantService NATIVE] Attempting segmentation for $plantId, original imageBytes length: ${imageBytes.length}',
           );
         }
@@ -160,7 +163,7 @@ class PlantService {
               .loadModel(); // Ensure model is loaded (idempotent)
           if (!_segmentationService.isModelLoaded) {
             if (kDebugMode) {
-              print(
+              logger.w(
                 '[PlantService NATIVE] Segmentation model failed to load. Skipping segmentation.',
               );
             }
@@ -174,7 +177,7 @@ class PlantService {
             );
             await tempOriginalFileForSeg.writeAsBytes(imageBytes);
             if (kDebugMode) {
-              print(
+              logger.i(
                 '[PlantService NATIVE] Wrote temp file for segmentation: ${tempOriginalFileForSeg.path}',
               );
             }
@@ -186,13 +189,13 @@ class PlantService {
             if (await segmentedFile.exists()) {
               final segmentedBytesLength = await segmentedFile.length();
               if (kDebugMode) {
-                print(
+                logger.i(
                   '[PlantService NATIVE] Segmentation successful. Segmented file: ${segmentedFile.path}, size: $segmentedBytesLength bytes',
                 );
               }
               bytesToAnalyze = await segmentedFile.readAsBytes();
               if (kDebugMode) {
-                print(
+                logger.i(
                   '[PlantService NATIVE] Using segmented image bytes for analysis. Length: ${bytesToAnalyze.length}',
                 );
               }
@@ -205,7 +208,7 @@ class PlantService {
                   'segmentation',
                 );
                 if (kDebugMode) {
-                  print(
+                  logger.i(
                     '[PlantService NATIVE] Uploaded segmentation image: $segmentationUrl',
                   );
                 }
@@ -214,7 +217,7 @@ class PlantService {
                 });
               } catch (e) {
                 if (kDebugMode) {
-                  print(
+                  logger.w(
                     '[PlantService NATIVE] Failed to upload segmented image: $e',
                   );
                 }
@@ -222,7 +225,7 @@ class PlantService {
               }
             } else {
               if (kDebugMode) {
-                print(
+                logger.w(
                   '[PlantService NATIVE] Segmentation returned null or file does not exist. Using original image bytes for analysis.',
                 );
               }
@@ -231,7 +234,7 @@ class PlantService {
           }
         } catch (e, s) {
           if (kDebugMode) {
-            print(
+            logger.w(
               '[PlantService NATIVE] Segmentation process failed or was skipped: $e\n$s',
             );
           }
@@ -241,7 +244,7 @@ class PlantService {
             if (tempOriginalFileForSeg != null &&
                 await tempOriginalFileForSeg.exists()) {
               if (kDebugMode) {
-                print(
+                logger.i(
                   '[PlantService NATIVE] Deleting temp original file: ${tempOriginalFileForSeg.path}',
                 );
               }
@@ -253,7 +256,7 @@ class PlantService {
             // For now, assuming it's handled or its path is managed by SegmentationService if it's not the one we created.
           } catch (e) {
             if (kDebugMode) {
-              print(
+              logger.e(
                 '[PlantService NATIVE] Error cleaning up temp file(s) for segmentation: $e',
               );
             }
@@ -261,13 +264,15 @@ class PlantService {
         }
       } else {
         if (kDebugMode) {
-          print('[PlantService WEB] Skipping segmentation for web platform.');
+          logger.i(
+            '[PlantService WEB] Skipping segmentation for web platform.',
+          );
         }
       }
       // --- End Segmentation Step ---
 
       if (kDebugMode) {
-        print(
+        logger.i(
           '[PlantService] Bytes to analyze length for InferenceService: ${bytesToAnalyze.length}',
         );
       }
@@ -281,7 +286,7 @@ class PlantService {
 
       if (analysisResult != null) {
         if (kDebugMode) {
-          print(
+          logger.i(
             '[PlantService] Inference complete for $plantId. Result: ${analysisResult.diseaseName}',
           );
         }
@@ -307,13 +312,13 @@ class PlantService {
               FieldValue.delete(), // Clear any previous error on success
         });
         if (kDebugMode) {
-          print(
+          logger.i(
             '[PlantService] Plant $plantId status updated to COMPLETED with results.',
           );
         }
       } else {
         if (kDebugMode) {
-          print(
+          logger.w(
             '[PlantService] Inference returned null (no result/error) for $plantId.',
           );
         }
@@ -322,12 +327,12 @@ class PlantService {
           'analysisError': 'Analysis did not return a valid result.',
         });
         if (kDebugMode) {
-          print('[PlantService] Plant $plantId status updated to ERROR.');
+          logger.w('[PlantService] Plant $plantId status updated to ERROR.');
         }
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        print(
+        logger.e(
           '[PlantService] Error during analysis call or Firestore update for $plantId: $e\n$stackTrace',
         );
       }
@@ -339,7 +344,7 @@ class PlantService {
           })
           .catchError((updateError) {
             if (kDebugMode) {
-              print(
+              logger.e(
                 '[PlantService] CRITICAL: Failed to update plant $plantId to error state: $updateError',
               );
             }
@@ -388,7 +393,7 @@ class PlantService {
       return downloadUrl;
     } catch (e) {
       if (kDebugMode) {
-        print(
+        logger.e(
           '[PlantService] Error saving processed image ($processType) for $originalImageId: $e',
         );
       }
@@ -413,7 +418,7 @@ class PlantService {
       if (e.toString().contains('failed-precondition') ||
           e.toString().contains('requires an index')) {
         if (kDebugMode) {
-          print(
+          logger.w(
             '[PlantService] Index not available for getUserPlants, using fallback query without orderBy.',
           );
         }
@@ -434,7 +439,9 @@ class PlantService {
         ); // Manual sort for fallback
         return plants;
       } else {
-        if (kDebugMode) print('[PlantService] Error getting user plants: $e');
+        if (kDebugMode) {
+          logger.e('[PlantService] Error getting user plants: $e');
+        }
         rethrow;
       }
     }
@@ -454,7 +461,7 @@ class PlantService {
           .toList();
     } catch (e) {
       if (kDebugMode) {
-        print('[PlantService] Error getting plant images for $plantId: $e');
+        logger.e('[PlantService] Error getting plant images for $plantId: $e');
       }
       rethrow;
     }
@@ -496,7 +503,7 @@ class PlantService {
               error,
             ) {
               if (kDebugMode) {
-                print(
+                logger.w(
                   '[PlantService] Storage deletion (original) for ${image.imageId} error: $error. Continuing.',
                 );
               }
@@ -504,7 +511,7 @@ class PlantService {
             });
           } catch (e) {
             if (kDebugMode) {
-              print(
+              logger.w(
                 '[PlantService] Storage deletion (original) for ${image.imageId} failed: $e. Continuing.',
               );
             }
@@ -521,13 +528,13 @@ class PlantService {
               // If entry.value is a full gs:// path, Firebase SDK might handle it.
               // Let's assume for now these are URLs and we can't reliably delete them without storage paths.
               if (kDebugMode) {
-                print(
+                logger.i(
                   '[PlantService] Skipping deletion of processed image (URL: ${entry.value}) for ${image.imageId} due to missing direct storage path info.',
                 );
               }
             } catch (e) {
               if (kDebugMode) {
-                print(
+                logger.w(
                   '[PlantService] Error attempting to delete processed image for ${image.imageId} from storage: $e',
                 );
               }
@@ -535,14 +542,16 @@ class PlantService {
           }
         } catch (e) {
           if (kDebugMode) {
-            print(
+            logger.w(
               '[PlantService] Error deleting data for image ${image.imageId}: $e. Continuing.',
             );
           }
         }
       }
     } catch (e) {
-      if (kDebugMode) print('[PlantService] Error deleting plant $plantId: $e');
+      if (kDebugMode) {
+        logger.e('[PlantService] Error deleting plant $plantId: $e');
+      }
       rethrow;
     }
   }
@@ -558,7 +567,9 @@ class PlantService {
       });
     } catch (e) {
       if (kDebugMode) {
-        print('[PlantService] Error updating plant analysis for $plantId: $e');
+        logger.e(
+          '[PlantService] Error updating plant analysis for $plantId: $e',
+        );
       }
       rethrow;
     }
@@ -595,14 +606,14 @@ class PlantService {
               (error.toString().contains('failed-precondition') ||
                   error.toString().contains('requires an index'))) {
             if (kDebugMode) {
-              print(
+              logger.w(
                 '[PlantService] userPlantsStream: Index error, falling back without orderBy: $error',
               );
             }
             fetchData(false); // Attempt fallback
           } else {
             if (kDebugMode) {
-              print(
+              logger.e(
                 '[PlantService] userPlantsStream: Stream error (orderBy: $withOrderBy): $error',
               );
             }

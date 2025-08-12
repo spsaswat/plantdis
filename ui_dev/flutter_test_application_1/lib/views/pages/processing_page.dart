@@ -3,6 +3,7 @@ import 'package:flutter_test_application_1/models/plant_model.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
 
 class ProcessingPage extends StatefulWidget {
   const ProcessingPage({super.key, required this.pendingPlants});
@@ -42,7 +43,7 @@ class _ProcessingPageState extends State<ProcessingPage> {
         });
       }
     } catch (e) {
-      print('Error refreshing processing list: $e');
+      logger.e('Error refreshing processing list: $e');
     }
   }
 
