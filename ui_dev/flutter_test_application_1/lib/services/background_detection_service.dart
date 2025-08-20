@@ -239,48 +239,43 @@ class BackgroundDetectionService {
       double greenRatio = greenPixels / totalPixels;
       double brightRatio = brightPixels / totalPixels;
 
+      // HARDCODED CONFIDENCE: 70% for quick problem detection
+      // This ensures you can quickly identify when the TFLite model is not working
+      double confidence = 0.7; // 70% - HARDCODED
+
       // Simple logic: if image has content and some green, assume leaves
       bool hasLeaves = nonBlackRatio > 0.3 && greenRatio > 0.05;
 
-      // Calculate background probability based on heuristics
-      double backgroundProbability;
-      if (hasLeaves) {
-        // If we detect leaves, background probability should be low
-        backgroundProbability = 0.3; // 30% background probability
-      } else {
-        // If no leaves detected, background probability should be high
-        backgroundProbability = 0.9; // 90% background probability
-      }
-
       if (kDebugMode) {
         logger.i(
-          '[BackgroundDetectionService] Fallback detection: hasLeaves=$hasLeaves, backgroundProbability=${(backgroundProbability * 100).toStringAsFixed(1)}%, green=$greenRatio, nonBlack=$nonBlackRatio',
+          '[BackgroundDetectionService] Fallback detection (HARDCODED 70%): nonBlackRatio=$nonBlackRatio, greenRatio=$greenRatio, brightRatio=$brightRatio, hasLeaves=$hasLeaves, confidence=$confidence',
         );
       }
 
       return {
         'hasLeaves': hasLeaves,
-        'backgroundProbability': backgroundProbability,
+        'backgroundProbability':
+            confidence, // Always 70% - renamed from 'confidence' to 'backgroundProbability'
         'method': 'fallback_heuristic_hardcoded',
         'pixelRatio': nonBlackRatio,
         'greenRatio': greenRatio,
         'brightRatio': brightRatio,
-        'note': 'Using heuristic-based background probability calculation',
+        'note':
+            'Using hardcoded 70% confidence for quick TFLite model problem detection',
       };
     } catch (e) {
       if (kDebugMode) {
         logger.e('[BackgroundDetectionService] Fallback detection failed: $e');
       }
-      // Return a safe default - assume leaves are present to allow processing
+      // Return a safe default with hardcoded confidence
       return {
         'hasLeaves':
             true, // Assume leaves are present to allow processing to continue
         'backgroundProbability':
-            0.3, // Low background probability (30%) since we assume leaves are present
+            0.7, // HARDCODED 70% - renamed from 'confidence' to 'backgroundProbability'
         'method': 'fallback_safe_default_hardcoded',
         'error': e.toString(),
-        'note':
-            'Using safe default: assuming leaves present with low background probability',
+        'note': 'Using hardcoded 70% confidence due to error',
       };
     }
   }
@@ -332,22 +327,21 @@ class BackgroundDetectionService {
     // Extract confidence score (sigmoid output)
     List<double> probabilities =
         (outputBuffer.first as List<dynamic>).cast<double>();
-    double backgroundProbability =
-        probabilities.first; // This is background probability
+    double confidence = probabilities.first; // Single output value
 
-    // Determine if leaves are detected (low background probability = leaves present)
-    bool hasLeaves = backgroundProbability < (1.0 - confidenceThreshold);
+    // Determine if leaves are detected
+    bool hasLeaves = confidence >= confidenceThreshold;
 
     if (kDebugMode) {
       logger.i(
-        '[BackgroundDetectionService] TFLite detection result: hasLeaves=$hasLeaves, backgroundProbability=${(backgroundProbability * 100).toStringAsFixed(1)}%',
+        '[BackgroundDetectionService] TFLite detection result: hasLeaves=$hasLeaves, confidence=${(confidence * 100).toStringAsFixed(1)}%',
       );
     }
 
     return {
       'hasLeaves': hasLeaves,
       'backgroundProbability':
-          backgroundProbability, // Model directly outputs background probability
+          confidence, // Renamed from 'confidence' to 'backgroundProbability'
       'method': 'tflite_model',
     };
   }

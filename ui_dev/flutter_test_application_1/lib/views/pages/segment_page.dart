@@ -1112,11 +1112,6 @@ class _SegmentPageState extends State<SegmentPage> {
           isThreeLine: true,
         ),
         _buildResultTile(
-          icon: Icons.label_important_outline,
-          label: 'Most Likely Detection (uncertain)',
-          value: likelyDisease,
-        ),
-        _buildResultTile(
           icon: Icons.percent_outlined,
           label: 'Confidence',
           value: _formatConfidence(
