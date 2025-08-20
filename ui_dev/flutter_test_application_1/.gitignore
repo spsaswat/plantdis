@@ -44,3 +44,8 @@ local.properties
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Models
+assets/models/leaf_mask_rcnn_v2.onnx
+assets/models/plant_disease_model.tflite
+assets/models/background_detector_quant.tflite
