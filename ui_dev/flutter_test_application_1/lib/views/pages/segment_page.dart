@@ -499,8 +499,8 @@ class _SegmentPageState extends State<SegmentPage> {
     }
 
     // 3. If the detected result is a healthy label
-    if (disease.endsWith('_healthy')) {
-      final plantName = disease.replaceAll('_healthy', '');
+    if (disease.endsWith(' healthy')) {
+      final plantName = disease.replaceAll(' healthy', '');
       return 'Congratulations! Your $plantName leaf appears to be healthy!';
     }
 
