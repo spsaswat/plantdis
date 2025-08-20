@@ -1,0 +1,10 @@
+[33m7deba6e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m # Models
+[33mc409b70[m migrate large model files to Git LFS
+[33m0fa6ae7[m track .onnx and .tflite  files with Git LFS
+[33m62370e6[m integrated zezhou's background_detector_quant.tflite and haoxiang's leaf_mask_rcnn_v2.onnx
+[33m96613d8[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: correct prompt when detection result is healthy close#110
+[33mbb526d3[m remove big file
+[33ma637f5d[m integrate background detection model
+[33mdcff16d[m refactor: Replace print statements with logger fix: Resolve 'use_build_context_synchronously' lint warnings
+[33m1be8524[m Merge branch 'main' of https://github.com/spsaswat/plantdis
+[33m4512531[m feat: Refactor navigation and UI for better UX - **Auto-navigation on Deletion**: The detail page now automatically pops when its underlying data is deleted, preventing users from being stranded. - **Centralized URL Logic**: URL launching functionality has been refactored into a dedicated LinkLauncher service to reduce code duplication. - **Decluttered AppBar**: The theme toggle and about buttons have been moved from the AppBar to a new SettingsPage to ensure the main title is always fully visible. - **Improved Drawer Layout**: The Logout button is now anchored to the bottom of the navigation drawer using a Spacer, improving visual organization.
