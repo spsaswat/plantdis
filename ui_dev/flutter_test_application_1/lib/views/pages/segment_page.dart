@@ -49,6 +49,8 @@ class _SegmentPageState extends State<SegmentPage> {
   // State variables for segmentation and analysis
   bool _isAnalysisTriggered = false;
 
+  static const double decisionThreshold = 0.7; 
+
   // Helper function to format the timestamp
   String _formatTimestamp(String? timestamp) {
     if (timestamp == null) return 'N/A';
@@ -106,7 +108,7 @@ class _SegmentPageState extends State<SegmentPage> {
       final backgroundResult = await _backgroundDetectionService.detectLeaves(
         imageBytes: imageBytes,
         confidenceThreshold:
-            0.8, // 80% probability threshold for background detection
+            decisionThreshold, // 80% probability threshold for background detection
       );
 
       if (kDebugMode) {
@@ -129,9 +131,10 @@ class _SegmentPageState extends State<SegmentPage> {
       // Return default result indicating no leaves detected
       final errorResult = {
         'hasLeaves': false,
-        'backgroundProbability':
-            0.0, // Changed from 'confidence' to 'backgroundProbability'
+        'leafProbability': 0.0,
+        'backgroundProbability': 1.0,
         'error': e.toString(),
+        'method': 'error_fallback',
       };
 
       // Store result in state only if widget is still mounted
@@ -183,16 +186,20 @@ class _SegmentPageState extends State<SegmentPage> {
     switch (method) {
       case 'tflite_model':
         return 'TFLite Model';
+      case 'fallback_heuristic':
       case 'fallback_heuristic_hardcoded':
-        return 'Fallback Heuristic (70% Hardcoded)';
+        return 'Fallback Heuristic';
+      case 'fallback_safe_default':
       case 'fallback_safe_default_hardcoded':
-        return 'Safe Default (70% Hardcoded)';
+        return 'Safe Default';
+      case 'error_fallback':
       case 'fallback_error':
         return 'Error Fallback';
       default:
         return method.replaceAll('_', ' ').toUpperCase();
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -319,6 +326,38 @@ class _SegmentPageState extends State<SegmentPage> {
             detectedDisease,
           );
 
+          String _pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
+
+          Widget _probBar({
+            required String label,
+            required double value,
+            required Color color,
+          }) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 12)),
+                    Text(_pct(value), style: TextStyle(fontSize: 12, color: color)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: value.clamp(0.0, 1.0),
+                    minHeight: 8,
+                    backgroundColor: Colors.black12,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            );
+          }
+
+
           // Debug prints inside StreamBuilder
           // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
           // print('[SegmentPage StreamBuilder] status: $status');
@@ -356,7 +395,8 @@ class _SegmentPageState extends State<SegmentPage> {
                                         );
                                         return {
                                           'hasLeaves': false,
-                                          'backgroundProbability': 0.0,
+                                          'leafProbability': 0.0,
+                                          'backgroundProbability': 1.0,
                                           'error': error.toString(),
                                           'method': 'error_fallback',
                                         };
@@ -433,156 +473,119 @@ class _SegmentPageState extends State<SegmentPage> {
                                   );
                                 } else {
                                   final result = snapshot.data!;
-                                  final hasLeaves =
-                                      result['hasLeaves'] as bool? ?? false;
-                                  final backgroundProbability =
-                                      (result['backgroundProbability'] as num?)
-                                          ?.toDouble() ??
-                                      0.0;
-                                  final method =
-                                      result['method'] as String? ?? 'unknown';
+                                  final hasLeaves = result['hasLeaves'] as bool? ?? false;
+
+                                  // Read both probabilities; if leafProbability missing, derive it from backgroundProbability.
+                                  final double bgProb =
+                                      (result['backgroundProbability'] as num?)?.toDouble() ?? 0.0;
+                                  final double leafProb =
+                                      (result['leafProbability'] as num?)?.toDouble() ?? (1.0 - bgProb);
+
+                                  final method = result['method'] as String? ?? 'unknown';
 
                                   return Card(
                                     child: Padding(
                                       padding: const EdgeInsets.all(15.0),
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           const Center(
-                                            child: Text(
-                                              "Background Detection",
-                                              style: KTextStyle.titleTealText,
-                                            ),
+                                            child: Text("Background Detection", style: KTextStyle.titleTealText),
                                           ),
-                                          const SizedBox(height: 15),
+                                          const SizedBox(height: 12),
+
+                                          // Decision row
                                           ListTile(
                                             leading: Icon(
-                                              hasLeaves
-                                                  ? Icons.eco
-                                                  : Icons.image_not_supported,
-                                              color:
-                                                  hasLeaves
-                                                      ? Colors.green
-                                                      : Colors.grey,
+                                              hasLeaves ? Icons.eco : Icons.image_not_supported,
+                                              color: hasLeaves ? Colors.green : Colors.grey,
                                               size: 32,
                                             ),
                                             title: Text(
-                                              hasLeaves
-                                                  ? 'Plant Leaves Detected'
-                                                  : 'No Plant Leaves',
+                                              hasLeaves ? 'Plant Leaves Detected' : 'No Plant Leaves',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                color:
-                                                    hasLeaves
-                                                        ? Colors.green
-                                                        : Colors.grey,
+                                                color: hasLeaves ? Colors.green : Colors.grey,
                                               ),
                                             ),
-                                            subtitle: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Background Probability: ${(backgroundProbability * 100).toStringAsFixed(1)}%',
-                                                  style: TextStyle(
-                                                    color:
-                                                        hasLeaves
-                                                            ? Colors
-                                                                .green
-                                                                .shade700
-                                                            : Colors
-                                                                .grey
-                                                                .shade600,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  'Method: ${_formatMethodName(method)}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey.shade600,
-                                                  ),
-                                                ),
-                                                if (method.contains(
-                                                      'fallback',
-                                                    ) &&
-                                                    result['greenRatio'] !=
-                                                        null)
-                                                  Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Text(
-                                                        'Green: ${(result['greenRatio'] * 100).toStringAsFixed(1)}% | Bright: ${(result['brightRatio'] * 100).toStringAsFixed(1)}%',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color:
-                                                              Colors
-                                                                  .grey
-                                                                  .shade500,
-                                                        ),
-                                                      ),
-                                                      if (result['note'] !=
-                                                          null)
-                                                        Text(
-                                                          result['note'],
-                                                          style: TextStyle(
-                                                            fontSize: 9,
-                                                            color:
-                                                                Colors
-                                                                    .orange
-                                                                    .shade600,
-                                                            fontStyle:
-                                                                FontStyle
-                                                                    .italic,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                              ],
+                                            subtitle: Text(
+                                              'Method: ${_formatMethodName(method)}',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                                             ),
                                           ),
+
+                                          const SizedBox(height: 8),
+
+                                          // Probabilities (two bars)
+                                          _probBar(
+                                            label: 'Leaf Probability',
+                                            value: leafProb,
+                                            color: Colors.green.shade700,
+                                          ),
+                                          const SizedBox(height: 10),
+                                          _probBar(
+                                            label: 'Background Probability',
+                                            value: bgProb,
+                                            color: Colors.blueGrey.shade700,
+                                          ),
+
+                                          const SizedBox(height: 10),
+
+                                          // Threshold hint + fallback extras
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.flag_circle_outlined, size: 16, color: Colors.teal),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Decision threshold: ${_pct(decisionThreshold)} (Leaf)',
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                            ],
+                                          ),
+
+                                          if (method.contains('fallback') &&
+                                              result['greenRatio'] != null &&
+                                              result['brightRatio'] != null) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Heuristic details – Green: ${_pct((result['greenRatio'] as num).toDouble())} • '
+                                              'Bright: ${_pct((result['brightRatio'] as num).toDouble())}',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                            ),
+                                            if (result['note'] != null)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 2.0),
+                                                child: Text(
+                                                  result['note'].toString(),
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.orange.shade700,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+
                                           if (hasLeaves)
                                             Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 10.0,
-                                              ),
+                                              padding: const EdgeInsets.only(top: 10.0),
                                               child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  10.0,
-                                                ),
+                                                padding: const EdgeInsets.all(10.0),
                                                 decoration: BoxDecoration(
                                                   color: Colors.green.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        8.0,
-                                                      ),
-                                                  border: Border.all(
-                                                    color:
-                                                        Colors.green.shade200,
-                                                  ),
+                                                  borderRadius: BorderRadius.circular(8.0),
+                                                  border: Border.all(color: Colors.green.shade200),
                                                 ),
                                                 child: Row(
                                                   children: [
-                                                    Icon(
-                                                      Icons
-                                                          .check_circle_outline,
-                                                      color:
-                                                          Colors.green.shade600,
-                                                      size: 20,
-                                                    ),
+                                                    Icon(Icons.check_circle_outline,
+                                                        color: Colors.green.shade600, size: 20),
                                                     const SizedBox(width: 8),
                                                     Expanded(
                                                       child: Text(
                                                         'Image contains plant leaves. Proceeding with segmentation and disease detection.',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors
-                                                                  .green
-                                                                  .shade700,
-                                                          fontSize: 12,
-                                                        ),
+                                                        style:
+                                                            TextStyle(color: Colors.green.shade700, fontSize: 12),
                                                       ),
                                                     ),
                                                   ],
@@ -591,46 +594,24 @@ class _SegmentPageState extends State<SegmentPage> {
                                             )
                                           else
                                             Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 10.0,
-                                              ),
+                                              padding: const EdgeInsets.only(top: 10.0),
                                               child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  10.0,
-                                                ),
+                                                padding: const EdgeInsets.all(10.0),
                                                 decoration: BoxDecoration(
                                                   color: Colors.orange.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        8.0,
-                                                      ),
-                                                  border: Border.all(
-                                                    color:
-                                                        Colors.orange.shade200,
-                                                  ),
+                                                  borderRadius: BorderRadius.circular(8.0),
+                                                  border: Border.all(color: Colors.orange.shade200),
                                                 ),
                                                 child: Row(
                                                   children: [
-                                                    Icon(
-                                                      Icons
-                                                          .warning_amber_outlined,
-                                                      color:
-                                                          Colors
-                                                              .orange
-                                                              .shade600,
-                                                      size: 20,
-                                                    ),
+                                                    Icon(Icons.warning_amber_outlined,
+                                                        color: Colors.orange.shade600, size: 20),
                                                     const SizedBox(width: 8),
                                                     Expanded(
                                                       child: Text(
                                                         'No plant leaves detected. Please upload an image that clearly shows plant leaves.',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors
-                                                                  .orange
-                                                                  .shade700,
-                                                          fontSize: 12,
-                                                        ),
+                                                        style:
+                                                            TextStyle(color: Colors.orange.shade700, fontSize: 12),
                                                       ),
                                                     ),
                                                   ],
@@ -642,6 +623,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                     ),
                                   );
                                 }
+
                               },
                             ),
                           ),
@@ -657,7 +639,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 as num?)
                                             ?.toDouble() ??
                                         0.0) >=
-                                    0.8 ||
+                                    (1-decisionThreshold) ||
                                 !(_backgroundDetectionResult!['hasLeaves']
                                         as bool? ??
                                     true)) ...[
