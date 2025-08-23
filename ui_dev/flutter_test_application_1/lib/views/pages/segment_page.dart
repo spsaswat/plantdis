@@ -358,6 +358,69 @@ class _SegmentPageState extends State<SegmentPage> {
           }
 
 
+
+
+          Widget _buildAsteriskFootnotes() {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Card(
+              elevation: 1,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Notes', style: KTextStyle.titleTealText),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('* ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            'Disease detection: may be inaccurate due to look-alike symptoms, image quality, or diseases outside the training set. Confirm before acting.',
+                            style: KTextStyle.descriptionText.copyWith(
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('**  ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            'AI-generated suggestion: general guidance only. Always verify with trusted sources or a qualified agronomist/plant pathologist.',
+                            style: KTextStyle.descriptionText.copyWith(
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Disclaimer: Results are provided “as is.” APPN and contributors are not liable for any loss or damage arising from use of these outputs.',
+                      style: KTextStyle.descriptionText.copyWith(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+
+
+
           // Debug prints inside StreamBuilder
           // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
           // print('[SegmentPage StreamBuilder] status: $status');
@@ -1037,6 +1100,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                   }
                                 },
                               ),
+                              _buildAsteriskFootnotes(),
                             ],
                           ],
                         ],
@@ -1061,7 +1125,7 @@ class _SegmentPageState extends State<SegmentPage> {
       children: [
         _buildResultTile(
           icon: Icons.bug_report_outlined, // Or appropriate icon
-          label: 'Detected Disease',
+          label: 'Detected Disease *',
           value: detectedDisease,
         ),
         _buildResultTile(
@@ -1105,6 +1169,36 @@ class _SegmentPageState extends State<SegmentPage> {
     );
   }
 
+    /// Renders simple inline “markdown-ish”: *italic* or **bold** -> bold
+  /// We intentionally treat single-star italics as bold for species names like *Puccinia sorghi*.
+  Widget _renderMarkdownishBold(String text) {
+    final spans = <TextSpan>[];
+    final base = KTextStyle.descriptionText;
+    final bold = base.copyWith(fontWeight: FontWeight.w600);
+
+    // Matches **bold** or *italic* (we render both as bold)
+    final re = RegExp(r'(\*\*[^*]+\*\*|\*[^*]+\*)');
+    int idx = 0;
+
+    for (final m in re.allMatches(text)) {
+      if (m.start > idx) {
+        spans.add(TextSpan(text: text.substring(idx, m.start), style: base));
+      }
+      final match = m.group(0)!;
+      final inner = match.startsWith('**')
+          ? match.substring(2, match.length - 2)
+          : match.substring(1, match.length - 1);
+
+      spans.add(TextSpan(text: inner, style: bold));
+      idx = m.end;
+    }
+    if (idx < text.length) {
+      spans.add(TextSpan(text: text.substring(idx), style: base));
+    }
+    return RichText(text: TextSpan(children: spans, style: base));
+  }
+
+
   // Widget to display AI suggestion box
   Widget _buildAiSuggestionBox(String suggestion) {
     return Container(
@@ -1118,9 +1212,9 @@ class _SegmentPageState extends State<SegmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('AI Suggestion', style: KTextStyle.titleTealText),
+              const Text('AI Suggestion **', style: KTextStyle.titleTealText),
               const SizedBox(height: 8),
-              Text(suggestion, style: KTextStyle.descriptionText),
+              _renderMarkdownishBold(suggestion),
             ],
           ),
         ),
@@ -1137,8 +1231,8 @@ class _SegmentPageState extends State<SegmentPage> {
       return 'Please upload an image that clearly shows a plant leaf.';
     }
 
-    // 2. If confidence is below 80%
-    if (diseaseConfidence < 0.8) {
+    // 2. If confidence is below 30%
+    if (diseaseConfidence < 0.3) {
       return 'We are unable to determine whether this is a plant leaf or whether it is diseased. Please try uploading a clearer image.';
     }
 
