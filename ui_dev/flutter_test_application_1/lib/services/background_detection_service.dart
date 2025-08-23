@@ -18,9 +18,23 @@ class BackgroundDetectionService {
   static const String _modelAssetPath =
       'assets/models/background_detector_quant.tflite';
 
+  /// If the model has a **single sigmoid** output (1x1), set this to true if that
+  /// output represents P(leaf). If it represents P(background), leave as false.
+  /// Given your filename and previous behavior, default = false.
+  static const bool _singleSigmoidIsLeafProb = false;
+
   TfliteInterpreterWrapper? _interpreterWrapper;
   bool _isLoadingModel = false;
   bool _modelLoaded = false;
+
+  static int _toByte(num v) {
+    // Fast, safe map to 0..255 as int
+    final int iv = v is int ? v : v.round();
+    if (iv < 0) return 0;
+    if (iv > 255) return 255;
+    return iv;
+  }
+
 
   /// Check if the background detection model is loaded
   bool get isModelLoaded => _modelLoaded;
@@ -146,7 +160,7 @@ class BackgroundDetectionService {
   ///
   /// [imageBytes] - Raw image bytes
   /// [confidenceThreshold] - Minimum confidence threshold (default: 0.6 = 60%)
-  /// Returns: Map with 'hasLeaves' boolean and 'confidence' double
+  /// Returns: Map with 'hasLeaves' boolean and probabilities
   Future<Map<String, dynamic>> detectLeaves({
     required Uint8List imageBytes,
     double confidenceThreshold = 0.6,
@@ -176,7 +190,7 @@ class BackgroundDetectionService {
         return _fallbackDetection(imageBytes, confidenceThreshold);
       }
 
-      // Original TFLite detection logic
+      // Robust TFLite detection logic
       return await _runTfliteDetection(imageBytes, confidenceThreshold);
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -195,22 +209,20 @@ class BackgroundDetectionService {
     double confidenceThreshold,
   ) {
     try {
-      // Simple heuristic: check if image has enough non-black pixels
-      // This is a very basic fallback and should be improved
       final img.Image? decodedImage = img.decodeImage(imageBytes);
       if (decodedImage == null) {
         return {
           'hasLeaves': false,
-          'confidence': 0.0,
+          'leafProbability': 0.0,
+          'backgroundProbability': 1.0,
           'method': 'fallback_error',
         };
       }
 
-      // Count non-black pixels (assuming leaves are not pure black)
+      // Heuristic: content + green-ness
       int nonBlackPixels = 0;
       int totalPixels = decodedImage.width * decodedImage.height;
 
-      // More sophisticated pixel analysis
       int greenPixels = 0;
       int brightPixels = 0;
 
@@ -218,64 +230,60 @@ class BackgroundDetectionService {
         for (int x = 0; x < decodedImage.width; x++) {
           final pixel = decodedImage.getPixel(x, y);
 
-          // Check if pixel is not too dark (simple threshold)
           if (pixel.r > 30 || pixel.g > 30 || pixel.b > 30) {
             nonBlackPixels++;
           }
 
-          // Check for green pixels (typical for leaves)
           if (pixel.g > pixel.r && pixel.g > pixel.b && pixel.g > 50) {
             greenPixels++;
           }
 
-          // Check for bright pixels (good lighting)
           if (pixel.r > 100 && pixel.g > 100 && pixel.b > 100) {
             brightPixels++;
           }
         }
       }
 
-      double nonBlackRatio = nonBlackPixels / totalPixels;
-      double greenRatio = greenPixels / totalPixels;
-      double brightRatio = brightPixels / totalPixels;
-
-      // HARDCODED CONFIDENCE: 70% for quick problem detection
-      // This ensures you can quickly identify when the TFLite model is not working
-      double confidence = 0.7; // 70% - HARDCODED
+      final double nonBlackRatio = nonBlackPixels / totalPixels;
+      final double greenRatio = greenPixels / totalPixels;
+      final double brightRatio = brightPixels / totalPixels;
 
       // Simple logic: if image has content and some green, assume leaves
-      bool hasLeaves = nonBlackRatio > 0.3 && greenRatio > 0.05;
+      final bool hasLeaves = nonBlackRatio > 0.3 && greenRatio > 0.05;
+
+      // Heuristic leaf prob centered near 0.7 when positive
+      final double leafProb = hasLeaves ? 0.7 : 0.3;
+      final double backgroundProb = 1.0 - leafProb;
 
       if (kDebugMode) {
         logger.i(
-          '[BackgroundDetectionService] Fallback detection (HARDCODED 70%): nonBlackRatio=$nonBlackRatio, greenRatio=$greenRatio, brightRatio=$brightRatio, hasLeaves=$hasLeaves, confidence=$confidence',
+          '[BackgroundDetectionService] Fallback heuristic: nonBlackRatio=$nonBlackRatio, '
+          'greenRatio=$greenRatio, brightRatio=$brightRatio, hasLeaves=$hasLeaves, '
+          'leafProb=$leafProb',
         );
       }
 
       return {
         'hasLeaves': hasLeaves,
-        'backgroundProbability':
-            confidence, // Always 70% - renamed from 'confidence' to 'backgroundProbability'
-        'method': 'fallback_heuristic_hardcoded',
+        'leafProbability': leafProb,
+        'backgroundProbability': backgroundProb,
+        'method': 'fallback_heuristic',
         'pixelRatio': nonBlackRatio,
         'greenRatio': greenRatio,
         'brightRatio': brightRatio,
-        'note':
-            'Using hardcoded 70% confidence for quick TFLite model problem detection',
+        'note': 'Heuristic used due to TFLite load/run issue',
       };
     } catch (e) {
       if (kDebugMode) {
         logger.e('[BackgroundDetectionService] Fallback detection failed: $e');
       }
-      // Return a safe default with hardcoded confidence
       return {
-        'hasLeaves':
-            true, // Assume leaves are present to allow processing to continue
-        'backgroundProbability':
-            0.7, // HARDCODED 70% - renamed from 'confidence' to 'backgroundProbability'
-        'method': 'fallback_safe_default_hardcoded',
+        'hasLeaves': true,
+        'leafProbability': 0.7,
+        'backgroundProbability': 0.3,
+        'method': 'fallback_safe_default',
         'error': e.toString(),
-        'note': 'Using hardcoded 70% confidence due to error',
+        'note': 'Safe default used due to fallback error',
       };
     }
   }
@@ -290,61 +298,195 @@ class BackgroundDetectionService {
     if (decodedImage == null) throw Exception('Failed to decode image.');
 
     // Get model input requirements
-    final inputTensor = _interpreterWrapper!.getInputTensor(0);
-    final inputShape = inputTensor.shape;
-    final inputHeight = inputShape[1]; // Should be 224
-    final inputWidth = inputShape[2]; // Should be 224
+    final dynamic inputTensor = _interpreterWrapper!.getInputTensor(0);
+    final List<int> inputShape =
+        (inputTensor.shape as List).map((e) => e as int).toList();
+    final int inputHeight = inputShape[1]; // e.g., 224
+    final int inputWidth = inputShape[2]; // e.g., 224
 
-    // Resize image to 224x224 (model input size)
+    // Resize image to model input size
     final img.Image resizedImage = img.copyResize(
       decodedImage,
       width: inputWidth,
       height: inputHeight,
     );
 
-    // Normalize image to [0,1] range and prepare input buffer
-    final inputBuffer = Float32List(1 * inputHeight * inputWidth * 3);
-    int bufferIndex = 0;
-    for (int y = 0; y < inputHeight; y++) {
-      for (int x = 0; x < inputWidth; x++) {
-        final pixel = resizedImage.getPixel(x, y);
-        inputBuffer[bufferIndex++] = pixel.r / 255.0;
-        inputBuffer[bufferIndex++] = pixel.g / 255.0;
-        inputBuffer[bufferIndex++] = pixel.b / 255.0;
+    // Determine input type (quantized or float)
+    final String inTypeStr = inputTensor.type.toString().toLowerCase();
+    final bool inIsUint8 = inTypeStr.contains('uint8');
+    final bool inIsFloat32 =
+        inTypeStr.contains('float') || inTypeStr.contains('float32');
+
+    // Try to read input quantization params if available
+    double inScale = 1.0 / 255.0;
+    int inZeroPoint = 0;
+    try {
+      // Try common shapes of metadata
+      final q = inputTensor.quantizationParameters ??
+          inputTensor.quantization ??
+          null;
+      if (q != null) {
+        // Some wrappers expose as {scale, zeroPoint} or arrays
+        if (q.scale is num) inScale = (q.scale as num).toDouble();
+        if (q.zeroPoint is int) inZeroPoint = q.zeroPoint as int;
+        // If scale is 0 (rare), fall back
+        if (inScale == 0) inScale = 1.0 / 255.0;
       }
+    } catch (_) {
+      // Keep defaults
     }
 
-    // Prepare output buffer (binary classification: 1 output)
-    final outputTensor = _interpreterWrapper!.getOutputTensor(0);
-    final outputBuffer = List.generate(
-      outputTensor.shape[0],
-      (_) => List.filled(outputTensor.shape[1], 0.0),
-    );
+    // Build input buffer according to type
+    ByteBuffer inputByteBuffer;
+    if (inIsUint8) {
+      // Quantized input: Uint8List with optional quantization mapping
+      final Uint8List input = Uint8List(inputHeight * inputWidth * 3);
+      int i = 0;
+      for (int y = 0; y < inputHeight; y++) {
+        for (int x = 0; x < inputWidth; x++) {
+          final p = resizedImage.getPixel(x, y);
+          // Convert RGB [0,255] -> quantized domain if non-default qparams present
+          // value_q = round(value_f / scale + zero_point)
+          // Here value_f is simply raw 0..255; if scale ~ 1/255 and zero_point 0, this is identity.
+
+          // p.r/g/b are `num` -> convert to 0..255 ints
+          int r = _toByte(p.r as num);
+          int g = _toByte(p.g as num);
+          int b = _toByte(p.b as num);
+
+          if (!(inScale == (1.0 / 255.0) && inZeroPoint == 0)) {
+            // Map from [0..255] float space to quant domain
+            r = _quantize255ToUint8(r.toDouble(), inScale, inZeroPoint);
+            g = _quantize255ToUint8(g.toDouble(), inScale, inZeroPoint);
+            b = _quantize255ToUint8(b.toDouble(), inScale, inZeroPoint);
+          }
+
+          input[i++] = r;
+          input[i++] = g;
+          input[i++] = b;
+        }
+      }
+      inputByteBuffer = input.buffer;
+    } else if (inIsFloat32) {
+      // Float input: normalize to [0,1]
+      final Float32List input =
+          Float32List(1 * inputHeight * inputWidth * 3); // NHWC with N=1
+      int bufferIndex = 0;
+      for (int y = 0; y < inputHeight; y++) {
+        for (int x = 0; x < inputWidth; x++) {
+          final p = resizedImage.getPixel(x, y);
+          input[bufferIndex++] = p.r / 255.0;
+          input[bufferIndex++] = p.g / 255.0;
+          input[bufferIndex++] = p.b / 255.0;
+        }
+      }
+      inputByteBuffer = input.buffer;
+    } else {
+      throw Exception(
+        'Unsupported input tensor type: ${inputTensor.type}',
+      );
+    }
+
+    // Prepare output buffer
+    final dynamic outputTensor = _interpreterWrapper!.getOutputTensor(0);
+    final List<int> outShape =
+        (outputTensor.shape as List).map((e) => e as int).toList();
+
+    // We expect [1,1] (single sigmoid) or [1,2] (softmax)
+    if (outShape.length != 2 || outShape.first != 1) {
+      throw Exception('Unexpected output shape: $outShape');
+    }
+    final int outSize = outShape[1];
+
+    // Allocate a nested list of doubles to remain compatible with wrapper
+    final List<List<double>> outputBuffer =
+        List.generate(1, (_) => List.filled(outSize, 0.0));
 
     // Run inference
-    _interpreterWrapper!.run(inputBuffer.buffer, outputBuffer);
+    _interpreterWrapper!.run(inputByteBuffer, outputBuffer);
 
-    // Extract confidence score (sigmoid output)
-    List<double> probabilities =
-        (outputBuffer.first as List<dynamic>).cast<double>();
-    double confidence = probabilities.first; // Single output value
+    // Extract raw outputs as doubles (wrapper may already dequantize; handle both)
+    final List<double> rawOut = (outputBuffer.first)
+        .map((e) => (e is num) ? e.toDouble() : double.parse(e.toString()))
+        .toList();
 
-    // Determine if leaves are detected
-    bool hasLeaves = confidence >= confidenceThreshold;
+    // If output is quantized uint8 in some wrappers, we might need to dequantize.
+    // Try to read output quantization params; if they exist and look valid, dequantize.
+    double outScale = 1.0;
+    int outZeroPoint = 0;
+    bool needDequantize = false;
+    try {
+      final q = outputTensor.quantizationParameters ??
+          outputTensor.quantization ??
+          null;
+      if (q != null && q.scale is num) {
+        outScale = (q.scale as num).toDouble();
+        if (q.zeroPoint is int) outZeroPoint = q.zeroPoint as int;
+        // If scale seems plausible (e.g., ~1/256), attempt dequantization.
+        if (outScale > 0 && (outScale < 1.0)) {
+          needDequantize = true;
+        }
+      }
+    } catch (_) {
+      // ignore, assume already float
+    }
+
+    final List<double> probs = needDequantize
+        ? rawOut
+            .map((v) => outScale * ((v as num).toDouble() - outZeroPoint))
+            .toList()
+        : rawOut;
+
+    // Convert to leaf/background probabilities depending on head
+    double leafProb;
+    double backgroundProb;
+
+    if (outSize == 2) {
+      // Assume [P(background), P(leaf)]
+      backgroundProb = _clip01(probs[0]);
+      leafProb = _clip01(probs[1]);
+    } else if (outSize == 1) {
+      // Single sigmoid
+      final double p = _clip01(probs[0]);
+      if (_singleSigmoidIsLeafProb) {
+        leafProb = p;
+        backgroundProb = 1.0 - p;
+      } else {
+        backgroundProb = p;
+        leafProb = 1.0 - p;
+      }
+    } else {
+      throw Exception('Unsupported number of outputs: $outSize');
+    }
+
+    final bool hasLeaves = leafProb >= confidenceThreshold;
 
     if (kDebugMode) {
       logger.i(
-        '[BackgroundDetectionService] TFLite detection result: hasLeaves=$hasLeaves, confidence=${(confidence * 100).toStringAsFixed(1)}%',
+        '[BackgroundDetectionService] TFLite result: '
+        'leafProb=${(leafProb * 100).toStringAsFixed(1)}%, '
+        'backgroundProb=${(backgroundProb * 100).toStringAsFixed(1)}%, '
+        'hasLeaves=$hasLeaves (threshold=${(confidenceThreshold * 100).toStringAsFixed(0)}%)',
       );
     }
 
     return {
       'hasLeaves': hasLeaves,
-      'backgroundProbability':
-          confidence, // Renamed from 'confidence' to 'backgroundProbability'
+      'leafProbability': leafProb,
+      'backgroundProbability': backgroundProb,
       'method': 'tflite_model',
+      'head': outSize == 2 ? 'softmax_2' : 'sigmoid_1',
     };
   }
+
+  static int _quantize255ToUint8(double value255, double scale, int zeroPoint) {
+    // Map [0..255] float domain to quantized domain
+    final double q = (value255 / 255.0) / scale + zeroPoint;
+    return q.round().clamp(0, 255);
+  }
+
+  static double _clip01(double x) =>
+      x.isNaN ? 0.0 : (x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x));
 
   /// Dispose of resources
   void dispose() {
