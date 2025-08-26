@@ -20,7 +20,7 @@ class SegmentationService {
   // --- Singleton Pattern End ---
 
   // ONNX model asset path
-  static const String _modelAssetPath = 'assets/models/leaf_mask_rcnn.onnx';
+  static const String _modelAssetPath = 'assets/models/leaf_mask_rcnn_v2.onnx';
 
   late OrtSessionOptions _sessionOptions;
   OrtSession? _session;
