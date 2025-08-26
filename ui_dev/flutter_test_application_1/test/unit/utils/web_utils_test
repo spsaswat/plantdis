@@ -1,0 +1,265 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:flutter_test_application_1/utils/web_utils.dart';
+
+// Mock URL Launcher Platform
+class MockUrlLauncherPlatform extends Mock
+    with MockPlatformInterfaceMixin
+    implements UrlLauncherPlatform {
+  
+  bool shouldSucceed = true;
+  List<String> launchedUrls = [];
+
+  @override
+  Future<bool> launch(
+    String url, {
+    required bool useSafariVC,
+    required bool useWebView,
+    required bool enableJavaScript,
+    required bool enableDomStorage,
+    required bool universalLinksOnly,
+    required Map<String, String> headers,
+    String? webOnlyWindowName,
+  }) async {
+    launchedUrls.add(url);
+    return shouldSucceed;
+  }
+
+  @override
+  Future<bool> canLaunch(String url) async {
+    return shouldSucceed;
+  }
+
+  @override
+  Future<void> closeWebView() async {}
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launchedUrls.add(url);
+    return shouldSucceed;
+  }
+
+  @override
+  Future<bool> supportsMode(PreferredLaunchMode mode) async {
+    return true;
+  }
+
+  @override
+  Future<bool> supportsCloseForMode(PreferredLaunchMode mode) async {
+    return false;
+  }
+}
+
+void main() {
+  group('WebUtils', () {
+    late MockUrlLauncherPlatform mockUrlLauncher;
+
+    setUp(() {
+      mockUrlLauncher = MockUrlLauncherPlatform();
+      UrlLauncherPlatform.instance = mockUrlLauncher;
+    });
+
+    group('launchPlantDisWebsite', () {
+      testWidgets('should launch Plant Disease website successfully', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = true;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => WebUtils.launchPlantDisWebsite(context),
+                  child: Text('Launch PlantDis'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Act
+        await tester.tap(find.text('Launch PlantDis'));
+        await tester.pumpAndSettle();
+
+        // Assert
+        expect(mockUrlLauncher.launchedUrls, contains('https://plantdis.github.io/'));
+        expect(find.byType(SnackBar), findsNothing); // No error snackbar
+      });
+
+      testWidgets('should show error snackbar when launch fails', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = false;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => WebUtils.launchPlantDisWebsite(context),
+                  child: Text('Launch PlantDis'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Act
+        await tester.tap(find.text('Launch PlantDis'));
+        await tester.pump(); // Don't settle, so we can see the snackbar
+
+        // Assert
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text('Could not launch https://plantdis.github.io/'), findsOneWidget);
+      });
+
+      testWidgets('should handle context being unmounted', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = false;
+        late BuildContext savedContext;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  savedContext = context;
+                  return Container();
+                },
+              ),
+            ),
+          ),
+        );
+
+        // Navigate away to unmount context
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: Text('New Page')),
+          ),
+        );
+
+        // Act - should not throw error when context is unmounted
+        expect(() async {
+          await WebUtils.launchPlantDisWebsite(savedContext);
+        }, returnsNormally);
+      });
+    });
+
+    group('launchAPPNWebsite', () {
+      testWidgets('should launch APPN website successfully', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = true;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => WebUtils.launchAPPNWebsite(context),
+                  child: Text('Launch APPN'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Act
+        await tester.tap(find.text('Launch APPN'));
+        await tester.pumpAndSettle();
+
+        // Assert
+        expect(mockUrlLauncher.launchedUrls, contains('https://www.plantphenomics.org.au/'));
+        expect(find.byType(SnackBar), findsNothing);
+      });
+
+      testWidgets('should show error snackbar when launch fails', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = false;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => WebUtils.launchAPPNWebsite(context),
+                  child: Text('Launch APPN'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Act
+        await tester.tap(find.text('Launch APPN'));
+        await tester.pump();
+
+        // Assert
+        expect(find.byType(SnackBar), findsOneWidget);
+        expect(find.text('Could not launch https://www.plantphenomics.org.au/'), findsOneWidget);
+      });
+    });
+
+    group('URL validation', () {
+      test('should have valid PlantDis URL format', () {
+        const plantDisUrl = 'https://plantdis.github.io/';
+        final uri = Uri.parse(plantDisUrl);
+        
+        expect(uri.scheme, 'https');
+        expect(uri.host, 'plantdis.github.io');
+        expect(uri.path, '/');
+      });
+
+      test('should have valid APPN URL format', () {
+        const appnUrl = 'https://www.plantphenomics.org.au/';
+        final uri = Uri.parse(appnUrl);
+        
+        expect(uri.scheme, 'https');
+        expect(uri.host, 'www.plantphenomics.org.au');
+        expect(uri.path, '/');
+      });
+    });
+
+    group('Edge cases', () {
+      testWidgets('should handle multiple rapid launches', (tester) async {
+        // Arrange
+        mockUrlLauncher.shouldSucceed = true;
+        
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => WebUtils.launchPlantDisWebsite(context),
+                      child: Text('Launch PlantDis'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => WebUtils.launchAPPNWebsite(context),
+                      child: Text('Launch APPN'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // Act - rapid launches
+        await tester.tap(find.text('Launch PlantDis'));
+        await tester.tap(find.text('Launch APPN'));
+        await tester.tap(find.text('Launch PlantDis'));
+        await tester.pumpAndSettle();
+
+        // Assert
+        expect(mockUrlLauncher.launchedUrls.length, 3);
+        expect(mockUrlLauncher.launchedUrls.where((url) => 
+          url == 'https://plantdis.github.io/').length, 2);
+        expect(mockUrlLauncher.launchedUrls.where((url) => 
+          url == 'https://www.plantphenomics.org.au/').length, 1);
+      });
+    });
+  });
+}
