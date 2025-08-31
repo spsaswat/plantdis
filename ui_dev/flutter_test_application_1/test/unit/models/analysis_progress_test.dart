@@ -51,21 +51,21 @@ void main() {
         stage: AnalysisStage.detecting,
         progress: 0.5,
       );
-      expect(progress50.estimatedRemaining, Duration(seconds: 6));
+      expect(progress50.estimatedRemaining, const Duration(seconds: 6));
 
       // Test with 75% progress (should have ~3 seconds remaining)
       final progress75 = AnalysisProgress(
         stage: AnalysisStage.postprocessing,
         progress: 0.75,
       );
-      expect(progress75.estimatedRemaining, Duration(seconds: 3));
+      expect(progress75.estimatedRemaining, const Duration(seconds: 3));
 
       // Test with 90% progress (should have ~1 second remaining)
       final progress90 = AnalysisProgress(
         stage: AnalysisStage.postprocessing,
         progress: 0.9,
       );
-      expect(progress90.estimatedRemaining, Duration(seconds: 1));
+      expect(progress90.estimatedRemaining, const Duration(seconds: 1));
     });
 
     test('should return null estimated time when progress is 0', () {
@@ -87,7 +87,7 @@ void main() {
       );
 
       // Assert
-      expect(progress.estimatedRemaining, Duration(seconds: 0));
+      expect(progress.estimatedRemaining, const Duration(seconds: 0));
     });
 
     test('should provide correct stage labels', () {

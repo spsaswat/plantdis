@@ -209,7 +209,7 @@ void main() {
       test('should create complete storage workflow', () {
         // Generate IDs
         final userId =
-            'user_' + DateTime.now().millisecondsSinceEpoch.toString();
+            'user_${DateTime.now().millisecondsSinceEpoch}';
         final plantId = StorageUtils.generatePlantId();
         final imageId = StorageUtils.generateImageId();
 

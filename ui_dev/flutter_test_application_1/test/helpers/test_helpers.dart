@@ -246,7 +246,7 @@ class TestHelpers {
         createdAt: DateTime.now().subtract(Duration(days: index)),
         images: List.generate(
           (index % 3) + 1, // 1-3 images per plant
-          (imgIndex) => 'test_img_${index}_${imgIndex}',
+          (imgIndex) => 'test_img_${index}_$imgIndex',
         ),
       );
     });

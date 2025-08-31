@@ -35,7 +35,6 @@ class BackgroundDetectionService {
     return iv;
   }
 
-
   /// Check if the background detection model is loaded
   bool get isModelLoaded => _modelLoaded;
 
@@ -322,9 +321,9 @@ class BackgroundDetectionService {
     int inZeroPoint = 0;
     try {
       // Try common shapes of metadata
-      final q = inputTensor.quantizationParameters ??
-          inputTensor.quantization ??
-          null;
+      final q =
+          inputTensor.quantizationParameters ??
+          inputTensor.quantization;
       if (q != null) {
         // Some wrappers expose as {scale, zeroPoint} or arrays
         if (q.scale is num) inScale = (q.scale as num).toDouble();
@@ -350,9 +349,9 @@ class BackgroundDetectionService {
           // Here value_f is simply raw 0..255; if scale ~ 1/255 and zero_point 0, this is identity.
 
           // p.r/g/b are `num` -> convert to 0..255 ints
-          int r = _toByte(p.r as num);
-          int g = _toByte(p.g as num);
-          int b = _toByte(p.b as num);
+          int r = _toByte(p.r);
+          int g = _toByte(p.g);
+          int b = _toByte(p.b);
 
           if (!(inScale == (1.0 / 255.0) && inZeroPoint == 0)) {
             // Map from [0..255] float space to quant domain
@@ -369,8 +368,9 @@ class BackgroundDetectionService {
       inputByteBuffer = input.buffer;
     } else if (inIsFloat32) {
       // Float input: normalize to [0,1]
-      final Float32List input =
-          Float32List(1 * inputHeight * inputWidth * 3); // NHWC with N=1
+      final Float32List input = Float32List(
+        1 * inputHeight * inputWidth * 3,
+      ); // NHWC with N=1
       int bufferIndex = 0;
       for (int y = 0; y < inputHeight; y++) {
         for (int x = 0; x < inputWidth; x++) {
@@ -382,9 +382,7 @@ class BackgroundDetectionService {
       }
       inputByteBuffer = input.buffer;
     } else {
-      throw Exception(
-        'Unsupported input tensor type: ${inputTensor.type}',
-      );
+      throw Exception('Unsupported input tensor type: ${inputTensor.type}');
     }
 
     // Prepare output buffer
@@ -399,16 +397,17 @@ class BackgroundDetectionService {
     final int outSize = outShape[1];
 
     // Allocate a nested list of doubles to remain compatible with wrapper
-    final List<List<double>> outputBuffer =
-        List.generate(1, (_) => List.filled(outSize, 0.0));
+    final List<List<double>> outputBuffer = List.generate(
+      1,
+      (_) => List.filled(outSize, 0.0),
+    );
 
     // Run inference
     _interpreterWrapper!.run(inputByteBuffer, outputBuffer);
 
     // Extract raw outputs as doubles (wrapper may already dequantize; handle both)
-    final List<double> rawOut = (outputBuffer.first)
-        .map((e) => (e is num) ? e.toDouble() : double.parse(e.toString()))
-        .toList();
+    final List<double> rawOut =
+        (outputBuffer.first).map((e) => e.toDouble()).toList();
 
     // If output is quantized uint8 in some wrappers, we might need to dequantize.
     // Try to read output quantization params; if they exist and look valid, dequantize.
@@ -416,9 +415,9 @@ class BackgroundDetectionService {
     int outZeroPoint = 0;
     bool needDequantize = false;
     try {
-      final q = outputTensor.quantizationParameters ??
-          outputTensor.quantization ??
-          null;
+      final q =
+          outputTensor.quantizationParameters ??
+          outputTensor.quantization;
       if (q != null && q.scale is num) {
         outScale = (q.scale as num).toDouble();
         if (q.zeroPoint is int) outZeroPoint = q.zeroPoint as int;
@@ -431,11 +430,12 @@ class BackgroundDetectionService {
       // ignore, assume already float
     }
 
-    final List<double> probs = needDequantize
-        ? rawOut
-            .map((v) => outScale * ((v as num).toDouble() - outZeroPoint))
-            .toList()
-        : rawOut;
+    final List<double> probs =
+        needDequantize
+            ? rawOut
+                .map((v) => outScale * ((v as num).toDouble() - outZeroPoint))
+                .toList()
+            : rawOut;
 
     // Convert to leaf/background probabilities depending on head
     double leafProb;
