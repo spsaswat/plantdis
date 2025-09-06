@@ -1,73 +1,56 @@
-// lib/services/detection_service_mobile.dart
 import 'detection_service.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
-
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_test_application_1/utils/logger.dart';
-
-// MOBILE-ONLY imports
 import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
 
-/// This function is called by the conditional import in detection_service.dart
-/// when the platform is NOT web.
-DetectionService getDetectionService() => MobileDetectionService();
-
-/// Mobile-specific implementation of the DetectionService.
-class MobileDetectionService implements DetectionService {
-  // --- Singleton Pattern Start ---
-  static final MobileDetectionService _instance =
-      MobileDetectionService._internal();
-
-  factory MobileDetectionService() {
-    return _instance;
-  }
-
-  MobileDetectionService._internal();
-  // --- Singleton Pattern End ---
+/// Implementation of the DetectionService using TFLite
+class DetectionServiceImpl implements DetectionService {
+  // Singleton Pattern
+  static final DetectionServiceImpl _instance =
+      DetectionServiceImpl._internal();
+  factory DetectionServiceImpl() => _instance;
+  DetectionServiceImpl._internal();
 
   static const String _tfliteModelPath =
       'assets/models/plant_disease_model.tflite';
   static const String _tfliteLabelsPath = 'assets/models/labels_village.txt';
 
-  TfliteInterpreterWrapper? _interpreterWrapper;
+  TfliteInterpreter? _interpreter;
   List<String>? _labels;
   bool _isLoadingModel = false;
 
   @override
-  bool get isModelLoaded => _interpreterWrapper?.isModelLoaded ?? false;
+  bool get isModelLoaded => _interpreter?.isModelLoaded ?? false;
 
   @override
   Future<void> loadModel() async {
-    // This is the NATIVE-ONLY logic from your original file.
     if (isModelLoaded) {
       if (kDebugMode) {
-        logger.i('[DetectionService NATIVE] Model already loaded.');
+        logger.i('[DetectionService] Model already loaded.');
       }
       return;
     }
     if (_isLoadingModel) {
       if (kDebugMode) {
-        logger.i(
-          '[DetectionService NATIVE] Model loading already in progress.',
-        );
+        logger.i('[DetectionService] Model loading already in progress.');
       }
       return;
     }
 
     _isLoadingModel = true;
     if (kDebugMode) {
-      logger.i('[DetectionService NATIVE] Starting to load model...');
+      logger.i('[DetectionService] Starting to load model...');
     }
 
     try {
-      _interpreterWrapper = TfliteInterpreterWrapper();
-      final options = TfliteInterpreterOptions();
-      options.threads = 2;
-      await _interpreterWrapper!.loadModel(_tfliteModelPath, options: options);
+      _interpreter = TfliteInterpreter();
+      final options = TfliteOptions()..threads = 2;
+      await _interpreter!.loadModel(_tfliteModelPath, options: options);
 
       final rawLabels = await rootBundle.loadString(_tfliteLabelsPath);
       _labels =
@@ -78,16 +61,14 @@ class MobileDetectionService implements DetectionService {
 
       if (kDebugMode && isModelLoaded) {
         logger.i(
-          '[DetectionService NATIVE] TFLite Model and Labels loaded successfully.',
+          '[DetectionService] TFLite Model and Labels loaded successfully.',
         );
       } else if (kDebugMode) {
-        logger.w('[DetectionService NATIVE] TFLite Model FAILED to load.');
+        logger.w('[DetectionService] TFLite Model FAILED to load.');
       }
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        logger.e(
-          '[DetectionService NATIVE] Error loading model: $e\n$stackTrace',
-        );
+        logger.e('[DetectionService] Error loading model: $e\n$stackTrace');
       }
       rethrow;
     } finally {
@@ -100,18 +81,16 @@ class MobileDetectionService implements DetectionService {
     required Uint8List imageBytes,
     required String plantId,
   }) async {
-    // This is the NATIVE-ONLY detection logic from your original file.
     if (!isModelLoaded) await loadModel();
-    if (!isModelLoaded || _interpreterWrapper == null || _labels == null) {
+    if (!isModelLoaded || _interpreter == null || _labels == null) {
       throw Exception("TFLite model/interpreter/labels not loaded.");
     }
 
     final img.Image? decodedImage = img.decodeImage(imageBytes);
     if (decodedImage == null) throw Exception('Failed to decode image.');
 
-    final inputTensor = _interpreterWrapper!.getInputTensor(0);
-    final inputShape = inputTensor.shape;
-    //final inputType = inputTensor.type;
+    final inputTensor = _interpreter!.getInputTensor(0);
+    final inputShape = inputTensor.shape; // expect [1,H,W,3]
     final inputHeight = inputShape[1];
     final inputWidth = inputShape[2];
 
@@ -121,29 +100,32 @@ class MobileDetectionService implements DetectionService {
       height: inputHeight,
     );
 
-    // Normalize image and fill input buffer
-    final inputBuffer = Float32List(1 * inputHeight * inputWidth * 3);
-    int bufferIndex = 0;
-    for (int y = 0; y < inputHeight; y++) {
-      for (int x = 0; x < inputWidth; x++) {
-        final pixel = resizedImage.getPixel(x, y);
-        inputBuffer[bufferIndex++] = pixel.r / 255.0;
-        inputBuffer[bufferIndex++] = pixel.g / 255.0;
-        inputBuffer[bufferIndex++] = pixel.b / 255.0;
-      }
-    }
+    // Build nested 4D input [1, H, W, 3] in [0,1]
+    final inputNested = [
+      List.generate(inputHeight, (y) {
+        return List.generate(inputWidth, (x) {
+          final p = resizedImage.getPixel(x, y);
+          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+        });
+      }),
+    ];
 
-    // Prepare output buffer
-    final outputTensor = _interpreterWrapper!.getOutputTensor(0);
-    final outputBuffer = List.generate(
-      outputTensor.shape[0],
-      (_) => List.filled(outputTensor.shape[1], 0.0),
+    // Prepare output buffer as nested list matching [1, numClasses]
+    final outputTensor = _interpreter!.getOutputTensor(0);
+    final outShape = outputTensor.shape; // e.g., [1, N]
+    final batch = outShape[0];
+    final numClasses = outShape.length > 1 ? outShape[1] : 1;
+    final outputNested = List.generate(
+      batch,
+      (_) => List.filled(numClasses, 0.0),
     );
 
-    _interpreterWrapper!.run(inputBuffer.buffer, outputBuffer);
+    // Run inference
+    _interpreter!.run(inputNested, outputNested);
 
-    List<double> probabilities =
-        (outputBuffer.first as List<dynamic>).cast<double>();
+    // Extract probabilities from [1, N]
+    final List<double> probabilities =
+        (outputNested[0] as List<dynamic>).cast<double>();
     double maxConfidence = 0.0;
     int maxIndex = -1;
     for (int i = 0; i < probabilities.length; i++) {
@@ -162,18 +144,18 @@ class MobileDetectionService implements DetectionService {
         ),
       ];
     }
-    return []; // Return empty list if no detection
+    return [];
   }
 
   @override
   void dispose() {
-    _interpreterWrapper?.close();
-    _interpreterWrapper = null;
+    _interpreter?.close();
+    _interpreter = null;
     _labels = null;
-    if (kDebugMode) logger.i('[DetectionService NATIVE] Disposed.');
+    if (kDebugMode) logger.i('[DetectionService] Disposed.');
   }
 
-  // --- Progress Tracking Implementation ---
+  // Progress Tracking Implementation
   final Map<String, StreamController<AnalysisProgress>> _progressStreams = {};
 
   @override

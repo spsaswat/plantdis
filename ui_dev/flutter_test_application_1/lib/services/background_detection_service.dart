@@ -407,7 +407,9 @@ class BackgroundDetectionService {
 
     // Extract raw outputs as doubles (wrapper may already dequantize; handle both)
     final List<double> rawOut =
-        (outputBuffer.first).map((e) => e.toDouble()).toList();
+        (outputBuffer.first)
+            .map((e) => (e is num) ? e.toDouble() : double.parse(e.toString()))
+            .toList();
 
     // If output is quantized uint8 in some wrappers, we might need to dequantize.
     // Try to read output quantization params; if they exist and look valid, dequantize.

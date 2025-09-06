@@ -57,7 +57,6 @@ android {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.15.1")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.12.0")
     implementation("org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.0")
 }

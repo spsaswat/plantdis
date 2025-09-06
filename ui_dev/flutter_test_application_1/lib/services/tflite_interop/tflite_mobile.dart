@@ -1,14 +1,14 @@
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
-import './tflite_interface.dart';
+import 'tflite_interface.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
-// This function will be called by tflite_wrapper.dart on mobile platforms.
+/// Register the mobile-specific factories for the legacy wrapper API.
 void initializePlatformSpecificFactories() {
   TfliteInterpreterWrapper.setFactory(() => TfliteInterpreterMobile());
   TfliteInterpreterOptions.setFactory(() => MobileInterpreterOptions());
 }
 
-// Helper to map tfl.TensorType to TfliteDataTypeWrapper
+/// Map tfl.TensorType to wrapper enum
 TfliteDataTypeWrapper _mapTensorType(tfl.TensorType type) {
   switch (type) {
     case tfl.TensorType.float32:
@@ -27,13 +27,13 @@ TfliteDataTypeWrapper _mapTensorType(tfl.TensorType type) {
       return TfliteDataTypeWrapper.string;
     case tfl.TensorType.int8:
       return TfliteDataTypeWrapper.int8;
-    // Add other cases as needed for tfl.TensorType values
     default:
-      logger.w('[TfliteInterpreterMobile] Warning: Unmapped TensorType: $type');
+      logger.w('[TfliteInterpreterMobile] Unmapped TensorType: $type');
       return TfliteDataTypeWrapper.unsupported;
   }
 }
 
+/// Mobile implementation of the legacy wrapper API.
 class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
   tfl.Interpreter? _interpreter;
   bool _loaded = false;
@@ -46,21 +46,19 @@ class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
     String modelPath, {
     TfliteInterpreterOptions? options,
   }) async {
-    final mobileOptions = tfl.InterpreterOptions();
+    final opts = tfl.InterpreterOptions();
     if (options?.threads != null) {
-      mobileOptions.threads = options!.threads!;
+      opts.threads = options!.threads!;
     }
-    _interpreter = await tfl.Interpreter.fromAsset(
-      modelPath,
-      options: mobileOptions,
-    );
+    _interpreter = await tfl.Interpreter.fromAsset(modelPath, options: opts);
+    _interpreter!.allocateTensors();
     _loaded = true;
   }
 
   @override
   void run(Object input, Object output) {
     if (_interpreter == null || !_loaded) {
-      throw Exception('Mobile TFLite model not loaded or uninitialized.');
+      throw StateError('Mobile TFLite interpreter not loaded');
     }
     _interpreter!.run(input, output);
   }
@@ -75,7 +73,7 @@ class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
   @override
   TensorWrapper getInputTensor(int index) {
     if (_interpreter == null || !_loaded) {
-      throw Exception('Mobile TFLite model not loaded or uninitialized.');
+      throw StateError('Mobile TFLite interpreter not loaded');
     }
     return MobileTensorWrapper(_interpreter!.getInputTensor(index));
   }
@@ -83,7 +81,7 @@ class TfliteInterpreterMobile implements TfliteInterpreterWrapper {
   @override
   TensorWrapper getOutputTensor(int index) {
     if (_interpreter == null || !_loaded) {
-      throw Exception('Mobile TFLite model not loaded or uninitialized.');
+      throw StateError('Mobile TFLite interpreter not loaded');
     }
     return MobileTensorWrapper(_interpreter!.getOutputTensor(index));
   }

@@ -49,6 +49,8 @@ class _SegmentPageState extends State<SegmentPage> {
   // State variables for segmentation and analysis
   bool _isAnalysisTriggered = false;
 
+  static const double decisionThreshold = 0.7; // Leaf decision threshold
+
   // Helper function to format the timestamp
   String _formatTimestamp(String? timestamp) {
     if (timestamp == null) return 'N/A';
@@ -129,9 +131,10 @@ class _SegmentPageState extends State<SegmentPage> {
       // Return default result indicating no leaves detected
       final errorResult = {
         'hasLeaves': false,
-        'backgroundProbability':
-            0.0, // Changed from 'confidence' to 'backgroundProbability'
+        'leafProbability': 0.0,
+        'backgroundProbability': 1.0,
         'error': e.toString(),
+        'method': 'error_fallback',
       };
 
       // Store result in state only if widget is still mounted
@@ -183,10 +186,13 @@ class _SegmentPageState extends State<SegmentPage> {
     switch (method) {
       case 'tflite_model':
         return 'TFLite Model';
+      case 'fallback_heuristic':
       case 'fallback_heuristic_hardcoded':
-        return 'Fallback Heuristic (70% Hardcoded)';
+        return 'Fallback Heuristic';
+      case 'fallback_safe_default':
       case 'fallback_safe_default_hardcoded':
-        return 'Safe Default (70% Hardcoded)';
+        return 'Safe Default';
+      case 'error_fallback':
       case 'fallback_error':
         return 'Error Fallback';
       default:
@@ -319,6 +325,106 @@ class _SegmentPageState extends State<SegmentPage> {
             detectedDisease,
           );
 
+          String pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
+
+          Widget probBar({
+            required String label,
+            required double value,
+            required Color color,
+          }) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 12)),
+                    Text(
+                      pct(value),
+                      style: TextStyle(fontSize: 12, color: color),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: value.clamp(0.0, 1.0),
+                    minHeight: 8,
+                    backgroundColor: Colors.black12,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          Widget buildAsteriskFootnotes() {
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Notes', style: KTextStyle.titleTealText),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '* ',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Expanded(
+                            child: Text(
+                              'Disease detection: may be inaccurate due to look-alike symptoms, image quality, or diseases outside the training set. Confirm before acting.',
+                              style: KTextStyle.descriptionText.copyWith(
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '**  ',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Expanded(
+                            child: Text(
+                              'AI-generated suggestion: general guidance only. Always verify with trusted sources or a qualified agronomist/plant pathologist.',
+                              style: KTextStyle.descriptionText.copyWith(
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Disclaimer: Results are provided “as is.” APPN and contributors are not liable for any loss or damage arising from use of these outputs.',
+                        style: KTextStyle.descriptionText.copyWith(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
           // Debug prints inside StreamBuilder
           // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
           // print('[SegmentPage StreamBuilder] status: $status');
@@ -356,7 +462,8 @@ class _SegmentPageState extends State<SegmentPage> {
                                         );
                                         return {
                                           'hasLeaves': false,
-                                          'backgroundProbability': 0.0,
+                                          'leafProbability': 0.0,
+                                          'backgroundProbability': 1.0,
                                           'error': error.toString(),
                                           'method': 'error_fallback',
                                         };
@@ -442,6 +549,11 @@ class _SegmentPageState extends State<SegmentPage> {
                                   final method =
                                       result['method'] as String? ?? 'unknown';
 
+                                  final double leafProb =
+                                      (result['leafProbability'] as num?)
+                                          ?.toDouble() ??
+                                      (1.0 - backgroundProbability);
+
                                   return Card(
                                     child: Padding(
                                       padding: const EdgeInsets.all(15.0),
@@ -484,65 +596,72 @@ class _SegmentPageState extends State<SegmentPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  'Background Probability: ${(backgroundProbability * 100).toStringAsFixed(1)}%',
-                                                  style: TextStyle(
-                                                    color:
-                                                        hasLeaves
-                                                            ? Colors
-                                                                .green
-                                                                .shade700
-                                                            : Colors
-                                                                .grey
-                                                                .shade600,
-                                                  ),
-                                                ),
-                                                Text(
                                                   'Method: ${_formatMethodName(method)}',
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     color: Colors.grey.shade600,
                                                   ),
                                                 ),
-                                                if (method.contains(
-                                                      'fallback',
-                                                    ) &&
-                                                    result['greenRatio'] !=
-                                                        null)
-                                                  Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Text(
-                                                        'Green: ${(result['greenRatio'] * 100).toStringAsFixed(1)}% | Bright: ${(result['brightRatio'] * 100).toStringAsFixed(1)}%',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color:
-                                                              Colors
-                                                                  .grey
-                                                                  .shade500,
-                                                        ),
-                                                      ),
-                                                      if (result['note'] !=
-                                                          null)
-                                                        Text(
-                                                          result['note'],
-                                                          style: TextStyle(
-                                                            fontSize: 9,
-                                                            color:
-                                                                Colors
-                                                                    .orange
-                                                                    .shade600,
-                                                            fontStyle:
-                                                                FontStyle
-                                                                    .italic,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
                                               ],
                                             ),
                                           ),
+                                          const SizedBox(height: 8),
+                                          probBar(
+                                            label: 'Leaf Probability',
+                                            value: leafProb,
+                                            color: Colors.green.shade700,
+                                          ),
+                                          const SizedBox(height: 10),
+                                          probBar(
+                                            label: 'Background Probability',
+                                            value: backgroundProbability,
+                                            color: Colors.blueGrey.shade700,
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.flag_circle_outlined,
+                                                size: 16,
+                                                color: Colors.teal,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Decision threshold: ${pct(decisionThreshold)} (Leaf)',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (method.contains('fallback') &&
+                                              result['greenRatio'] != null &&
+                                              result['brightRatio'] !=
+                                                  null) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Heuristic details – Green: ${pct((result['greenRatio'] as num).toDouble())} • Bright: ${pct((result['brightRatio'] as num).toDouble())}',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            if (result['note'] != null)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 2.0,
+                                                ),
+                                                child: Text(
+                                                  result['note'].toString(),
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color:
+                                                        Colors.orange.shade700,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                           if (hasLeaves)
                                             Padding(
                                               padding: const EdgeInsets.only(
@@ -657,7 +776,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 as num?)
                                             ?.toDouble() ??
                                         0.0) >=
-                                    0.8 ||
+                                    (1 - decisionThreshold) ||
                                 !(_backgroundDetectionResult!['hasLeaves']
                                         as bool? ??
                                     true)) ...[
@@ -1056,6 +1175,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                   }
                                 },
                               ),
+                              buildAsteriskFootnotes(),
                             ],
                           ],
                         ],
@@ -1113,11 +1233,6 @@ class _SegmentPageState extends State<SegmentPage> {
           isThreeLine: true,
         ),
         _buildResultTile(
-          icon: Icons.label_important_outline,
-          label: 'Most Likely Detection (uncertain)',
-          value: likelyDisease,
-        ),
-        _buildResultTile(
           icon: Icons.percent_outlined,
           label: 'Confidence',
           value: _formatConfidence(
@@ -1127,6 +1242,40 @@ class _SegmentPageState extends State<SegmentPage> {
         ),
       ],
     );
+  }
+
+  /// Renders simple inline “markdown-ish”: *italic* or **bold** -> bold
+  /// We intentionally treat single-star italics as bold for species names like *Puccinia sorghi*.
+  Widget _renderMarkdownishBold(
+    String text, {
+    TextStyle? baseStyle,
+    TextStyle? boldStyle,
+  }) {
+    final spans = <TextSpan>[];
+    final base = baseStyle ?? KTextStyle.descriptionText;
+    final bold = boldStyle ?? base.copyWith(fontWeight: FontWeight.w600);
+
+    // Matches **bold** or *italic* (we render both as bold)
+    final re = RegExp(r'(\*\*[^*]+\*\*|\*[^*]+\*)');
+    int idx = 0;
+
+    for (final m in re.allMatches(text)) {
+      if (m.start > idx) {
+        spans.add(TextSpan(text: text.substring(idx, m.start), style: base));
+      }
+      final match = m.group(0)!;
+      final inner =
+          match.startsWith('**')
+              ? match.substring(2, match.length - 2)
+              : match.substring(1, match.length - 1);
+
+      spans.add(TextSpan(text: inner, style: bold));
+      idx = m.end;
+    }
+    if (idx < text.length) {
+      spans.add(TextSpan(text: text.substring(idx), style: base));
+    }
+    return RichText(text: TextSpan(children: spans, style: base));
   }
 
   // Widget to display AI suggestion box
@@ -1142,9 +1291,26 @@ class _SegmentPageState extends State<SegmentPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('AI Suggestion', style: KTextStyle.titleTealText),
+              const Text('AI Suggestion **', style: KTextStyle.titleTealText),
               const SizedBox(height: 8),
-              Text(suggestion, style: KTextStyle.descriptionText),
+              Builder(
+                builder: (context) {
+                  final Color resolvedColor =
+                      Theme.of(context).textTheme.bodyMedium?.color ??
+                      (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87);
+                  final base = KTextStyle.descriptionText.copyWith(
+                    color: resolvedColor,
+                  );
+                  final bold = base.copyWith(fontWeight: FontWeight.w600);
+                  return _renderMarkdownishBold(
+                    suggestion,
+                    baseStyle: base,
+                    boldStyle: bold,
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -1161,14 +1327,17 @@ class _SegmentPageState extends State<SegmentPage> {
       return 'Please upload an image that clearly shows a plant leaf.';
     }
 
-    // 2. If confidence is below 80%
-    if (diseaseConfidence < 0.8) {
+    // 2. If confidence is below 30%
+    if (diseaseConfidence < 0.3) {
       return 'We are unable to determine whether this is a plant leaf or whether it is diseased. Please try uploading a clearer image.';
     }
 
     // 3. If the detected result is a healthy label
-    if (detectedDisease.endsWith('_healthy')) {
-      final plantName = detectedDisease.replaceAll('_healthy', '');
+    if (detectedDisease.endsWith(' healthy') ||
+        detectedDisease.endsWith('_healthy')) {
+      final plantName = detectedDisease
+          .replaceAll('_healthy', '')
+          .replaceAll(' healthy', '');
       return 'Congratulations! Your $plantName leaf appears to be healthy!';
     }
 
