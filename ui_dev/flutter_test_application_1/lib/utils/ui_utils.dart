@@ -31,7 +31,10 @@ class UIUtils {
     if (diseaseName == 'No disease detected' || diseaseName == 'N/A') {
       return diseaseName;
     }
-    return diseaseName.replaceAll('_', ' ');
+    return diseaseName
+        .replaceAll(RegExp(r'_+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   /// Shows a deletion loading dialog that auto-dismisses.

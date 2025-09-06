@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb, kDebugMode
+import 'package:image/image.dart' as img;
+import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
 
 import '../models/plant_model.dart';
 import '../models/image_model.dart';
@@ -275,6 +277,48 @@ class PlantService {
         logger.i(
           '[PlantService] Bytes to analyze length for InferenceService: ${bytesToAnalyze.length}',
         );
+      }
+
+      // Specialized disease path based on local species classifier (extensible)
+      if (!kIsWeb) {
+        try {
+          final speciesResult = await _classifySpecies(bytesToAnalyze);
+          if (speciesResult != null) {
+            final DetectionResult? specDet = await _detectSpecializedDisease(
+              bytesToAnalyze,
+              speciesResult.species,
+            );
+            if (specDet != null) {
+              if (kDebugMode) {
+                logger.i(
+                  '[PlantService] Using specialized ${speciesResult.species.toUpperCase()} model: ${specDet.diseaseName} (${specDet.confidence.toStringAsFixed(2)})',
+                );
+              }
+              final Map<String, dynamic> analysisData = {
+                'detectedDisease': specDet.diseaseName,
+                'confidence': specDet.confidence,
+                'detectionTimestamp': DateTime.now().toIso8601String(),
+                if (segmentationUrl != null) 'segmentationUrl': segmentationUrl,
+                'plantSpecies': speciesResult.species,
+                'plantSpeciesConfidence': speciesResult.confidence,
+              };
+              await _plants.doc(plantId).update({
+                'status': 'completed',
+                'analysisResults': analysisData,
+                'analysisError': FieldValue.delete(),
+              });
+              return {
+                'plantId': plantId,
+                'imageId': imageId,
+                'downloadUrl': downloadUrl,
+              };
+            }
+          }
+        } catch (e, s) {
+          if (kDebugMode) {
+            logger.w('[PlantService] Specialized detection skipped: $e\n$s');
+          }
+        }
       }
       DetectionResult? analysisResult = await _inferenceService.analyzeImage(
         imageBytes: bytesToAnalyze,
@@ -625,5 +669,141 @@ class PlantService {
 
     fetchData(true); // Initial attempt with orderBy
     return controller.stream;
+  }
+}
+
+class _SpeciesResult {
+  final String species;
+  final double confidence;
+  const _SpeciesResult(this.species, this.confidence);
+}
+
+extension on PlantService {
+  static const Map<String, String> _speciesModelPath = {
+    'corn': 'assets/models/corn_disease_detector.tflite',
+    'pepper': 'assets/models/pepper_disease_detector.tflite',
+    'grape': 'assets/models/grape_disease_detector.tflite',
+  };
+
+  static const Map<String, List<String>> _speciesLabels = {
+    'corn': [
+      'Corn___Cercospora_leaf_spot_Gray_leaf_spot',
+      'Corn___Common_rust',
+      'Corn___healthy',
+      'Corn___Northern_Leaf_Blight',
+    ],
+    'pepper': ['Pepper_bacterial_spot', 'Pepper_healthy'],
+    'grape': [
+      'Grape___Black_rot',
+      'Grape___Esca_(Black_Measles)',
+      'Grape___healthy',
+      'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+    ],
+  };
+  Future<_SpeciesResult?> _classifySpecies(Uint8List bytes) async {
+    try {
+      final img.Image? decoded = img.decodeImage(bytes);
+      if (decoded == null) return null;
+      final img.Image resized = img.copyResize(
+        decoded,
+        width: 224,
+        height: 224,
+      );
+      final input = [
+        List.generate(
+          224,
+          (y) => List.generate(224, (x) {
+            final p = resized.getPixel(x, y);
+            return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+          }),
+        ),
+      ];
+      final interpreter = TfliteInterpreter();
+      await interpreter.loadModel('assets/models/plants_detector.tflite');
+      final output = [List.filled(14, 0.0)];
+      interpreter.run(input, output);
+      interpreter.close();
+      final probs = (output[0] as List).cast<double>();
+      int maxIdx = 0;
+      double maxVal = -1;
+      for (int i = 0; i < probs.length; i++) {
+        if (probs[i] > maxVal) {
+          maxVal = probs[i];
+          maxIdx = i;
+        }
+      }
+      const labels = [
+        'apple',
+        'blueberry',
+        'cherry',
+        'corn',
+        'grape',
+        'orange',
+        'peach',
+        'pepper',
+        'potato',
+        'raspberry',
+        'soybean',
+        'squash',
+        'strawberry',
+        'tomato',
+      ];
+      final species = labels[maxIdx].toLowerCase().trim();
+      return _SpeciesResult(species, maxVal);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<DetectionResult?> _detectSpecializedDisease(
+    Uint8List bytes,
+    String species,
+  ) async {
+    final key = species.toLowerCase().trim();
+    if (!_speciesModelPath.containsKey(key)) return null;
+    try {
+      final img.Image? decoded = img.decodeImage(bytes);
+      if (decoded == null) return null;
+      final img.Image resized = img.copyResize(
+        decoded,
+        width: 224,
+        height: 224,
+      );
+      final input = [
+        List.generate(
+          224,
+          (y) => List.generate(224, (x) {
+            final p = resized.getPixel(x, y);
+            return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+          }),
+        ),
+      ];
+      final interpreter = TfliteInterpreter();
+      await interpreter.loadModel(_speciesModelPath[key]!);
+      final labels = _speciesLabels[key]!;
+      final output = [List.filled(labels.length, 0.0)];
+      interpreter.run(input, output);
+      interpreter.close();
+      final probs = (output[0] as List).cast<double>();
+      int maxIdx = 0;
+      double maxVal = -1;
+      for (int i = 0; i < probs.length; i++) {
+        if (probs[i] > maxVal) {
+          maxVal = probs[i];
+          maxIdx = i;
+        }
+      }
+      final diseaseName =
+          (maxIdx >= 0 && maxIdx < labels.length)
+              ? labels[maxIdx]
+              : '${species[0].toUpperCase()}${species.substring(1)}___Unknown';
+      return DetectionResult(
+        diseaseName: diseaseName,
+        confidence: maxVal,
+        boundingBox: null,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -14,6 +14,17 @@ import '../services/openrouter_service.dart';
 import 'package:flutter_test_application_1/services/background_detection_service.dart'; // Import background detection service
 
 import 'package:http/http.dart' as http; // Import for http requests
+import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:flutter/services.dart' show rootBundle;
+import 'package:image/image.dart' as img;
+import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
+import 'package:flutter_test_application_1/services/segmentation_service.dart'
+    as seg_tfl;
+import 'package:flutter_test_application_1/services/segmentation_service_onnx.dart'
+    as seg_onnx;
+import 'package:flutter_test_application_1/services/inference_service.dart';
+import 'package:flutter_test_application_1/models/detection_result.dart';
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -50,6 +61,261 @@ class _SegmentPageState extends State<SegmentPage> {
   bool _isAnalysisTriggered = false;
 
   static const double decisionThreshold = 0.7; // Leaf decision threshold
+
+  // Segmentation model selector
+  String _selectedSegModel = 'tflite'; // 'tflite' | 'onnx'
+  bool _isBusy = false;
+  String? _plantClass;
+  double? _plantClassConf;
+  bool _speciesLoading = false;
+
+  Future<File> _downloadToTemp(Uint8List bytes) async {
+    final dir = Directory.systemTemp;
+    final f = File(
+      '${dir.path}/seg_input_${DateTime.now().millisecondsSinceEpoch}.png',
+    );
+    await f.writeAsBytes(bytes);
+    return f;
+  }
+
+  Future<void> _runPlantSpeciesClassifier(Uint8List segBytes) async {
+    // Load image and resize to classifier input (assume 224x224 float)
+    final img.Image? decoded = img.decodeImage(segBytes);
+    if (decoded == null) throw Exception('Failed to decode segmented image');
+    final img.Image resized = img.copyResize(decoded, width: 224, height: 224);
+
+    final input = [
+      List.generate(
+        224,
+        (y) => List.generate(224, (x) {
+          final p = resized.getPixel(x, y);
+          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+        }),
+      ),
+    ];
+
+    final interpreter = TfliteInterpreter();
+    await interpreter.loadModel('assets/models/plants_detector.tflite');
+    // Output shape [1, N]
+    final output = [List.filled(14, 0.0)];
+    interpreter.run(input, output);
+    interpreter.close();
+
+    final probs = (output[0] as List).cast<double>();
+    int maxIdx = 0;
+    double maxVal = -1;
+    for (int i = 0; i < probs.length; i++) {
+      if (probs[i] > maxVal) {
+        maxVal = probs[i];
+        maxIdx = i;
+      }
+    }
+    const labels = [
+      'apple',
+      'blueberry',
+      'cherry',
+      'corn',
+      'grape',
+      'orange',
+      'peach',
+      'pepper',
+      'potato',
+      'raspberry',
+      'soybean',
+      'squash',
+      'strawberry',
+      'tomato',
+    ];
+    if (mounted) {
+      final species = labels[maxIdx].toLowerCase().trim();
+      setState(() {
+        _plantClass = species;
+        _plantClassConf = maxVal;
+      });
+    }
+  }
+
+  Future<DetectionResult?> _runDiseaseDetection(Uint8List bytes) async {
+    // Choose model
+    String modelPath;
+    final species = (_plantClass ?? '').toLowerCase().trim();
+    if (species == 'corn') {
+      modelPath = 'assets/models/corn_disease_detector.tflite';
+    } else if (species == 'pepper') {
+      modelPath = 'assets/models/pepper_disease_detector.tflite';
+    } else if (species == 'grape') {
+      modelPath = 'assets/models/grape_disease_detector.tflite';
+    } else {
+      // fallback to original
+      final res = await InferenceService().analyzeImage(
+        imageBytes: bytes,
+        plantId: widget.plantId,
+        isSegmented: true,
+      );
+      // mark unknown species
+      if (species.isNotEmpty &&
+          species != 'corn' &&
+          species != 'pepper' &&
+          species != 'grape') {}
+      return res;
+    }
+
+    // Run custom disease detector (assume [1,224,224,3] softmax)
+    final img.Image? decoded = img.decodeImage(bytes);
+    if (decoded == null) throw Exception('Failed to decode segmented image');
+    final img.Image resized = img.copyResize(decoded, width: 224, height: 224);
+    final input = [
+      List.generate(
+        224,
+        (y) => List.generate(224, (x) {
+          final p = resized.getPixel(x, y);
+          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+        }),
+      ),
+    ];
+    final interpreter = TfliteInterpreter();
+    await interpreter.loadModel(modelPath);
+    // read output size dynamically
+    final outTensor = interpreter.getOutputTensor(0);
+    final outShape = outTensor.shape;
+    final outSize = outShape.length > 1 ? outShape[1] : 1;
+    final output = [List.filled(outSize, 0.0)];
+    interpreter.run(input, output);
+    interpreter.close();
+    final probs = (output[0] as List).cast<double>();
+    int maxIdx = 0;
+    double maxVal = -1;
+    for (int i = 0; i < probs.length; i++) {
+      if (probs[i] > maxVal) {
+        maxVal = probs[i];
+        maxIdx = i;
+      }
+    }
+    String diseaseName;
+    if (species == 'corn') {
+      const cornLabels = [
+        'Corn___Cercospora_leaf_spot_Gray_leaf_spot',
+        'Corn___Common_rust',
+        'Corn___healthy',
+        'Corn___Northern_Leaf_Blight',
+      ];
+      diseaseName =
+          (maxIdx >= 0 && maxIdx < cornLabels.length)
+              ? cornLabels[maxIdx]
+              : 'Corn___Unknown';
+    } else {
+      diseaseName = 'Class_$maxIdx';
+    }
+    return DetectionResult(
+      diseaseName: diseaseName,
+      confidence: maxVal,
+      boundingBox: null,
+    );
+  }
+
+  Future<void> _kickSpeciesFromUrl(String url) async {
+    if (_speciesLoading || _plantClass != null) return;
+    _speciesLoading = true;
+    try {
+      final resp = await http.get(Uri.parse(url));
+      if (resp.statusCode == 200) {
+        await _runPlantSpeciesClassifier(resp.bodyBytes);
+      }
+    } catch (e, st) {
+      logger.w('[SegmentPage] Species classifier from URL failed: $e\n$st');
+    } finally {
+      _speciesLoading = false;
+    }
+  }
+
+  Future<void> _resegmentAndDetectAndWrite() async {
+    try {
+      if (mounted) setState(() => _isBusy = true);
+
+      // 1) Download original image
+      final uri = Uri.parse(widget.imgSrc);
+      final resp = await http.get(uri);
+      if (resp.statusCode != 200) {
+        throw Exception('Failed to download image');
+      }
+      final temp = await _downloadToTemp(resp.bodyBytes);
+
+      // 2) Segment locally with selected model
+      File segmentedFile;
+      if (_selectedSegModel == 'onnx') {
+        final svc = seg_onnx.OnnxSegmentationService();
+        await svc.loadModel();
+        segmentedFile = await svc.segment(temp);
+      } else {
+        final svc = seg_tfl.SegmentationService();
+        await svc.loadModel();
+        segmentedFile = await svc.segment(temp);
+      }
+
+      // 3) Upload segmented image (optional but populates segmentationUrl)
+      String? segmentationUrl;
+      try {
+        segmentationUrl = await _plantService.saveProcessedImage(
+          segmentedFile,
+          widget.plantId,
+          widget.id,
+          'segmentation',
+        );
+        await _firestore.collection('images').doc(widget.id).update({
+          'processedUrls.segmentation': segmentationUrl,
+        });
+      } catch (_) {
+        // Continue even if upload fails
+      }
+
+      // 4) Run detection on segmented image bytes (local inference)
+      final segBytes = await segmentedFile.readAsBytes();
+
+      // 4a) Run plant species classifier first
+      await _runPlantSpeciesClassifier(segBytes);
+
+      // 4b) Choose disease model based on species
+      final Uint8List bytesForDisease = segBytes;
+      final detection = await _runDiseaseDetection(bytesForDisease);
+      final result = detection;
+
+      // 5) Write back analysisResults to plants/<plantId>
+      if (result != null) {
+        final analysisData = {
+          'detectedDisease': result.diseaseName,
+          'confidence': result.confidence,
+          'detectionTimestamp': DateTime.now().toIso8601String(),
+          if (segmentationUrl != null) 'segmentationUrl': segmentationUrl,
+          if (_plantClass != null) 'plantSpecies': _plantClass,
+          if (_plantClassConf != null)
+            'plantSpeciesConfidence': _plantClassConf,
+        };
+        await _firestore.collection('plants').doc(widget.plantId).update({
+          'status': 'completed',
+          'analysisResults': analysisData,
+          'analysisError': FieldValue.delete(),
+        });
+      } else {
+        await _firestore.collection('plants').doc(widget.plantId).update({
+          'status': 'error',
+          'analysisError': 'Local analysis returned no result',
+        });
+      }
+    } catch (e, st) {
+      logger.e('[SegmentPage] Re-segment/detect failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Re-run failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _runLocalSegmentationAndRetrigger() async {
+    await _resegmentAndDetectAndWrite();
+  }
 
   // Helper function to format the timestamp
   String _formatTimestamp(String? timestamp) {
@@ -104,11 +370,18 @@ class _SegmentPageState extends State<SegmentPage> {
         throw Exception('Downloaded image is empty');
       }
 
+      // Load user confidence threshold
+      final prefs = await SharedPreferences.getInstance();
+      final int uiThreshold = prefs.getInt('seg_conf_threshold') ?? 80;
+      final double threshold = (uiThreshold.clamp(0, 100)) / 100.0;
+      // Load default segmentation model
+      _selectedSegModel =
+          prefs.getString('seg_default_model') ?? _selectedSegModel;
+
       // Run background detection
       final backgroundResult = await _backgroundDetectionService.detectLeaves(
         imageBytes: imageBytes,
-        confidenceThreshold:
-            0.8, // 80% probability threshold for background detection
+        confidenceThreshold: threshold,
       );
 
       if (kDebugMode) {
@@ -207,986 +480,1153 @@ class _SegmentPageState extends State<SegmentPage> {
 
     return Scaffold(
       appBar: const AppbarWidget(),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: _firestore.collection('plants').doc(widget.plantId).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
-                  Text('Loading plant data...'),
-                ],
-              ),
-            );
-          }
-
-          if (snapshot.hasError) {
-            logger.e(
-              'Error in StreamBuilder for plant ${widget.plantId}: ${snapshot.error}',
-            );
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 20),
-                  Text('Error loading plant data: ${snapshot.error}'),
-                  // Optional: Add a retry button if appropriate
-                ],
-              ),
-            );
-          }
-
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(30.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.info_outline, // Changed icon
-                      size: 60,
-                      color: Colors.blueGrey, // Changed color
-                    ),
-                    const SizedBox(height: 25),
-                    const Text(
-                      'Plant Data Unavailable', // Changed title
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 15),
-                    Text(
-                      'This plant data (ID: ${widget.plantId}) cannot be displayed. It might have been deleted or is still processing.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[400], // Adjusted color
-                        height: 1.4, // Added line height
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Go Back'),
-                      style: ElevatedButton.styleFrom(
-                        // Use primary color for button background
-                        foregroundColor: Colors.white, // White text
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                      ),
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // Data is available, parse it
-          final docData = snapshot.data!.data()!;
-          PlantModel plant = PlantModel.fromMap(docData);
-          Map<String, dynamic>? analysisResults = plant.analysisResults;
-          String status = plant.status;
-          // Read analysisError directly from the document data
-          String? analysisErrorMsg = docData['analysisError'] as String?;
-
-          // Determine display state based on results and confidence
-          bool hasResults =
-              analysisResults != null && analysisResults.isNotEmpty;
-          double diseaseConfidence = 0.0;
-          if (hasResults && analysisResults['confidence'] != null) {
-            diseaseConfidence =
-                (analysisResults['confidence'] as num).toDouble();
-          }
-          bool isLowConfidence =
-              hasResults && diseaseConfidence < lowConfidenceThreshold;
-          String detectedDisease = 'N/A';
-          if (hasResults) {
-            detectedDisease =
-                analysisResults['detectedDisease']?.toString() ?? 'N/A';
-          }
-
-          // Format the displayed disease name to show spaces instead of underscores
-          String displayDiseaseName = UIUtils.formatDiseaseName(
-            detectedDisease,
-          );
-
-          String pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
-
-          Widget probBar({
-            required String label,
-            required double value,
-            required Color color,
-          }) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(label, style: const TextStyle(fontSize: 12)),
-                    Text(
-                      pct(value),
-                      style: TextStyle(fontSize: 12, color: color),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: value.clamp(0.0, 1.0),
-                    minHeight: 8,
-                    backgroundColor: Colors.black12,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
-                ),
-              ],
-            );
-          }
-
-          Widget buildAsteriskFootnotes() {
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Card(
-                elevation: 1,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
+      body: Stack(
+        children: [
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream:
+                _firestore.collection('plants').doc(widget.plantId).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Notes', style: KTextStyle.titleTealText),
-                      const SizedBox(height: 6),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '* ',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Expanded(
-                            child: Text(
-                              'Disease detection: may be inaccurate due to look-alike symptoms, image quality, or diseases outside the training set. Confirm before acting.',
-                              style: KTextStyle.descriptionText.copyWith(
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '**  ',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Expanded(
-                            child: Text(
-                              'AI-generated suggestion: general guidance only. Always verify with trusted sources or a qualified agronomist/plant pathologist.',
-                              style: KTextStyle.descriptionText.copyWith(
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Disclaimer: Results are provided “as is.” APPN and contributors are not liable for any loss or damage arising from use of these outputs.',
-                        style: KTextStyle.descriptionText.copyWith(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
+                      CircularProgressIndicator(),
+                      SizedBox(height: 20),
+                      Text('Loading plant data...'),
                     ],
                   ),
-                ),
-              ),
-            );
-          }
+                );
+              }
 
-          // Debug prints inside StreamBuilder
-          // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
-          // print('[SegmentPage StreamBuilder] status: $status');
-          // print('[SegmentPage StreamBuilder] analysisResults: $analysisResults');
-          // print('[SegmentPage StreamBuilder] hasResults: $hasResults');
-          // print('[SegmentPage StreamBuilder] diseaseConfidence: $diseaseConfidence');
-          // print('[SegmentPage StreamBuilder] detectedDisease: $detectedDisease');
+              if (snapshot.hasError) {
+                logger.e(
+                  'Error in StreamBuilder for plant ${widget.plantId}: ${snapshot.error}',
+                );
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 20),
+                      Text('Error loading plant data: ${snapshot.error}'),
+                      // Optional: Add a retry button if appropriate
+                    ],
+                  ),
+                );
+              }
 
-          return Center(
-            heightFactor: 1,
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return FractionallySizedBox(
-                      widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
-                      child: Column(
-                        spacing: 10.0,
-                        children: [
-                          SegmentHero(imgSrc: widget.imgSrc, id: widget.id),
-
-                          // Background Detection Result
-                          Padding(
-                            padding: const EdgeInsets.only(top: 15.0),
-                            child: FutureBuilder<Map<String, dynamic>>(
-                              future:
-                                  _backgroundDetectionFuture ??=
-                                      _detectBackgroundAndLeaves().catchError((
-                                        error,
-                                      ) {
-                                        // Handle errors gracefully to prevent crashes
-                                        logger.e(
-                                          '[SegmentPage] Background detection failed: $error',
-                                        );
-                                        return {
-                                          'hasLeaves': false,
-                                          'leafProbability': 0.0,
-                                          'backgroundProbability': 1.0,
-                                          'error': error.toString(),
-                                          'method': 'error_fallback',
-                                        };
-                                      }),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Card(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(15.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Center(
-                                            child: Text(
-                                              "Background Detection",
-                                              style: KTextStyle.titleTealText,
-                                            ),
-                                          ),
-                                          SizedBox(height: 15),
-                                          Center(
-                                            child: Column(
-                                              children: [
-                                                CircularProgressIndicator(),
-                                                SizedBox(height: 10),
-                                                Text(
-                                                  'Detecting plant leaves...',
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                } else if (snapshot.hasError) {
-                                  return Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(15.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Center(
-                                            child: Text(
-                                              "Background Detection",
-                                              style: KTextStyle.titleTealText,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 15),
-                                          Center(
-                                            child: Column(
-                                              children: [
-                                                const Icon(
-                                                  Icons.error_outline,
-                                                  color: Colors.red,
-                                                  size: 32,
-                                                ),
-                                                const SizedBox(height: 10),
-                                                Text(
-                                                  'Detection failed: ${snapshot.error}',
-                                                  style: const TextStyle(
-                                                    color: Colors.red,
-                                                  ),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  final result = snapshot.data!;
-                                  final hasLeaves =
-                                      result['hasLeaves'] as bool? ?? false;
-                                  final backgroundProbability =
-                                      (result['backgroundProbability'] as num?)
-                                          ?.toDouble() ??
-                                      0.0;
-                                  final method =
-                                      result['method'] as String? ?? 'unknown';
-
-                                  final double leafProb =
-                                      (result['leafProbability'] as num?)
-                                          ?.toDouble() ??
-                                      (1.0 - backgroundProbability);
-
-                                  return Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(15.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Center(
-                                            child: Text(
-                                              "Background Detection",
-                                              style: KTextStyle.titleTealText,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 15),
-                                          ListTile(
-                                            leading: Icon(
-                                              hasLeaves
-                                                  ? Icons.eco
-                                                  : Icons.image_not_supported,
-                                              color:
-                                                  hasLeaves
-                                                      ? Colors.green
-                                                      : Colors.grey,
-                                              size: 32,
-                                            ),
-                                            title: Text(
-                                              hasLeaves
-                                                  ? 'Plant Leaves Detected'
-                                                  : 'No Plant Leaves',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color:
-                                                    hasLeaves
-                                                        ? Colors.green
-                                                        : Colors.grey,
-                                              ),
-                                            ),
-                                            subtitle: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Method: ${_formatMethodName(method)}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey.shade600,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          probBar(
-                                            label: 'Leaf Probability',
-                                            value: leafProb,
-                                            color: Colors.green.shade700,
-                                          ),
-                                          const SizedBox(height: 10),
-                                          probBar(
-                                            label: 'Background Probability',
-                                            value: backgroundProbability,
-                                            color: Colors.blueGrey.shade700,
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.flag_circle_outlined,
-                                                size: 16,
-                                                color: Colors.teal,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                'Decision threshold: ${pct(decisionThreshold)} (Leaf)',
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          if (method.contains('fallback') &&
-                                              result['greenRatio'] != null &&
-                                              result['brightRatio'] !=
-                                                  null) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Heuristic details – Green: ${pct((result['greenRatio'] as num).toDouble())} • Bright: ${pct((result['brightRatio'] as num).toDouble())}',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                            if (result['note'] != null)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 2.0,
-                                                ),
-                                                child: Text(
-                                                  result['note'].toString(),
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color:
-                                                        Colors.orange.shade700,
-                                                    fontStyle: FontStyle.italic,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                          if (hasLeaves)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 10.0,
-                                              ),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  10.0,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.green.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        8.0,
-                                                      ),
-                                                  border: Border.all(
-                                                    color:
-                                                        Colors.green.shade200,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons
-                                                          .check_circle_outline,
-                                                      color:
-                                                          Colors.green.shade600,
-                                                      size: 20,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        'Image contains plant leaves. Proceeding with segmentation and disease detection.',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors
-                                                                  .green
-                                                                  .shade700,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            )
-                                          else
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 10.0,
-                                              ),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  10.0,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.orange.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        8.0,
-                                                      ),
-                                                  border: Border.all(
-                                                    color:
-                                                        Colors.orange.shade200,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons
-                                                          .warning_amber_outlined,
-                                                      color:
-                                                          Colors
-                                                              .orange
-                                                              .shade600,
-                                                      size: 20,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        'No plant leaves detected. Please upload an image that clearly shows plant leaves.',
-                                                        style: TextStyle(
-                                                          color:
-                                                              Colors
-                                                                  .orange
-                                                                  .shade700,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(30.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.info_outline, // Changed icon
+                          size: 60,
+                          color: Colors.blueGrey, // Changed color
+                        ),
+                        const SizedBox(height: 25),
+                        const Text(
+                          'Plant Data Unavailable', // Changed title
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 15),
+                        Text(
+                          'This plant data (ID: ${widget.plantId}) cannot be displayed. It might have been deleted or is still processing.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[400], // Adjusted color
+                            height: 1.4, // Added line height
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('Go Back'),
+                          style: ElevatedButton.styleFrom(
+                            // Use primary color for button background
+                            foregroundColor: Colors.white, // White text
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
                             ),
                           ),
+                          onPressed: () {
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
 
-                          // Check if background detection indicates no leaves (high background probability = no leaves)
-                          // Only show subsequent content if leaves are detected
-                          if (_isBackgroundDetectionComplete &&
-                              _backgroundDetectionResult != null &&
-                              _backgroundDetectionResult!['error'] == null) ...[
-                            // Check if background detection shows high probability for background (no leaves)
-                            // Note: backgroundProbability = probability of being background without leaves
-                            if (((_backgroundDetectionResult!['backgroundProbability']
-                                                as num?)
-                                            ?.toDouble() ??
-                                        0.0) >=
-                                    (1 - decisionThreshold) ||
-                                !(_backgroundDetectionResult!['hasLeaves']
-                                        as bool? ??
-                                    true)) ...[
-                              // Show message when background is detected with high confidence
-                              Padding(
-                                padding: const EdgeInsets.only(top: 15.0),
-                                child: Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(20.0),
-                                    child: Column(
-                                      children: [
-                                        const Icon(
-                                          Icons.image_not_supported,
-                                          size: 48,
-                                          color: Colors.orange,
-                                        ),
-                                        const SizedBox(height: 16),
-                                        const Text(
-                                          'No Plant Leaves Detected',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.orange,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        const Text(
-                                          'Please upload a photo that clearly shows plant leaves.',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Container(
-                                          padding: const EdgeInsets.all(12.0),
-                                          decoration: BoxDecoration(
-                                            color: Colors.orange.shade50,
-                                            borderRadius: BorderRadius.circular(
-                                              8.0,
-                                            ),
-                                            border: Border.all(
-                                              color: Colors.orange.shade200,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.info_outline,
-                                                color: Colors.orange.shade600,
-                                                size: 20,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  'Background probability is ${(((_backgroundDetectionResult!['backgroundProbability'] as num?)?.toDouble() ?? 0.0) * 100).toStringAsFixed(1)}%. This image appears to contain only background without plant leaves.',
-                                                  style: TextStyle(
-                                                    color:
-                                                        Colors.orange.shade700,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+              // Data is available, parse it
+              final docData = snapshot.data!.data()!;
+              PlantModel plant = PlantModel.fromMap(docData);
+              Map<String, dynamic>? analysisResults = plant.analysisResults;
+              String status = plant.status;
+              // Read analysisError directly from the document data
+              String? analysisErrorMsg = docData['analysisError'] as String?;
+
+              // Determine display state based on results and confidence
+              bool hasResults =
+                  analysisResults != null && analysisResults.isNotEmpty;
+              double diseaseConfidence = 0.0;
+              if (hasResults && analysisResults['confidence'] != null) {
+                diseaseConfidence =
+                    (analysisResults['confidence'] as num).toDouble();
+              }
+              bool isLowConfidence =
+                  hasResults && diseaseConfidence < lowConfidenceThreshold;
+              String detectedDisease = 'N/A';
+              if (hasResults) {
+                detectedDisease =
+                    analysisResults['detectedDisease']?.toString() ?? 'N/A';
+              }
+
+              // Format the displayed disease name to show spaces instead of underscores
+              String displayDiseaseName = UIUtils.formatDiseaseName(
+                detectedDisease,
+              );
+
+              String pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
+
+              Widget probBar({
+                required String label,
+                required double value,
+                required Color color,
+              }) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(label, style: const TextStyle(fontSize: 12)),
+                        Text(
+                          pct(value),
+                          style: TextStyle(fontSize: 12, color: color),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: value.clamp(0.0, 1.0),
+                        minHeight: 8,
+                        backgroundColor: Colors.black12,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              Widget buildAsteriskFootnotes() {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Card(
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Notes', style: KTextStyle.titleTealText),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '* ',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'Disease detection: may be inaccurate due to look-alike symptoms, image quality, or diseases outside the training set. Confirm before acting.',
+                                  style: KTextStyle.descriptionText.copyWith(
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
-                            ] else ...[
-                              // Show subsequent content only if leaves are detected
-                              // Auto-trigger analysis if not already triggered and plant is not processing/completed
-                              if (!_isAnalysisTriggered &&
-                                  status != 'processing' &&
-                                  status != 'analyzing' &&
-                                  status != 'completed') ...[
-                                // Trigger analysis automatically
-                                FutureBuilder<void>(
-                                  future: _triggerPlantAnalysis(),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '**  ',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'AI-generated suggestion: general guidance only. Always verify with trusted sources or a qualified agronomist/plant pathologist.',
+                                  style: KTextStyle.descriptionText.copyWith(
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Disclaimer: Results are provided “as is.” APPN and contributors are not liable for any loss or damage arising from use of these outputs.',
+                            style: KTextStyle.descriptionText.copyWith(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              // Debug prints inside StreamBuilder
+              // print('[SegmentPage StreamBuilder] plantId: ${widget.plantId}');
+              // print('[SegmentPage StreamBuilder] status: $status');
+              // print('[SegmentPage StreamBuilder] analysisResults: $analysisResults');
+              // print('[SegmentPage StreamBuilder] hasResults: $hasResults');
+              // print('[SegmentPage StreamBuilder] diseaseConfidence: $diseaseConfidence');
+              // print('[SegmentPage StreamBuilder] detectedDisease: $detectedDisease');
+
+              return Center(
+                heightFactor: 1,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return FractionallySizedBox(
+                          widthFactor: constraints.maxWidth > 500 ? 0.5 : 1,
+                          child: Column(
+                            spacing: 10.0,
+                            children: [
+                              SegmentHero(imgSrc: widget.imgSrc, id: widget.id),
+
+                              // Background Detection Result
+                              Padding(
+                                padding: const EdgeInsets.only(top: 15.0),
+                                child: FutureBuilder<Map<String, dynamic>>(
+                                  future:
+                                      _backgroundDetectionFuture ??=
+                                          _detectBackgroundAndLeaves().catchError((
+                                            error,
+                                          ) {
+                                            // Handle errors gracefully to prevent crashes
+                                            logger.e(
+                                              '[SegmentPage] Background detection failed: $error',
+                                            );
+                                            return {
+                                              'hasLeaves': false,
+                                              'leafProbability': 0.0,
+                                              'backgroundProbability': 1.0,
+                                              'error': error.toString(),
+                                              'method': 'error_fallback',
+                                            };
+                                          }),
                                   builder: (context, snapshot) {
-                                    return const Padding(
-                                      padding: EdgeInsets.only(top: 15.0),
-                                      child: Card(
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Card(
                                         child: Padding(
                                           padding: EdgeInsets.all(15.0),
                                           child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Icon(
-                                                Icons.auto_fix_high,
-                                                size: 48,
-                                                color: Colors.blue,
-                                              ),
-                                              SizedBox(height: 16),
-                                              Text(
-                                                'Plant Leaves Detected!',
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue,
+                                              Center(
+                                                child: Text(
+                                                  "Background Detection",
+                                                  style:
+                                                      KTextStyle.titleTealText,
                                                 ),
-                                                textAlign: TextAlign.center,
                                               ),
-                                              SizedBox(height: 12),
-                                              Text(
-                                                'Starting automatic segmentation and disease analysis...',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: Colors.grey,
+                                              SizedBox(height: 15),
+                                              Center(
+                                                child: Column(
+                                                  children: [
+                                                    CircularProgressIndicator(),
+                                                    SizedBox(height: 10),
+                                                    Text(
+                                                      'Detecting plant leaves...',
+                                                    ),
+                                                  ],
                                                 ),
-                                                textAlign: TextAlign.center,
                                               ),
-                                              SizedBox(height: 16),
-                                              CircularProgressIndicator(),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-
-                              // Check for segmentation result in analysisResults
-                              if (hasResults &&
-                                  analysisResults['segmentationUrl'] != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 15.0),
-                                  child: Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(15.0),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Center(
-                                            child: Text(
-                                              "Segmentation Result",
-                                              style: KTextStyle.titleTealText,
-                                            ),
+                                      );
+                                    } else if (snapshot.hasError) {
+                                      return Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(15.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Center(
+                                                child: Text(
+                                                  "Background Detection",
+                                                  style:
+                                                      KTextStyle.titleTealText,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 15),
+                                              Center(
+                                                child: Column(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.error_outline,
+                                                      color: Colors.red,
+                                                      size: 32,
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                    Text(
+                                                      'Detection failed: ${snapshot.error}',
+                                                      style: const TextStyle(
+                                                        color: Colors.red,
+                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 15),
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              5.0,
-                                            ),
-                                            child: Image.network(
-                                              analysisResults['segmentationUrl'],
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (
-                                                context,
-                                                error,
-                                                stackTrace,
-                                              ) {
-                                                return Container(
-                                                  width: double.infinity,
-                                                  height: 200,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.shade200,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          5.0,
-                                                        ),
+                                        ),
+                                      );
+                                    } else {
+                                      final result = snapshot.data!;
+                                      final hasLeaves =
+                                          result['hasLeaves'] as bool? ?? false;
+                                      final backgroundProbability =
+                                          (result['backgroundProbability']
+                                                  as num?)
+                                              ?.toDouble() ??
+                                          0.0;
+                                      final method =
+                                          result['method'] as String? ??
+                                          'unknown';
+
+                                      final double leafProb =
+                                          (result['leafProbability'] as num?)
+                                              ?.toDouble() ??
+                                          (1.0 - backgroundProbability);
+
+                                      return Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(15.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Center(
+                                                child: Text(
+                                                  "Background Detection",
+                                                  style:
+                                                      KTextStyle.titleTealText,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 15),
+                                              ListTile(
+                                                leading: Icon(
+                                                  hasLeaves
+                                                      ? Icons.eco
+                                                      : Icons
+                                                          .image_not_supported,
+                                                  color:
+                                                      hasLeaves
+                                                          ? Colors.green
+                                                          : Colors.grey,
+                                                  size: 32,
+                                                ),
+                                                title: Text(
+                                                  hasLeaves
+                                                      ? 'Plant Leaves Detected'
+                                                      : 'No Plant Leaves',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        hasLeaves
+                                                            ? Colors.green
+                                                            : Colors.grey,
                                                   ),
-                                                  child: const Center(
-                                                    child: Column(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .center,
+                                                ),
+                                                subtitle: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Method: ${_formatMethodName(method)}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            Colors
+                                                                .grey
+                                                                .shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              probBar(
+                                                label: 'Leaf Probability',
+                                                value: leafProb,
+                                                color: Colors.green.shade700,
+                                              ),
+                                              const SizedBox(height: 10),
+                                              probBar(
+                                                label: 'Background Probability',
+                                                value: backgroundProbability,
+                                                color: Colors.blueGrey.shade700,
+                                              ),
+                                              const SizedBox(height: 10),
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.flag_circle_outlined,
+                                                    size: 16,
+                                                    color: Colors.teal,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'Decision threshold: ${pct(decisionThreshold)} (Leaf)',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (method.contains('fallback') &&
+                                                  result['greenRatio'] !=
+                                                      null &&
+                                                  result['brightRatio'] !=
+                                                      null) ...[
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'Heuristic details – Green: ${pct((result['greenRatio'] as num).toDouble())} • Bright: ${pct((result['brightRatio'] as num).toDouble())}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                ),
+                                                if (result['note'] != null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 2.0,
+                                                        ),
+                                                    child: Text(
+                                                      result['note'].toString(),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color:
+                                                            Colors
+                                                                .orange
+                                                                .shade700,
+                                                        fontStyle:
+                                                            FontStyle.italic,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                              if (hasLeaves)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 10.0,
+                                                      ),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                          10.0,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.green.shade50,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8.0,
+                                                          ),
+                                                      border: Border.all(
+                                                        color:
+                                                            Colors
+                                                                .green
+                                                                .shade200,
+                                                      ),
+                                                    ),
+                                                    child: Row(
                                                       children: [
                                                         Icon(
-                                                          Icons.broken_image,
-                                                          size: 48,
-                                                          color: Colors.grey,
+                                                          Icons
+                                                              .check_circle_outline,
+                                                          color:
+                                                              Colors
+                                                                  .green
+                                                                  .shade600,
+                                                          size: 20,
                                                         ),
-                                                        SizedBox(height: 8),
-                                                        Text(
-                                                          'Failed to load image',
-                                                          style: TextStyle(
-                                                            color: Colors.grey,
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            'Image contains plant leaves. Proceeding with segmentation and disease detection.',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors
+                                                                      .green
+                                                                      .shade700,
+                                                              fontSize: 12,
+                                                            ),
                                                           ),
                                                         ),
                                                       ],
                                                     ),
                                                   ),
-                                                );
-                                              },
-                                              loadingBuilder: (
-                                                context,
-                                                child,
-                                                loadingProgress,
-                                              ) {
-                                                if (loadingProgress == null) {
-                                                  return child;
-                                                }
-                                                return Container(
-                                                  width: double.infinity,
-                                                  height: 200,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.shade100,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          5.0,
+                                                )
+                                              else
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 10.0,
+                                                      ),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                          10.0,
                                                         ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.orange.shade50,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8.0,
+                                                          ),
+                                                      border: Border.all(
+                                                        color:
+                                                            Colors
+                                                                .orange
+                                                                .shade200,
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons
+                                                              .warning_amber_outlined,
+                                                          color:
+                                                              Colors
+                                                                  .orange
+                                                                  .shade600,
+                                                          size: 20,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            'No plant leaves detected. Please upload an image that clearly shows plant leaves.',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors
+                                                                      .orange
+                                                                      .shade700,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
-                                                  child: const Center(
-                                                    child:
-                                                        CircularProgressIndicator(),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10.0,
-                                ),
-                                child: Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(15.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      spacing: 5.0,
-                                      children: [
-                                        const Center(
-                                          child: Text(
-                                            "Analysis Results",
-                                            style: KTextStyle.titleTealText,
+                                                ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 10),
-                                        // Handle different statuses
-                                        if (status == 'processing' ||
-                                            status == 'analyzing')
-                                          ListTile(
-                                            leading:
-                                                const CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
-                                            title: const Text(
-                                              'Analysis in progress...',
-                                            ),
-                                            subtitle: const Text(
-                                              'Results will appear here shortly.',
-                                            ),
-                                            trailing: IconButton(
-                                              icon: const Icon(
-                                                Icons.delete_outline,
-                                                color: Colors.red,
-                                              ),
-                                              onPressed:
-                                                  () => _confirmDelete(context),
-                                              tooltip: 'Cancel analysis',
-                                            ),
-                                          )
-                                        else if (status == 'error')
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.error_outline,
-                                              color: Colors.red,
-                                            ),
-                                            title: const Text(
-                                              'Analysis Failed',
-                                            ),
-                                            subtitle: Text(
-                                              analysisErrorMsg ??
-                                                  'An unknown error occurred.',
-                                            ),
-                                          )
-                                        // Display results if completed
-                                        else if (status == 'completed') ...[
-                                          if (hasResults) ...[
-                                            if (detectedDisease ==
-                                                'No disease detected')
-                                              const ListTile(
-                                                leading: Icon(
-                                                  Icons.check_circle_outline,
-                                                  color: Colors.green,
-                                                ),
-                                                title: Text(
-                                                  'Analysis Completed',
-                                                ),
-                                                subtitle: Text(
-                                                  'No disease detected above the confidence threshold.',
-                                                ),
-                                              )
-                                            else if (isLowConfidence)
-                                              _buildLowConfidenceInfo(
-                                                displayDiseaseName,
-                                                diseaseConfidence,
-                                              )
-                                            else
-                                              _buildStandardResults(
-                                                displayDiseaseName,
-                                                diseaseConfidence,
-                                              ),
-                                            // Always show detection time if available
-                                            _buildResultTile(
-                                              icon: Icons.timer_outlined,
-                                              label: 'Detection Time',
-                                              value: _formatTimestamp(
-                                                analysisResults['detectionTimestamp']
-                                                    ?.toString(),
-                                              ),
-                                            ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
 
-                                            // Add delete button
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 16.0,
+                              // Check if background detection indicates no leaves (high background probability = no leaves)
+                              // Only show subsequent content if leaves are detected
+                              if (_isBackgroundDetectionComplete &&
+                                  _backgroundDetectionResult != null &&
+                                  _backgroundDetectionResult!['error'] ==
+                                      null) ...[
+                                // Check if background detection shows high probability for background (no leaves)
+                                // Note: backgroundProbability = probability of being background without leaves
+                                if (((_backgroundDetectionResult!['backgroundProbability']
+                                                    as num?)
+                                                ?.toDouble() ??
+                                            0.0) >=
+                                        (1 - decisionThreshold) ||
+                                    !(_backgroundDetectionResult!['hasLeaves']
+                                            as bool? ??
+                                        true)) ...[
+                                  // Show message when background is detected with high confidence
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 15.0),
+                                    child: Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(20.0),
+                                        child: Column(
+                                          children: [
+                                            const Icon(
+                                              Icons.image_not_supported,
+                                              size: 48,
+                                              color: Colors.orange,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            const Text(
+                                              'No Plant Leaves Detected',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.orange,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            const Text(
+                                              'Please upload a photo that clearly shows plant leaves.',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Container(
+                                              padding: const EdgeInsets.all(
+                                                12.0,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange.shade50,
+                                                borderRadius:
+                                                    BorderRadius.circular(8.0),
+                                                border: Border.all(
+                                                  color: Colors.orange.shade200,
+                                                ),
                                               ),
                                               child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.end,
                                                 children: [
-                                                  TextButton.icon(
-                                                    style: TextButton.styleFrom(
-                                                      foregroundColor:
-                                                          Colors.red,
+                                                  Icon(
+                                                    Icons.info_outline,
+                                                    color:
+                                                        Colors.orange.shade600,
+                                                    size: 20,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      'Background probability is ${(((_backgroundDetectionResult!['backgroundProbability'] as num?)?.toDouble() ?? 0.0) * 100).toStringAsFixed(1)}%. This image appears to contain only background without plant leaves.',
+                                                      style: TextStyle(
+                                                        color:
+                                                            Colors
+                                                                .orange
+                                                                .shade700,
+                                                        fontSize: 12,
+                                                      ),
                                                     ),
-                                                    icon: const Icon(
-                                                      Icons.delete_outline,
-                                                    ),
-                                                    label: const Text(
-                                                      'Delete Result',
-                                                    ),
-                                                    onPressed:
-                                                        () => _confirmDelete(
-                                                          context,
-                                                        ),
                                                   ),
                                                 ],
                                               ),
                                             ),
-                                          ] else
-                                            const ListTile(
-                                              leading: Icon(
-                                                Icons.info_outline,
-                                                color: Colors.grey,
-                                              ),
-                                              title: Text(
-                                                "No analysis results available.",
-                                              ),
-                                              subtitle: Text(
-                                                "The analysis completed, but no specific results were found.",
-                                              ),
-                                            ),
-                                        ] else // Handle other statuses like 'pending' or unknown
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.hourglass_empty,
-                                              color: Colors.grey,
-                                            ),
-                                            title: const Text(
-                                              'Analysis Pending',
-                                            ),
-                                            subtitle: Text('Status: $status'),
-                                          ),
-                                      ],
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                              FutureBuilder<String>(
-                                future: _generateSuggestion(
-                                  detectedDisease,
-                                  diseaseConfidence,
-                                ),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return _buildAiSuggestionBox(
-                                      'Generating AI suggestion...',
-                                    );
-                                  } else if (snapshot.hasError) {
-                                    return _buildAiSuggestionBox(
-                                      'Failed to generate suggestion.',
-                                    );
-                                  } else {
-                                    return _buildAiSuggestionBox(
-                                      snapshot.data ??
-                                          'No suggestion available.',
-                                    );
-                                  }
-                                },
-                              ),
-                              buildAsteriskFootnotes(),
+                                ] else ...[
+                                  // Show subsequent content only if leaves are detected
+                                  // Auto-trigger analysis if not already triggered and plant is not processing/completed
+                                  if (!_isAnalysisTriggered &&
+                                      status != 'processing' &&
+                                      status != 'analyzing' &&
+                                      status != 'completed') ...[
+                                    // Trigger analysis automatically
+                                    FutureBuilder<void>(
+                                      future: _triggerPlantAnalysis(),
+                                      builder: (context, snapshot) {
+                                        return const Padding(
+                                          padding: EdgeInsets.only(top: 15.0),
+                                          child: Card(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(15.0),
+                                              child: Column(
+                                                children: [
+                                                  Icon(
+                                                    Icons.auto_fix_high,
+                                                    size: 48,
+                                                    color: Colors.blue,
+                                                  ),
+                                                  SizedBox(height: 16),
+                                                  Text(
+                                                    'Plant Leaves Detected!',
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.blue,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                  SizedBox(height: 12),
+                                                  Text(
+                                                    'Starting automatic segmentation and disease analysis...',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                  SizedBox(height: 16),
+                                                  CircularProgressIndicator(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+
+                                  // Check for segmentation result in analysisResults
+                                  if (hasResults &&
+                                      analysisResults['segmentationUrl'] !=
+                                          null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 15.0),
+                                      child: Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(15.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Kick species classification on first render when URL is present
+                                              Builder(
+                                                builder: (context) {
+                                                  final String segUrl =
+                                                      (analysisResults['segmentationUrl']
+                                                          as String);
+                                                  if (_plantClass == null &&
+                                                      !_speciesLoading) {
+                                                    // fire-and-forget
+                                                    _kickSpeciesFromUrl(segUrl);
+                                                  }
+                                                  return const SizedBox.shrink();
+                                                },
+                                              ),
+                                              const Center(
+                                                child: Text(
+                                                  "Segmentation Result",
+                                                  style:
+                                                      KTextStyle.titleTealText,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
+                                                children: [
+                                                  if (_plantClass != null &&
+                                                      _plantClassConf != null)
+                                                    Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          'Plant: ${_plantClass!}',
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 12,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Text(
+                                                          'Conf: ${(100 * _plantClassConf!).toStringAsFixed(1)}%',
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 11,
+                                                                color:
+                                                                    Colors.grey,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 12,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  DropdownButton<String>(
+                                                    value: _selectedSegModel,
+                                                    items: const [
+                                                      DropdownMenuItem(
+                                                        value: 'tflite',
+                                                        child: Text('TFLite'),
+                                                      ),
+                                                      DropdownMenuItem(
+                                                        value: 'onnx',
+                                                        child: Text('ONNX'),
+                                                      ),
+                                                    ],
+                                                    onChanged: (v) async {
+                                                      if (v == null) return;
+                                                      setState(
+                                                        () =>
+                                                            _selectedSegModel =
+                                                                v,
+                                                      );
+                                                      await _runLocalSegmentationAndRetrigger();
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 15),
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(5.0),
+                                                child: Image.network(
+                                                  analysisResults['segmentationUrl'],
+                                                  width: double.infinity,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) {
+                                                    return Container(
+                                                      width: double.infinity,
+                                                      height: 200,
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            Colors
+                                                                .grey
+                                                                .shade200,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              5.0,
+                                                            ),
+                                                      ),
+                                                      child: const Center(
+                                                        child: Column(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .broken_image,
+                                                              size: 48,
+                                                              color:
+                                                                  Colors.grey,
+                                                            ),
+                                                            SizedBox(height: 8),
+                                                            Text(
+                                                              'Failed to load image',
+                                                              style: TextStyle(
+                                                                color:
+                                                                    Colors.grey,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  loadingBuilder: (
+                                                    context,
+                                                    child,
+                                                    loadingProgress,
+                                                  ) {
+                                                    if (loadingProgress ==
+                                                        null) {
+                                                      return child;
+                                                    }
+                                                    return Container(
+                                                      width: double.infinity,
+                                                      height: 200,
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            Colors
+                                                                .grey
+                                                                .shade100,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              5.0,
+                                                            ),
+                                                      ),
+                                                      child: const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10.0,
+                                    ),
+                                    child: Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(15.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          spacing: 5.0,
+                                          children: [
+                                            const Center(
+                                              child: Text(
+                                                "Analysis Results",
+                                                style: KTextStyle.titleTealText,
+                                              ),
+                                            ),
+                                            if (_plantClass != null &&
+                                                _plantClass != 'corn' &&
+                                                _plantClass != 'pepper' &&
+                                                _plantClass != 'grape')
+                                              const Padding(
+                                                padding: EdgeInsets.only(
+                                                  top: 4.0,
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    'This plant is not recognized by our specialized models. Accuracy is for reference only.',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              ),
+                                            const SizedBox(height: 10),
+                                            // Handle different statuses
+                                            if (status == 'processing' ||
+                                                status == 'analyzing')
+                                              ListTile(
+                                                leading:
+                                                    const CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                                title: const Text(
+                                                  'Analysis in progress...',
+                                                ),
+                                                subtitle: const Text(
+                                                  'Results will appear here shortly.',
+                                                ),
+                                                trailing: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed:
+                                                      () => _confirmDelete(
+                                                        context,
+                                                      ),
+                                                  tooltip: 'Cancel analysis',
+                                                ),
+                                              )
+                                            else if (status == 'error')
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.error_outline,
+                                                  color: Colors.red,
+                                                ),
+                                                title: const Text(
+                                                  'Analysis Failed',
+                                                ),
+                                                subtitle: Text(
+                                                  analysisErrorMsg ??
+                                                      'An unknown error occurred.',
+                                                ),
+                                              )
+                                            // Display results if completed
+                                            else if (status == 'completed') ...[
+                                              if (hasResults) ...[
+                                                if (detectedDisease ==
+                                                    'No disease detected')
+                                                  const ListTile(
+                                                    leading: Icon(
+                                                      Icons
+                                                          .check_circle_outline,
+                                                      color: Colors.green,
+                                                    ),
+                                                    title: Text(
+                                                      'Analysis Completed',
+                                                    ),
+                                                    subtitle: Text(
+                                                      'No disease detected above the confidence threshold.',
+                                                    ),
+                                                  )
+                                                else if (isLowConfidence)
+                                                  _buildLowConfidenceInfo(
+                                                    displayDiseaseName,
+                                                    diseaseConfidence,
+                                                  )
+                                                else
+                                                  _buildStandardResults(
+                                                    displayDiseaseName,
+                                                    diseaseConfidence,
+                                                  ),
+                                                // Always show detection time if available
+                                                _buildResultTile(
+                                                  icon: Icons.timer_outlined,
+                                                  label: 'Detection Time',
+                                                  value: _formatTimestamp(
+                                                    analysisResults['detectionTimestamp']
+                                                        ?.toString(),
+                                                  ),
+                                                ),
+
+                                                // Add delete button
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 16.0,
+                                                      ),
+                                                  child: Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.end,
+                                                    children: [
+                                                      TextButton.icon(
+                                                        style:
+                                                            TextButton.styleFrom(
+                                                              foregroundColor:
+                                                                  Colors.red,
+                                                            ),
+                                                        icon: const Icon(
+                                                          Icons.delete_outline,
+                                                        ),
+                                                        label: const Text(
+                                                          'Delete Result',
+                                                        ),
+                                                        onPressed:
+                                                            () =>
+                                                                _confirmDelete(
+                                                                  context,
+                                                                ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ] else
+                                                const ListTile(
+                                                  leading: Icon(
+                                                    Icons.info_outline,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  title: Text(
+                                                    "No analysis results available.",
+                                                  ),
+                                                  subtitle: Text(
+                                                    "The analysis completed, but no specific results were found.",
+                                                  ),
+                                                ),
+                                            ] else // Handle other statuses like 'pending' or unknown
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.hourglass_empty,
+                                                  color: Colors.grey,
+                                                ),
+                                                title: const Text(
+                                                  'Analysis Pending',
+                                                ),
+                                                subtitle: Text(
+                                                  'Status: $status',
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  FutureBuilder<String>(
+                                    future: _generateSuggestion(
+                                      detectedDisease,
+                                      diseaseConfidence,
+                                    ),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return _buildAiSuggestionBox(
+                                          'Generating AI suggestion...',
+                                        );
+                                      } else if (snapshot.hasError) {
+                                        return _buildAiSuggestionBox(
+                                          'Failed to generate suggestion.',
+                                        );
+                                      } else {
+                                        return _buildAiSuggestionBox(
+                                          snapshot.data ??
+                                              'No suggestion available.',
+                                        );
+                                      }
+                                    },
+                                  ),
+                                  buildAsteriskFootnotes(),
+                                ],
+                              ],
                             ],
-                          ],
-                        ],
-                      ),
-                    );
-                  },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          if (_isBusy)
+            Positioned.fill(
+              child: AbsorbPointer(
+                absorbing: true,
+                child: Container(
+                  color: Colors.black45,
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
               ),
             ),
-          );
-        },
+        ],
       ),
     );
   }
@@ -1322,8 +1762,10 @@ class _SegmentPageState extends State<SegmentPage> {
     String detectedDisease,
     double diseaseConfidence,
   ) async {
+    final String formatted = UIUtils.formatDiseaseName(detectedDisease);
+
     // 1. If the result is background (not a leaf)
-    if (detectedDisease == 'Background without leaves') {
+    if (formatted == 'Background without leaves') {
       return 'Please upload an image that clearly shows a plant leaf.';
     }
 
@@ -1333,15 +1775,14 @@ class _SegmentPageState extends State<SegmentPage> {
     }
 
     // 3. If the detected result is a healthy label
-    if (detectedDisease.endsWith(' healthy')) {
-      final plantName = detectedDisease.replaceAll(' healthy', '');
+    if (formatted.endsWith(' healthy')) {
+      final plantName = formatted.replaceAll(RegExp(r'\s+healthy$'), '');
       return 'Congratulations! Your $plantName leaf appears to be healthy!';
     }
 
     // 4. For specific plant diseases, call Gemini to generate advice
-
     final prompt =
-        'What is the best way to identify, manage, or treat the plant disease "$detectedDisease"?';
+        'What is the best way to identify, manage, or treat the plant disease "$formatted"?';
 
     try {
       final response = await OpenRouterService().getAnswer(
