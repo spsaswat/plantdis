@@ -321,9 +321,7 @@ class BackgroundDetectionService {
     int inZeroPoint = 0;
     try {
       // Try common shapes of metadata
-      final q =
-          inputTensor.quantizationParameters ??
-          inputTensor.quantization;
+      final q = inputTensor.quantizationParameters ?? inputTensor.quantization;
       if (q != null) {
         // Some wrappers expose as {scale, zeroPoint} or arrays
         if (q.scale is num) inScale = (q.scale as num).toDouble();
@@ -407,9 +405,7 @@ class BackgroundDetectionService {
 
     // Extract raw outputs as doubles (wrapper may already dequantize; handle both)
     final List<double> rawOut =
-        (outputBuffer.first)
-            .map((e) => (e is num) ? e.toDouble() : double.parse(e.toString()))
-            .toList();
+        (outputBuffer.first as List<num>).map((e) => e.toDouble()).toList();
 
     // If output is quantized uint8 in some wrappers, we might need to dequantize.
     // Try to read output quantization params; if they exist and look valid, dequantize.
@@ -418,8 +414,7 @@ class BackgroundDetectionService {
     bool needDequantize = false;
     try {
       final q =
-          outputTensor.quantizationParameters ??
-          outputTensor.quantization;
+          outputTensor.quantizationParameters ?? outputTensor.quantization;
       if (q != null && q.scale is num) {
         outScale = (q.scale as num).toDouble();
         if (q.zeroPoint is int) outZeroPoint = q.zeroPoint as int;
