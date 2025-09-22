@@ -70,6 +70,13 @@ class _SegmentPageState extends State<SegmentPage> {
   double? _plantClassConf;
   bool _speciesLoading = false;
   bool _manualOverride = false;
+  bool _speciesOverrideActive = false;
+  String? _speciesOverrideSelection;
+  bool _analysisConfirmed = false;
+  final ScrollController _scrollController = ScrollController();
+  bool _segPreviewRan = false;
+  String? _segPreviewUrl;
+  String? _forcedSpecies; // if user overrides species selection, use this once
 
   Future<File> _downloadToTemp(Uint8List bytes) async {
     final dir = Directory.systemTemp;
@@ -140,7 +147,7 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<DetectionResult?> _runDiseaseDetection(Uint8List bytes) async {
     // Choose model
     String modelPath;
-    final species = (_plantClass ?? '').toLowerCase().trim();
+    String species = (_forcedSpecies ?? _plantClass ?? '').toLowerCase().trim();
     if (species == 'corn') {
       modelPath = 'assets/models/corn_disease_detector.tflite';
     } else if (species == 'pepper') {
@@ -200,19 +207,67 @@ class _SegmentPageState extends State<SegmentPage> {
       }
     }
     String diseaseName;
-    if (species == 'corn') {
-      const cornLabels = [
-        'Corn___Cercospora_leaf_spot_Gray_leaf_spot',
-        'Corn___Common_rust',
-        'Corn___healthy',
-        'Corn___Northern_Leaf_Blight',
-      ];
-      diseaseName =
-          (maxIdx >= 0 && maxIdx < cornLabels.length)
-              ? cornLabels[maxIdx]
-              : 'Corn___Unknown';
+    List<String>? labels;
+    switch (species) {
+      case 'corn':
+        labels = const [
+          'Corn___Cercospora_leaf_spot_Gray_leaf_spot',
+          'Corn___Common_rust',
+          'Corn___healthy',
+          'Corn___Northern_Leaf_Blight',
+        ];
+        break;
+      case 'pepper':
+        labels = const ['Pepper_bacterial_spot', 'Pepper_healthy'];
+        break;
+      case 'grape':
+        labels = const [
+          'Grape___Black_rot',
+          'Grape___Esca_(Black_Measles)',
+          'Grape___healthy',
+          'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+        ];
+        break;
+      case 'apple':
+        labels = const [
+          'Apple___Apple_scab',
+          'Apple___Black_rot',
+          'Apple___Cedar_apple_rust',
+          'Apple___healthy',
+        ];
+        break;
+      case 'potato':
+        labels = const [
+          'Potato___Early_blight',
+          'Potato___Late_blight',
+          'Potato___healthy',
+        ];
+        break;
+      case 'tomato':
+        labels = const [
+          'Tomato___Bacterial_spot',
+          'Tomato___Early_blight',
+          'Tomato___Late_blight',
+          'Tomato___Leaf_Mold',
+          'Tomato___Septoria_leaf_spot',
+          'Tomato___Spider_mites_Two_spotted_spider_mite',
+          'Tomato___Target_Spot',
+          'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
+          'Tomato___Tomato_mosaic_virus',
+          'Tomato___healthy',
+        ];
+        break;
+      default:
+        labels = null;
+        break;
+    }
+
+    if (labels != null && maxIdx >= 0 && maxIdx < labels.length) {
+      diseaseName = labels[maxIdx];
     } else {
-      diseaseName = 'Class_$maxIdx';
+      final String fallbackName =
+          _plantClass ?? (species.isNotEmpty ? species : 'Unknown plant');
+      diseaseName = fallbackName;
     }
     return DetectionResult(
       diseaseName: diseaseName,
@@ -315,6 +370,85 @@ class _SegmentPageState extends State<SegmentPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Re-run failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _segmentAndClassifyOnly() async {
+    try {
+      if (mounted) {
+        setState(() {
+          _isBusy = true;
+          _segPreviewRan = true;
+        });
+      }
+
+      // 1) Download original image
+      final uri = Uri.parse(widget.imgSrc);
+      final resp = await http.get(uri);
+      if (resp.statusCode != 200) {
+        throw Exception('Failed to download image');
+      }
+      final temp = await _downloadToTemp(resp.bodyBytes);
+
+      // 2) Segment locally with selected model
+      File segmentedFile;
+      if (_selectedSegModel == 'onnx') {
+        final svc = seg_onnx.OnnxSegmentationService();
+        await svc.loadModel();
+        segmentedFile = await svc.segment(temp);
+      } else {
+        final svc = seg_tfl.SegmentationService();
+        await svc.loadModel();
+        segmentedFile = await svc.segment(temp);
+      }
+
+      // 3) Upload segmented image (populate segmentationUrl)
+      String? segmentationUrl;
+      try {
+        segmentationUrl = await _plantService.saveProcessedImage(
+          segmentedFile,
+          widget.plantId,
+          widget.id,
+          'segmentation',
+        );
+        await _firestore.collection('images').doc(widget.id).update({
+          'processedUrls.segmentation': segmentationUrl,
+        });
+      } catch (_) {}
+
+      // 4) Run plant species classifier for UI display
+      final segBytes = await segmentedFile.readAsBytes();
+      await _runPlantSpeciesClassifier(segBytes);
+
+      // 5) Persist minimal analysisResults (segmentationUrl and optional species)
+      final Map<String, Object?> updates = {
+        if (segmentationUrl != null)
+          'analysisResults.segmentationUrl': segmentationUrl,
+        'analysisResults.detectionTimestamp': DateTime.now().toIso8601String(),
+        if (_plantClass != null) 'analysisResults.plantSpecies': _plantClass,
+        if (_plantClassConf != null)
+          'analysisResults.plantSpeciesConfidence': _plantClassConf,
+      };
+      if (updates.isNotEmpty) {
+        await _firestore
+            .collection('plants')
+            .doc(widget.plantId)
+            .update(updates);
+      }
+      if (mounted)
+        setState(() {
+          _segPreviewRan = true;
+          _segPreviewUrl = segmentationUrl;
+        });
+    } catch (e, st) {
+      logger.e('[SegmentPage] Segmentation-only failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Segmentation failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isBusy = false);
@@ -724,6 +858,7 @@ class _SegmentPageState extends State<SegmentPage> {
               return Center(
                 heightFactor: 1,
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: LayoutBuilder(
@@ -1198,73 +1333,35 @@ class _SegmentPageState extends State<SegmentPage> {
                                     ),
                                   ),
                                 ],
-                                if (!((((_backgroundDetectionResult!['backgroundProbability']
-                                                        as num?)
-                                                    ?.toDouble() ??
-                                                0.0) >=
-                                            (1 - decisionThreshold) ||
-                                        !(_backgroundDetectionResult!['hasLeaves']
-                                                as bool? ??
-                                            true)) &&
-                                    !_manualOverride)) ...[
+                                ...[
                                   // continue with the rest content
                                   // Show subsequent content only if leaves are detected
                                   // Auto-trigger analysis if not already triggered and plant is not processing/completed
                                   if (!_isAnalysisTriggered &&
                                       status != 'processing' &&
                                       status != 'analyzing' &&
-                                      status != 'completed') ...[
-                                    // Trigger analysis automatically
-                                    FutureBuilder<void>(
-                                      future: _triggerPlantAnalysis(),
-                                      builder: (context, snapshot) {
-                                        return const Padding(
-                                          padding: EdgeInsets.only(top: 15.0),
-                                          child: Card(
-                                            child: Padding(
-                                              padding: EdgeInsets.all(15.0),
-                                              child: Column(
-                                                children: [
-                                                  Icon(
-                                                    Icons.auto_fix_high,
-                                                    size: 48,
-                                                    color: Colors.blue,
-                                                  ),
-                                                  SizedBox(height: 16),
-                                                  Text(
-                                                    'Plant Leaves Detected!',
-                                                    style: TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.blue,
-                                                    ),
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                  SizedBox(height: 12),
-                                                  Text(
-                                                    'Starting automatic segmentation and disease analysis...',
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                  SizedBox(height: 16),
-                                                  CircularProgressIndicator(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                      status != 'completed')
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 15.0),
+                                      child: ElevatedButton.icon(
+                                        onPressed:
+                                            _isBusy
+                                                ? null
+                                                : () async {
+                                                  await _segmentAndClassifyOnly();
+                                                },
+                                        icon: const Icon(Icons.auto_fix_high),
+                                        label: const Text(
+                                          'Run segmentation (preview)',
+                                        ),
+                                      ),
                                     ),
-                                  ],
 
                                   // Check for segmentation result in analysisResults
-                                  if (hasResults &&
-                                      analysisResults['segmentationUrl'] !=
-                                          null)
+                                  if ((hasResults &&
+                                          analysisResults['segmentationUrl'] !=
+                                              null) ||
+                                      _segPreviewUrl != null)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 15.0),
                                       child: Card(
@@ -1277,13 +1374,18 @@ class _SegmentPageState extends State<SegmentPage> {
                                               // Kick species classification on first render when URL is present
                                               Builder(
                                                 builder: (context) {
-                                                  final String segUrl =
-                                                      (analysisResults['segmentationUrl']
-                                                          as String);
+                                                  final String? segUrl =
+                                                      _segPreviewUrl ??
+                                                      (analysisResults?['segmentationUrl']
+                                                          as String?);
                                                   if (_plantClass == null &&
                                                       !_speciesLoading) {
                                                     // fire-and-forget
-                                                    _kickSpeciesFromUrl(segUrl);
+                                                    if (segUrl != null) {
+                                                      _kickSpeciesFromUrl(
+                                                        segUrl,
+                                                      );
+                                                    }
                                                   }
                                                   return const SizedBox.shrink();
                                                 },
@@ -1359,7 +1461,10 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 borderRadius:
                                                     BorderRadius.circular(5.0),
                                                 child: Image.network(
-                                                  analysisResults['segmentationUrl'],
+                                                  (_segPreviewUrl ??
+                                                          (analysisResults?['segmentationUrl']
+                                                              as String?)) ??
+                                                      '',
                                                   width: double.infinity,
                                                   fit: BoxFit.cover,
                                                   errorBuilder: (
@@ -1436,215 +1541,405 @@ class _SegmentPageState extends State<SegmentPage> {
                                                   },
                                                 ),
                                               ),
+                                              const SizedBox(height: 12),
+                                              // Species confirmation controls (English)
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          'Is the detected plant correct?',
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 13,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        _plantClass != null
+                                                            ? 'Plant: ${_plantClass!}  (${_plantClassConf != null ? (100 * _plantClassConf!).toStringAsFixed(1) + '%' : 'N/A'})'
+                                                            : 'Plant: N/A',
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.end,
+                                                    children: [
+                                                      TextButton(
+                                                        onPressed:
+                                                            _isBusy
+                                                                ? null
+                                                                : () async {
+                                                                  setState(() {
+                                                                    _analysisConfirmed =
+                                                                        true;
+                                                                  });
+                                                                  await _runLocalSegmentationAndRetrigger();
+                                                                },
+                                                        child: const Text(
+                                                          'Yes, continue',
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      OutlinedButton(
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            _speciesOverrideActive =
+                                                                true;
+                                                          });
+                                                          // keep scroll position after expanding selector
+                                                          WidgetsBinding
+                                                              .instance
+                                                              .addPostFrameCallback((
+                                                                _,
+                                                              ) {
+                                                                if (!mounted)
+                                                                  return;
+                                                                if (_scrollController
+                                                                    .hasClients) {
+                                                                  _scrollController.jumpTo(
+                                                                    _scrollController
+                                                                        .position
+                                                                        .pixels,
+                                                                  );
+                                                                }
+                                                              });
+                                                        },
+                                                        child: const Text(
+                                                          "No, I'll choose",
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (_speciesOverrideActive) ...[
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: DropdownButtonFormField<
+                                                            String
+                                                          >(
+                                                            value:
+                                                                _speciesOverrideSelection,
+                                                            decoration: const InputDecoration(
+                                                              isDense: true,
+                                                              border:
+                                                                  OutlineInputBorder(),
+                                                              labelText:
+                                                                  'Select a plant',
+                                                            ),
+                                                            items: const [
+                                                              DropdownMenuItem(
+                                                                value: 'corn',
+                                                                child: Text(
+                                                                  'corn',
+                                                                ),
+                                                              ),
+                                                              DropdownMenuItem(
+                                                                value: 'apple',
+                                                                child: Text(
+                                                                  'apple',
+                                                                ),
+                                                              ),
+                                                              DropdownMenuItem(
+                                                                value: 'grape',
+                                                                child: Text(
+                                                                  'grape',
+                                                                ),
+                                                              ),
+                                                              DropdownMenuItem(
+                                                                value: 'pepper',
+                                                                child: Text(
+                                                                  'pepper',
+                                                                ),
+                                                              ),
+                                                              DropdownMenuItem(
+                                                                value: 'potato',
+                                                                child: Text(
+                                                                  'potato',
+                                                                ),
+                                                              ),
+                                                              DropdownMenuItem(
+                                                                value: 'tomato',
+                                                                child: Text(
+                                                                  'tomato',
+                                                                ),
+                                                              ),
+                                                            ],
+                                                            onChanged: (v) {
+                                                              setState(() {
+                                                                _speciesOverrideSelection =
+                                                                    v;
+                                                              });
+                                                            },
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        ElevatedButton(
+                                                          onPressed:
+                                                              (_isBusy ||
+                                                                      _speciesOverrideSelection ==
+                                                                          null)
+                                                                  ? null
+                                                                  : () async {
+                                                                    setState(() {
+                                                                      _plantClass =
+                                                                          _speciesOverrideSelection;
+                                                                      _forcedSpecies =
+                                                                          _speciesOverrideSelection;
+                                                                      _speciesOverrideActive =
+                                                                          false;
+                                                                      _analysisConfirmed =
+                                                                          true;
+                                                                    });
+                                                                    await _runLocalSegmentationAndRetrigger();
+                                                                    // clear forced species after one run
+                                                                    if (mounted) {
+                                                                      setState(() {
+                                                                        _forcedSpecies =
+                                                                            null;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                          child: const Text(
+                                                            'Run with selection',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
                                             ],
                                           ),
                                         ),
                                       ),
                                     ),
 
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 10.0,
-                                    ),
-                                    child: Card(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(15.0),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          spacing: 5.0,
-                                          children: [
-                                            const Center(
-                                              child: Text(
-                                                "Analysis Results",
-                                                style: KTextStyle.titleTealText,
-                                              ),
-                                            ),
-                                            if (_plantClass != null &&
-                                                _plantClass != 'corn' &&
-                                                _plantClass != 'pepper' &&
-                                                _plantClass != 'grape')
-                                              const Padding(
-                                                padding: EdgeInsets.only(
-                                                  top: 4.0,
+                                  if (_analysisConfirmed)
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10.0,
+                                      ),
+                                      child: Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(15.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            spacing: 5.0,
+                                            children: [
+                                              const Center(
+                                                child: Text(
+                                                  "Analysis Results",
+                                                  style:
+                                                      KTextStyle.titleTealText,
                                                 ),
-                                                child: Center(
-                                                  child: Text(
-                                                    'This plant is not recognized by our specialized models. Accuracy is for reference only.',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: Colors.grey,
+                                              ),
+                                              if (_plantClass != null &&
+                                                  _plantClass != 'corn' &&
+                                                  _plantClass != 'pepper' &&
+                                                  _plantClass != 'grape')
+                                                const Padding(
+                                                  padding: EdgeInsets.only(
+                                                    top: 4.0,
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'This plant is not recognized by our specialized models. Accuracy is for reference only.',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
                                                     ),
-                                                    textAlign: TextAlign.center,
                                                   ),
                                                 ),
-                                              ),
-                                            const SizedBox(height: 10),
-                                            // Handle different statuses
-                                            if (status == 'processing' ||
-                                                status == 'analyzing')
-                                              ListTile(
-                                                leading:
-                                                    const CircularProgressIndicator(
-                                                      strokeWidth: 2,
+                                              const SizedBox(height: 10),
+                                              // Handle different statuses
+                                              if (status == 'processing' ||
+                                                  status == 'analyzing')
+                                                ListTile(
+                                                  leading:
+                                                      const CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                  title: const Text(
+                                                    'Analysis in progress...',
+                                                  ),
+                                                  subtitle: const Text(
+                                                    'Results will appear here shortly.',
+                                                  ),
+                                                  trailing: IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete_outline,
+                                                      color: Colors.red,
                                                     ),
-                                                title: const Text(
-                                                  'Analysis in progress...',
-                                                ),
-                                                subtitle: const Text(
-                                                  'Results will appear here shortly.',
-                                                ),
-                                                trailing: IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete_outline,
+                                                    onPressed:
+                                                        () => _confirmDelete(
+                                                          context,
+                                                        ),
+                                                    tooltip: 'Cancel analysis',
+                                                  ),
+                                                )
+                                              else if (status == 'error')
+                                                ListTile(
+                                                  leading: const Icon(
+                                                    Icons.error_outline,
                                                     color: Colors.red,
                                                   ),
-                                                  onPressed:
-                                                      () => _confirmDelete(
-                                                        context,
-                                                      ),
-                                                  tooltip: 'Cancel analysis',
-                                                ),
-                                              )
-                                            else if (status == 'error')
-                                              ListTile(
-                                                leading: const Icon(
-                                                  Icons.error_outline,
-                                                  color: Colors.red,
-                                                ),
-                                                title: const Text(
-                                                  'Analysis Failed',
-                                                ),
-                                                subtitle: Text(
-                                                  analysisErrorMsg ??
-                                                      'An unknown error occurred.',
-                                                ),
-                                              )
-                                            // Display results if completed
-                                            else if (status == 'completed') ...[
-                                              if (hasResults) ...[
-                                                if (detectedDisease ==
-                                                    'No disease detected')
-                                                  const ListTile(
-                                                    leading: Icon(
-                                                      Icons
-                                                          .check_circle_outline,
-                                                      color: Colors.green,
-                                                    ),
-                                                    title: Text(
-                                                      'Analysis Completed',
-                                                    ),
-                                                    subtitle: Text(
-                                                      'No disease detected above the confidence threshold.',
-                                                    ),
-                                                  )
-                                                else if (isLowConfidence)
-                                                  _buildLowConfidenceInfo(
-                                                    displayDiseaseName,
-                                                    diseaseConfidence,
-                                                  )
-                                                else
-                                                  _buildStandardResults(
-                                                    displayDiseaseName,
-                                                    diseaseConfidence,
-                                                  ),
-                                                // Always show detection time if available
-                                                _buildResultTile(
-                                                  icon: Icons.timer_outlined,
-                                                  label: 'Detection Time',
-                                                  value: _formatTimestamp(
-                                                    analysisResults['detectionTimestamp']
-                                                        ?.toString(),
-                                                  ),
-                                                ),
-
-                                                // Add delete button
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                        top: 16.0,
-                                                      ),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.end,
-                                                    children: [
-                                                      TextButton.icon(
-                                                        style:
-                                                            TextButton.styleFrom(
-                                                              foregroundColor:
-                                                                  Colors.red,
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons.delete_outline,
-                                                        ),
-                                                        label: const Text(
-                                                          'Delete Result',
-                                                        ),
-                                                        onPressed:
-                                                            () =>
-                                                                _confirmDelete(
-                                                                  context,
-                                                                ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ] else
-                                                const ListTile(
-                                                  leading: Icon(
-                                                    Icons.info_outline,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  title: Text(
-                                                    "No analysis results available.",
+                                                  title: const Text(
+                                                    'Analysis Failed',
                                                   ),
                                                   subtitle: Text(
-                                                    "The analysis completed, but no specific results were found.",
+                                                    analysisErrorMsg ??
+                                                        'An unknown error occurred.',
+                                                  ),
+                                                )
+                                              // Display results if completed
+                                              else if (status ==
+                                                  'completed') ...[
+                                                if (hasResults) ...[
+                                                  if (detectedDisease ==
+                                                      'No disease detected')
+                                                    const ListTile(
+                                                      leading: Icon(
+                                                        Icons
+                                                            .check_circle_outline,
+                                                        color: Colors.green,
+                                                      ),
+                                                      title: Text(
+                                                        'Analysis Completed',
+                                                      ),
+                                                      subtitle: Text(
+                                                        'No disease detected above the confidence threshold.',
+                                                      ),
+                                                    )
+                                                  else if (isLowConfidence)
+                                                    _buildLowConfidenceInfo(
+                                                      displayDiseaseName,
+                                                      diseaseConfidence,
+                                                    )
+                                                  else
+                                                    _buildStandardResults(
+                                                      displayDiseaseName,
+                                                      diseaseConfidence,
+                                                    ),
+                                                  // Always show detection time if available
+                                                  _buildResultTile(
+                                                    icon: Icons.timer_outlined,
+                                                    label: 'Detection Time',
+                                                    value: _formatTimestamp(
+                                                      analysisResults['detectionTimestamp']
+                                                          ?.toString(),
+                                                    ),
+                                                  ),
+
+                                                  // Add delete button
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 16.0,
+                                                        ),
+                                                    child: Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment.end,
+                                                      children: [
+                                                        TextButton.icon(
+                                                          style:
+                                                              TextButton.styleFrom(
+                                                                foregroundColor:
+                                                                    Colors.red,
+                                                              ),
+                                                          icon: const Icon(
+                                                            Icons
+                                                                .delete_outline,
+                                                          ),
+                                                          label: const Text(
+                                                            'Delete Result',
+                                                          ),
+                                                          onPressed:
+                                                              () =>
+                                                                  _confirmDelete(
+                                                                    context,
+                                                                  ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ] else
+                                                  const ListTile(
+                                                    leading: Icon(
+                                                      Icons.info_outline,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    title: Text(
+                                                      "No analysis results available.",
+                                                    ),
+                                                    subtitle: Text(
+                                                      "The analysis completed, but no specific results were found.",
+                                                    ),
+                                                  ),
+                                              ] else // Handle other statuses like 'pending' or unknown
+                                                ListTile(
+                                                  leading: const Icon(
+                                                    Icons.hourglass_empty,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  title: const Text(
+                                                    'Analysis Pending',
+                                                  ),
+                                                  subtitle: Text(
+                                                    'Status: $status',
                                                   ),
                                                 ),
-                                            ] else // Handle other statuses like 'pending' or unknown
-                                              ListTile(
-                                                leading: const Icon(
-                                                  Icons.hourglass_empty,
-                                                  color: Colors.grey,
-                                                ),
-                                                title: const Text(
-                                                  'Analysis Pending',
-                                                ),
-                                                subtitle: Text(
-                                                  'Status: $status',
-                                                ),
-                                              ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  FutureBuilder<String>(
-                                    future: _generateSuggestion(
-                                      detectedDisease,
-                                      diseaseConfidence,
+                                  if (_analysisConfirmed)
+                                    FutureBuilder<String>(
+                                      future: _generateSuggestion(
+                                        detectedDisease,
+                                        diseaseConfidence,
+                                      ),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.connectionState ==
+                                            ConnectionState.waiting) {
+                                          return _buildAiSuggestionBox(
+                                            'Generating AI suggestion...',
+                                          );
+                                        } else if (snapshot.hasError) {
+                                          return _buildAiSuggestionBox(
+                                            'Failed to generate suggestion.',
+                                          );
+                                        } else {
+                                          return _buildAiSuggestionBox(
+                                            snapshot.data ??
+                                                'No suggestion available.',
+                                          );
+                                        }
+                                      },
                                     ),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.connectionState ==
-                                          ConnectionState.waiting) {
-                                        return _buildAiSuggestionBox(
-                                          'Generating AI suggestion...',
-                                        );
-                                      } else if (snapshot.hasError) {
-                                        return _buildAiSuggestionBox(
-                                          'Failed to generate suggestion.',
-                                        );
-                                      } else {
-                                        return _buildAiSuggestionBox(
-                                          snapshot.data ??
-                                              'No suggestion available.',
-                                        );
-                                      }
-                                    },
-                                  ),
-                                  buildAsteriskFootnotes(),
+                                  if (_analysisConfirmed)
+                                    buildAsteriskFootnotes(),
                                 ],
                               ],
                             ],
