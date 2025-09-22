@@ -15,6 +15,7 @@ import 'package:flutter_test_application_1/services/background_detection_service
 
 import 'package:http/http.dart' as http; // Import for http requests
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
@@ -68,6 +69,7 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _plantClass;
   double? _plantClassConf;
   bool _speciesLoading = false;
+  bool _manualOverride = false;
 
   Future<File> _downloadToTemp(Uint8List bytes) async {
     final dir = Directory.systemTemp;
@@ -145,6 +147,12 @@ class _SegmentPageState extends State<SegmentPage> {
       modelPath = 'assets/models/pepper_disease_detector.tflite';
     } else if (species == 'grape') {
       modelPath = 'assets/models/grape_disease_detector.tflite';
+    } else if (species == 'apple') {
+      modelPath = 'assets/models/apple_mnv3_float32.tflite';
+    } else if (species == 'potato') {
+      modelPath = 'assets/models/potato_mnv3_float32.tflite';
+    } else if (species == 'tomato') {
+      modelPath = 'assets/models/tomato_mnv3_float32.tflite';
     } else {
       // fallback to original
       final res = await InferenceService().analyzeImage(
@@ -1076,6 +1084,26 @@ class _SegmentPageState extends State<SegmentPage> {
                                 ),
                               ),
 
+                              // Manually Overwrite button (fixed position under Background Detection)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10.0),
+                                child: Center(
+                                  child: ElevatedButton.icon(
+                                    onPressed:
+                                        _isBusy
+                                            ? null
+                                            : () async {
+                                              setState(() {
+                                                _manualOverride = true;
+                                              });
+                                              await _resegmentAndDetectAndWrite();
+                                            },
+                                    icon: const Icon(Icons.flash_on),
+                                    label: const Text('Manually Overwrite'),
+                                  ),
+                                ),
+                              ),
+
                               // Check if background detection indicates no leaves (high background probability = no leaves)
                               // Only show subsequent content if leaves are detected
                               if (_isBackgroundDetectionComplete &&
@@ -1084,14 +1112,15 @@ class _SegmentPageState extends State<SegmentPage> {
                                       null) ...[
                                 // Check if background detection shows high probability for background (no leaves)
                                 // Note: backgroundProbability = probability of being background without leaves
-                                if (((_backgroundDetectionResult!['backgroundProbability']
-                                                    as num?)
-                                                ?.toDouble() ??
-                                            0.0) >=
-                                        (1 - decisionThreshold) ||
-                                    !(_backgroundDetectionResult!['hasLeaves']
-                                            as bool? ??
-                                        true)) ...[
+                                if ((((_backgroundDetectionResult!['backgroundProbability']
+                                                        as num?)
+                                                    ?.toDouble() ??
+                                                0.0) >=
+                                            (1 - decisionThreshold) ||
+                                        !(_backgroundDetectionResult!['hasLeaves']
+                                                as bool? ??
+                                            true)) &&
+                                    !_manualOverride) ...[
                                   // Show message when background is detected with high confidence
                                   Padding(
                                     padding: const EdgeInsets.only(top: 15.0),
@@ -1105,6 +1134,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                               size: 48,
                                               color: Colors.orange,
                                             ),
+                                            const SizedBox(height: 12),
                                             const SizedBox(height: 16),
                                             const Text(
                                               'No Plant Leaves Detected',
@@ -1161,12 +1191,23 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 ],
                                               ),
                                             ),
+                                            const SizedBox(height: 12),
                                           ],
                                         ),
                                       ),
                                     ),
                                   ),
-                                ] else ...[
+                                ],
+                                if (!((((_backgroundDetectionResult!['backgroundProbability']
+                                                        as num?)
+                                                    ?.toDouble() ??
+                                                0.0) >=
+                                            (1 - decisionThreshold) ||
+                                        !(_backgroundDetectionResult!['hasLeaves']
+                                                as bool? ??
+                                            true)) &&
+                                    !_manualOverride)) ...[
+                                  // continue with the rest content
                                   // Show subsequent content only if leaves are detected
                                   // Auto-trigger analysis if not already triggered and plant is not processing/completed
                                   if (!_isAnalysisTriggered &&
