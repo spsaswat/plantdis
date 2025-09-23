@@ -74,9 +74,27 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _speciesOverrideSelection;
   bool _analysisConfirmed = false;
   final ScrollController _scrollController = ScrollController();
-  bool _segPreviewRan = false;
   String? _segPreviewUrl;
   String? _forcedSpecies; // if user overrides species selection, use this once
+
+  // Cache species classifier labels and last probabilities for UI confidence display
+  static const List<String> _speciesLabels = [
+    'apple',
+    'blueberry',
+    'cherry',
+    'corn',
+    'grape',
+    'orange',
+    'peach',
+    'pepper',
+    'potato',
+    'raspberry',
+    'soybean',
+    'squash',
+    'strawberry',
+    'tomato',
+  ];
+  List<double>? _lastSpeciesProbs;
 
   Future<File> _downloadToTemp(Uint8List bytes) async {
     final dir = Directory.systemTemp;
@@ -119,27 +137,13 @@ class _SegmentPageState extends State<SegmentPage> {
         maxIdx = i;
       }
     }
-    const labels = [
-      'apple',
-      'blueberry',
-      'cherry',
-      'corn',
-      'grape',
-      'orange',
-      'peach',
-      'pepper',
-      'potato',
-      'raspberry',
-      'soybean',
-      'squash',
-      'strawberry',
-      'tomato',
-    ];
+    const labels = _speciesLabels;
     if (mounted) {
       final species = labels[maxIdx].toLowerCase().trim();
       setState(() {
         _plantClass = species;
         _plantClassConf = maxVal;
+        _lastSpeciesProbs = probs;
       });
     }
   }
@@ -334,8 +338,17 @@ class _SegmentPageState extends State<SegmentPage> {
       // 4) Run detection on segmented image bytes (local inference)
       final segBytes = await segmentedFile.readAsBytes();
 
-      // 4a) Run plant species classifier first
-      await _runPlantSpeciesClassifier(segBytes);
+      // 4a) Determine plant species
+      if (_forcedSpecies != null) {
+        if (mounted) {
+          setState(() {
+            _plantClass = _forcedSpecies;
+            _plantClassConf = null; // confidence not applicable when forced
+          });
+        }
+      } else {
+        await _runPlantSpeciesClassifier(segBytes);
+      }
 
       // 4b) Choose disease model based on species
       final Uint8List bytesForDisease = segBytes;
@@ -381,7 +394,6 @@ class _SegmentPageState extends State<SegmentPage> {
       if (mounted) {
         setState(() {
           _isBusy = true;
-          _segPreviewRan = true;
         });
       }
 
@@ -440,7 +452,6 @@ class _SegmentPageState extends State<SegmentPage> {
       }
       if (mounted)
         setState(() {
-          _segPreviewRan = true;
           _segPreviewUrl = segmentationUrl;
         });
     } catch (e, st) {
@@ -564,37 +575,7 @@ class _SegmentPageState extends State<SegmentPage> {
     }
   }
 
-  /// Trigger plant analysis workflow (segmentation + disease detection)
-  Future<void> _triggerPlantAnalysis() async {
-    if (_isAnalysisTriggered) return; // Prevent duplicate triggers
-
-    setState(() {
-      _isAnalysisTriggered = true;
-    });
-
-    try {
-      // Update plant status to processing
-      await _firestore.collection('plants').doc(widget.plantId).update({
-        'status': 'processing',
-        'analysisError': null,
-      });
-
-      if (kDebugMode) {
-        logger.i('[SegmentPage] Started plant analysis for ${widget.plantId}');
-      }
-
-      // The actual analysis will be handled by the backend/cloud functions
-      // This just triggers the process by updating the status
-    } catch (e, stackTrace) {
-      logger.e('[SegmentPage] Error triggering analysis: $e\n$stackTrace');
-
-      // Update status to error
-      await _firestore.collection('plants').doc(widget.plantId).update({
-        'status': 'error',
-        'analysisError': 'Failed to trigger analysis: ${e.toString()}',
-      });
-    }
-  }
+  // removed unused _triggerPlantAnalysis
 
   /// Format method name for display
   String _formatMethodName(String method) {
@@ -1219,7 +1200,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                 ),
                               ),
 
-                              // Manually Overwrite button (fixed position under Background Detection)
+                              // Manually Overide button (fixed position under Background Detection)
                               Padding(
                                 padding: const EdgeInsets.only(top: 10.0),
                                 child: Center(
@@ -1234,7 +1215,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                               await _resegmentAndDetectAndWrite();
                                             },
                                     icon: const Icon(Icons.flash_on),
-                                    label: const Text('Manually Overwrite'),
+                                    label: const Text('Manually Overide'),
                                   ),
                                 ),
                               ),
@@ -1402,36 +1383,6 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 mainAxisAlignment:
                                                     MainAxisAlignment.end,
                                                 children: [
-                                                  if (_plantClass != null &&
-                                                      _plantClassConf != null)
-                                                    Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Text(
-                                                          'Plant: ${_plantClass!}',
-                                                          style:
-                                                              const TextStyle(
-                                                                fontSize: 12,
-                                                              ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Text(
-                                                          'Conf: ${(100 * _plantClassConf!).toStringAsFixed(1)}%',
-                                                          style:
-                                                              const TextStyle(
-                                                                fontSize: 11,
-                                                                color:
-                                                                    Colors.grey,
-                                                              ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 12,
-                                                        ),
-                                                      ],
-                                                    ),
                                                   DropdownButton<String>(
                                                     value: _selectedSegModel,
                                                     items: const [
@@ -1561,14 +1512,54 @@ class _SegmentPageState extends State<SegmentPage> {
                                                               ),
                                                         ),
                                                       ),
-                                                      Text(
-                                                        _plantClass != null
-                                                            ? 'Plant: ${_plantClass!}  (${_plantClassConf != null ? (100 * _plantClassConf!).toStringAsFixed(1) + '%' : 'N/A'})'
-                                                            : 'Plant: N/A',
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors.grey,
-                                                        ),
+                                                      Builder(
+                                                        builder: (context) {
+                                                          String text;
+                                                          if (_plantClass ==
+                                                              null) {
+                                                            text = 'Plant: N/A';
+                                                          } else {
+                                                            double? conf =
+                                                                _plantClassConf;
+                                                            if (conf == null &&
+                                                                _lastSpeciesProbs !=
+                                                                    null) {
+                                                              final idx =
+                                                                  _speciesLabels
+                                                                      .indexOf(
+                                                                        _plantClass!,
+                                                                      );
+                                                              if (idx >= 0 &&
+                                                                  idx <
+                                                                      _lastSpeciesProbs!
+                                                                          .length) {
+                                                                conf =
+                                                                    _lastSpeciesProbs![idx];
+                                                              }
+                                                            }
+                                                            final confStr =
+                                                                conf != null
+                                                                    ? (100 *
+                                                                                conf)
+                                                                            .toStringAsFixed(
+                                                                              1,
+                                                                            ) +
+                                                                        '%'
+                                                                    : 'N/A';
+                                                            text =
+                                                                'Plant: ${_plantClass!}  ($confStr)';
+                                                          }
+                                                          return Text(
+                                                            text,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 12,
+                                                                  color:
+                                                                      Colors
+                                                                          .grey,
+                                                                ),
+                                                          );
+                                                        },
                                                       ),
                                                     ],
                                                   ),
@@ -1585,8 +1576,16 @@ class _SegmentPageState extends State<SegmentPage> {
                                                                   setState(() {
                                                                     _analysisConfirmed =
                                                                         true;
+                                                                    _forcedSpecies =
+                                                                        _plantClass; // honor current species
                                                                   });
                                                                   await _runLocalSegmentationAndRetrigger();
+                                                                  if (mounted) {
+                                                                    setState(() {
+                                                                      _forcedSpecies =
+                                                                          null; // clear after one run
+                                                                    });
+                                                                  }
                                                                 },
                                                         child: const Text(
                                                           'Yes, continue',
@@ -1754,7 +1753,10 @@ class _SegmentPageState extends State<SegmentPage> {
                                               if (_plantClass != null &&
                                                   _plantClass != 'corn' &&
                                                   _plantClass != 'pepper' &&
-                                                  _plantClass != 'grape')
+                                                  _plantClass != 'grape' &&
+                                                  _plantClass != 'apple' &&
+                                                  _plantClass != 'potato' &&
+                                                  _plantClass != 'tomato')
                                                 const Padding(
                                                   padding: EdgeInsets.only(
                                                     top: 4.0,
