@@ -1212,7 +1212,8 @@ class _SegmentPageState extends State<SegmentPage> {
                                               setState(() {
                                                 _manualOverride = true;
                                               });
-                                              await _resegmentAndDetectAndWrite();
+                                              // Run segmentation first to show the result
+                                              await _segmentAndClassifyOnly();
                                             },
                                     icon: const Icon(Icons.flash_on),
                                     label: const Text('Manually Overide'),
@@ -1339,10 +1340,16 @@ class _SegmentPageState extends State<SegmentPage> {
                                     ),
 
                                   // Check for segmentation result in analysisResults
-                                  if ((hasResults &&
-                                          analysisResults['segmentationUrl'] !=
-                                              null) ||
-                                      _segPreviewUrl != null)
+                                  // Only show if leaves are detected OR manual override is active
+                                  if (((hasResults &&
+                                              analysisResults['segmentationUrl'] !=
+                                                  null) ||
+                                          _segPreviewUrl != null) &&
+                                      ((_backgroundDetectionResult != null &&
+                                              (_backgroundDetectionResult!['hasLeaves']
+                                                      as bool? ??
+                                                  false)) ||
+                                          _manualOverride))
                                     Padding(
                                       padding: const EdgeInsets.only(top: 15.0),
                                       child: Card(
