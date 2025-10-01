@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:path/path.dart' as p;
+// Removed dependency on 'path' to avoid depend_on_referenced_packages in tests
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 /// ---- Project paths ----
@@ -23,20 +23,29 @@ void main() {
 
     setUpAll(() async {
       // Sanity checks
-      expect(File(kModelPath).existsSync(), true,
-          reason: 'Model file not found at $kModelPath');
-      expect(Directory(kTestRoot).existsSync(), true,
-          reason: 'Test data directory not found at $kTestRoot');
+      expect(
+        File(kModelPath).existsSync(),
+        true,
+        reason: 'Model file not found at $kModelPath',
+      );
+      expect(
+        Directory(kTestRoot).existsSync(),
+        true,
+        reason: 'Test data directory not found at $kTestRoot',
+      );
 
       // Load interpreter
-      interpreter = await Interpreter.fromFile(File(kModelPath));
+      interpreter = Interpreter.fromFile(File(kModelPath));
       inputShape = interpreter.getInputTensor(0).shape;
       outputShape = interpreter.getOutputTensor(0).shape;
 
       // Expect NHWC input and single sigmoid output
       expect(inputShape.length, anyOf([4, 3]));
-      expect(outputShape.reduce((a, b) => a * b), 1,
-          reason: 'Model output is expected to be a single sigmoid value.');
+      expect(
+        outputShape.reduce((a, b) => a * b),
+        1,
+        reason: 'Model output is expected to be a single sigmoid value.',
+      );
     });
 
     tearDownAll(() {
@@ -54,8 +63,8 @@ void main() {
       for (final s in samples) {
         final tensor = _preprocessToInput(s.imagePath);
         final prob = _infer(interpreter, tensor);
-        probs.add(prob);           // probability of class "no_plant"
-        labels.add(s.labelIndex);  // 0=has_plant, 1=no_plant
+        probs.add(prob); // probability of class "no_plant"
+        labels.add(s.labelIndex); // 0=has_plant, 1=no_plant
       }
       final totalMs = stopwatch.elapsedMilliseconds;
 
@@ -77,17 +86,22 @@ void main() {
       // Default threshold quality gate
       final defaultTh = 0.5;
       final defaultPreds = probs.map((p) => p > defaultTh ? 1 : 0).toList();
-      final defaultMetrics =
-          _computeMetrics(labels, defaultPreds, numClasses: 2);
+      final defaultMetrics = _computeMetrics(
+        labels,
+        defaultPreds,
+        numClasses: 2,
+      );
 
       final avgMs = totalMs / samples.length;
       // ignore: avoid_print
       print('Avg inference time: ${avgMs.toStringAsFixed(2)} ms');
 
-      expect(defaultMetrics.accuracy,
-          greaterThanOrEqualTo(kMinAccuracyAtDefaultThreshold),
-          reason:
-              'Accuracy at threshold $defaultTh is too low: ${defaultMetrics.accuracy.toStringAsFixed(4)}');
+      expect(
+        defaultMetrics.accuracy,
+        greaterThanOrEqualTo(kMinAccuracyAtDefaultThreshold),
+        reason:
+            'Accuracy at threshold $defaultTh is too low: ${defaultMetrics.accuracy.toStringAsFixed(4)}',
+      );
     });
   });
 }
@@ -106,7 +120,7 @@ Future<List<_Sample>> _loadDataset(String root) async {
   final result = <_Sample>[];
   for (int label = 0; label < kClassNames.length; label++) {
     final cls = kClassNames[label];
-    final dir = Directory(p.join(root, cls));
+    final dir = Directory('$root/$cls');
     if (!dir.existsSync()) continue;
 
     for (final ent in dir.listSync(recursive: true)) {
@@ -137,16 +151,18 @@ List<List<List<List<double>>>> _preprocessToInput(String imagePath) {
 
   // Convert to float32 [1,h,w,3], normalized to [0,1]
   final tensor = List.generate(
-      1,
-      (_) => List.generate(
-          h,
-          (y) => List.generate(w, (x) {
-                final pixel = resized.getPixel(x, y);
-                final r = img.getRed(pixel) / 255.0;
-                final g = img.getGreen(pixel) / 255.0;
-                final b = img.getBlue(pixel) / 255.0;
-                return <double>[r, g, b];
-              })));
+    1,
+    (_) => List.generate(
+      h,
+      (y) => List.generate(w, (x) {
+        final pixel = resized.getPixel(x, y);
+        final r = img.getRed(pixel) / 255.0;
+        final g = img.getGreen(pixel) / 255.0;
+        final b = img.getBlue(pixel) / 255.0;
+        return <double>[r, g, b];
+      }),
+    ),
+  );
   return tensor;
 }
 
@@ -166,14 +182,19 @@ class _Metrics {
 }
 
 /// Compute accuracy and confusion matrix.
-_Metrics _computeMetrics(List<int> yTrue, List<int> yPred,
-    {required int numClasses}) {
+_Metrics _computeMetrics(
+  List<int> yTrue,
+  List<int> yPred, {
+  required int numClasses,
+}) {
   assert(yTrue.length == yPred.length && yTrue.isNotEmpty);
   final n = yTrue.length;
 
   final cm = List.generate(
-      numClasses, (_) => List.filled(numClasses, 0, growable: false),
-      growable: false);
+    numClasses,
+    (_) => List.filled(numClasses, 0, growable: false),
+    growable: false,
+  );
 
   var correct = 0;
   for (var i = 0; i < n; i++) {
@@ -192,30 +213,11 @@ String _formatCM(List<List<int>> cm, List<String> labels) {
   buf.writeln();
   buf.writeln('      ' + labels.map(pad).join(' | '));
   for (var i = 0; i < cm.length; i++) {
-    buf.writeln('${pad(labels[i])} : ${cm[i].map((v) => v.toString().padLeft(3)).join(' | ')}');
+    buf.writeln(
+      '${pad(labels[i])} : ${cm[i].map((v) => v.toString().padLeft(3)).join(' | ')}',
+    );
   }
   return buf.toString();
 }
 
-/// Tiny helper to reshape List (since we avoided extra packages).
-extension _Reshape on List {
-  List reshape(List<int> dims) {
-    assert(dims.fold<int>(1, (a, b) => a * b) == length);
-    List rec(List list, int d) {
-      if (d == dims.length - 1) {
-        final start = 0;
-        final end = dims[d];
-        final chunk = list.sublist(start, end);
-        return chunk;
-      }
-      final size = dims.sublist(d + 1).fold<int>(1, (a, b) => a * b);
-      final out = <dynamic>[];
-      for (var i = 0; i < dims[d]; i++) {
-        out.add(rec(list.sublist(i * size, (i + 1) * size), d + 1));
-      }
-      return out;
-    }
-
-    return rec(this, 0) as List;
-  }
-}
+// Removed unused reshape extension to fix lints

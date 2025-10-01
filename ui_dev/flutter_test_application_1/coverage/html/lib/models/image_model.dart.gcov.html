@@ -1,0 +1,121 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - lcov.info - lib/models/image_model.dart</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../index.html" title="Click to go to top-level">top level</a> - <a href="index.html" title="Click to go to directory lib/models">lib/models</a> - image_model.dart</td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">lcov.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntry">19</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2025-10-01 12:14:50</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : import 'package:cloud_firestore/cloud_firestore.dart';</span>
+<span id="L2"><span class="lineNum">       2</span>              : </span>
+<span id="L3"><span class="lineNum">       3</span>              : class ImageModel {</span>
+<span id="L4"><span class="lineNum">       4</span>              :   final String imageId;</span>
+<span id="L5"><span class="lineNum">       5</span>              :   final String plantId;</span>
+<span id="L6"><span class="lineNum">       6</span>              :   final String userId;</span>
+<span id="L7"><span class="lineNum">       7</span>              :   final String originalUrl;</span>
+<span id="L8"><span class="lineNum">       8</span>              :   final Map&lt;String, String&gt; processedUrls;</span>
+<span id="L9"><span class="lineNum">       9</span>              :   final DateTime uploadTime;</span>
+<span id="L10"><span class="lineNum">      10</span>              :   final Map&lt;String, dynamic&gt;? metadata;</span>
+<span id="L11"><span class="lineNum">      11</span>              : </span>
+<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">           1 :   ImageModel({</span></span>
+<span id="L13"><span class="lineNum">      13</span>              :     required this.imageId,</span>
+<span id="L14"><span class="lineNum">      14</span>              :     required this.plantId,</span>
+<span id="L15"><span class="lineNum">      15</span>              :     required this.userId,</span>
+<span id="L16"><span class="lineNum">      16</span>              :     required this.originalUrl,</span>
+<span id="L17"><span class="lineNum">      17</span>              :     required this.processedUrls,</span>
+<span id="L18"><span class="lineNum">      18</span>              :     required this.uploadTime,</span>
+<span id="L19"><span class="lineNum">      19</span>              :     this.metadata,</span>
+<span id="L20"><span class="lineNum">      20</span>              :   });</span>
+<span id="L21"><span class="lineNum">      21</span>              : </span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :   Map&lt;String, dynamic&gt; toMap() {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :     return {</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :       'imageId': imageId,</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :       'plantId': plantId,</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :       'userId': userId,</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :       'originalUrl': originalUrl,</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :       'processedUrls': processedUrls,</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           2 :       'uploadTime': Timestamp.fromDate(uploadTime),</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :       'metadata': metadata,</span></span>
+<span id="L31"><span class="lineNum">      31</span>              :     };</span>
+<span id="L32"><span class="lineNum">      32</span>              :   }</span>
+<span id="L33"><span class="lineNum">      33</span>              : </span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :   factory ImageModel.fromMap(Map&lt;String, dynamic&gt; map) {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     return ImageModel(</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :       imageId: map['imageId'] as String,</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :       plantId: map['plantId'] as String,</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :       userId: map['userId'] as String,</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :       originalUrl: map['originalUrl'] as String,</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           2 :       processedUrls: Map&lt;String, String&gt;.from(map['processedUrls']),</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           2 :       uploadTime: (map['uploadTime'] as Timestamp).toDate(),</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :       metadata: map['metadata'] as Map&lt;String, dynamic&gt;?,</span></span>
+<span id="L43"><span class="lineNum">      43</span>              :     );</span>
+<span id="L44"><span class="lineNum">      44</span>              :   }</span>
+<span id="L45"><span class="lineNum">      45</span>              : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.3.2-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

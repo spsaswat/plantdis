@@ -64,7 +64,7 @@ class _SegmentPageState extends State<SegmentPage> {
   static const double decisionThreshold = 0.7; // Leaf decision threshold
 
   // Segmentation model selector
-  String _selectedSegModel = 'tflite'; // 'tflite' | 'onnx'
+  String _selectedSegModel = 'onnx'; // 'tflite' | 'onnx'
   bool _isBusy = false;
   String? _plantClass;
   double? _plantClassConf;

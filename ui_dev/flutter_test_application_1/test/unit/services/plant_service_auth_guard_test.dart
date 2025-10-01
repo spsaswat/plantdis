@@ -1,7 +1,5 @@
 import 'dart:typed_data';
-import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image_picker/image_picker.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -43,13 +41,24 @@ void main() {
       const imageId = 'img_xyz789';
       const extension = 'jpg';
 
-      final originalPath = getOriginalImagePath(userId, plantId, imageId, extension);
+      final originalPath = getOriginalImagePath(
+        userId,
+        plantId,
+        imageId,
+        extension,
+      );
       expect(originalPath, contains(userId));
       expect(originalPath, contains(plantId));
       expect(originalPath, contains(imageId));
       expect(originalPath, endsWith('.$extension'));
-      
-      final processedPath = getProcessedImagePath(userId, plantId, imageId, 'segmentation', extension);
+
+      final processedPath = getProcessedImagePath(
+        userId,
+        plantId,
+        imageId,
+        'segmentation',
+        extension,
+      );
       expect(processedPath, contains('processed'));
       expect(processedPath, contains('segmentation'));
     });
@@ -73,9 +82,28 @@ void main() {
     test('Image data validation', () async {
       // Valid JPEG header
       final validJpegBytes = Uint8List.fromList([
-        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46,
-        0x00, 0x01, 0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00,
-        0xFF, 0xD9
+        0xFF,
+        0xD8,
+        0xFF,
+        0xE0,
+        0x00,
+        0x10,
+        0x4A,
+        0x46,
+        0x49,
+        0x46,
+        0x00,
+        0x01,
+        0x01,
+        0x01,
+        0x00,
+        0x48,
+        0x00,
+        0x48,
+        0x00,
+        0x00,
+        0xFF,
+        0xD9,
       ]);
       expect(isValidImageData(validJpegBytes), isTrue);
 
@@ -117,7 +145,7 @@ void main() {
     test('Error message formatting', () {
       final error = Exception('Network timeout');
       final formattedMessage = formatErrorMessage(error);
-      
+
       expect(formattedMessage, isNotEmpty);
       expect(formattedMessage, contains('timeout'));
     });
@@ -125,7 +153,7 @@ void main() {
     test('Date formatting utilities', () {
       final testDate = DateTime(2024, 1, 15, 14, 30, 0);
       final formatted = formatDisplayDate(testDate);
-      
+
       expect(formatted, isNotEmpty);
       expect(formatted, contains('2024'));
     });
@@ -164,7 +192,7 @@ void main() {
       expect(isNotEmpty('hello'), isTrue);
       expect(isNotEmpty(''), isFalse);
       expect(isNotEmpty('   '), isFalse);
-      
+
       expect(isValidId('abc123'), isTrue);
       expect(isValidId(''), isFalse);
       expect(isValidId('ab'), isFalse);
@@ -173,7 +201,7 @@ void main() {
     test('List manipulation utilities', () {
       final list1 = ['a', 'b', 'c'];
       final list2 = ['b', 'c', 'd'];
-      
+
       expect(mergeLists(list1, list2), hasLength(4));
       expect(mergeLists(list1, list2), containsAll(['a', 'b', 'c', 'd']));
     });
@@ -181,7 +209,7 @@ void main() {
     test('Map manipulation utilities', () {
       final map1 = {'key1': 'value1', 'key2': 'value2'};
       final map2 = {'key2': 'updated', 'key3': 'value3'};
-      
+
       final merged = mergeMaps(map1, map2);
       expect(merged['key1'], equals('value1'));
       expect(merged['key2'], equals('updated'));
@@ -220,11 +248,22 @@ String generateImageId() {
   return 'img_$timestamp$random';
 }
 
-String getOriginalImagePath(String userId, String plantId, String imageId, String extension) {
+String getOriginalImagePath(
+  String userId,
+  String plantId,
+  String imageId,
+  String extension,
+) {
   return 'users/$userId/plants/$plantId/images/original/$imageId.$extension';
 }
 
-String getProcessedImagePath(String userId, String plantId, String imageId, String processType, String extension) {
+String getProcessedImagePath(
+  String userId,
+  String plantId,
+  String imageId,
+  String processType,
+  String extension,
+) {
   return 'users/$userId/plants/$plantId/images/processed/$processType/$imageId.$extension';
 }
 
@@ -241,12 +280,12 @@ bool isValidWebMimeType(String mimeType) {
 
 bool isValidImageData(Uint8List bytes) {
   if (bytes.isEmpty) return false;
-  
+
   // Check for JPEG header
   if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
     return true;
   }
-  
+
   // Check for PNG header
   if (bytes.length >= 8) {
     final pngHeader = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -259,7 +298,7 @@ bool isValidImageData(Uint8List bytes) {
     }
     if (isPng) return true;
   }
-  
+
   return false;
 }
 
@@ -276,9 +315,9 @@ String extractContentType(Map<String, dynamic> metadata) {
 }
 
 bool isValidAnalysisResult(Map<String, dynamic> result) {
-  return result.containsKey('detectedDisease') && 
-         result.containsKey('confidence') && 
-         result.containsKey('detectionTimestamp');
+  return result.containsKey('detectedDisease') &&
+      result.containsKey('confidence') &&
+      result.containsKey('detectionTimestamp');
 }
 
 String getConfidenceLevel(double confidence) {
@@ -296,9 +335,9 @@ String formatDisplayDate(DateTime date) {
 }
 
 bool isValidPlantData(Map<String, dynamic> data) {
-  return data.containsKey('plantId') && 
-         data.containsKey('userId') && 
-         data.containsKey('status');
+  return data.containsKey('plantId') &&
+      data.containsKey('userId') &&
+      data.containsKey('status');
 }
 
 String extractPlantId(Map<String, dynamic> data) {
@@ -314,8 +353,7 @@ String extractImageId(Map<String, dynamic> data) {
 }
 
 bool isValidDetectionResult(Map<String, dynamic> data) {
-  return data.containsKey('diseaseName') && 
-         data.containsKey('confidence');
+  return data.containsKey('diseaseName') && data.containsKey('confidence');
 }
 
 String extractDiseaseName(Map<String, dynamic> data) {
@@ -341,7 +379,10 @@ List<String> mergeLists(List<String> list1, List<String> list2) {
   return combined.toList();
 }
 
-Map<String, String> mergeMaps(Map<String, String> map1, Map<String, String> map2) {
+Map<String, String> mergeMaps(
+  Map<String, String> map1,
+  Map<String, String> map2,
+) {
   final result = <String, String>{};
   result.addAll(map1);
   result.addAll(map2);
