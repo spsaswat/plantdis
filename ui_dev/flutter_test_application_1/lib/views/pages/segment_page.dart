@@ -159,11 +159,11 @@ class _SegmentPageState extends State<SegmentPage> {
     } else if (species == 'grape') {
       modelPath = 'assets/models/grape_disease_detector.tflite';
     } else if (species == 'apple') {
-      modelPath = 'assets/models/apple_mnv3_float32.tflite';
+      modelPath = 'assets/models/apple_disease_detactor.tflite';
     } else if (species == 'potato') {
-      modelPath = 'assets/models/potato_mnv3_float32.tflite';
+      modelPath = 'assets/models/potato_disease_detactor.tflite';
     } else if (species == 'tomato') {
-      modelPath = 'assets/models/tomato_mnv3_float32.tflite';
+      modelPath = 'assets/models/tomato_disease_detactor.tflite';
     } else {
       // fallback to original
       final res = await InferenceService().analyzeImage(
@@ -224,7 +224,7 @@ class _SegmentPageState extends State<SegmentPage> {
         ];
         break;
       case 'pepper':
-        labels = const ['Pepper_bacterial_spot','Pepper_healthy'];
+        labels = const ['Pepper_bacterial_spot', 'Pepper_healthy'];
         break;
       case 'grape':
         labels = const [

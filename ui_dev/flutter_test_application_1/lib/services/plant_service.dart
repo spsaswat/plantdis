@@ -683,9 +683,9 @@ extension on PlantService {
     'corn': 'assets/models/corn_disease_detector.tflite',
     'pepper': 'assets/models/pepper_disease_detector.tflite',
     'grape': 'assets/models/grape_disease_detector.tflite',
-    'tomato': 'assets/models/tomato_mnv3_float32.tflite',
-    'potato': 'assets/models/potato_mnv3_float32.tflite',
-    'apple': 'assets/models/apple_mnv3_float32.tflite',
+    'tomato': 'assets/models/tomato_disease_detactor.tflite',
+    'potato': 'assets/models/potato_disease_detactor.tflite',
+    'apple': 'assets/models/apple_disease_detactor.tflite',
   };
 
   static const Map<String, List<String>> _speciesLabels = {
