@@ -175,7 +175,9 @@ class _SegmentPageState extends State<SegmentPage> {
       if (species.isNotEmpty &&
           species != 'corn' &&
           species != 'pepper' &&
-          species != 'grape') {}
+          species != 'grape' &&
+          species != 'apple' &&
+          species != 'tomato') {}
       return res;
     }
 
@@ -222,7 +224,7 @@ class _SegmentPageState extends State<SegmentPage> {
         ];
         break;
       case 'pepper':
-        labels = const ['Pepper_bacterial_spot', 'Pepper_healthy'];
+        labels = const ['Pepper_bacterial_spot','Pepper_healthy'];
         break;
       case 'grape':
         labels = const [

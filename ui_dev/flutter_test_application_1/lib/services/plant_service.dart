@@ -683,6 +683,9 @@ extension on PlantService {
     'corn': 'assets/models/corn_disease_detector.tflite',
     'pepper': 'assets/models/pepper_disease_detector.tflite',
     'grape': 'assets/models/grape_disease_detector.tflite',
+    'tomato': 'assets/models/tomato_mnv3_float32.tflite',
+    'potato': 'assets/models/potato_mnv3_float32.tflite',
+    'apple': 'assets/models/apple_mnv3_float32.tflite',
   };
 
   static const Map<String, List<String>> _speciesLabels = {
@@ -698,6 +701,29 @@ extension on PlantService {
       'Grape___Esca_(Black_Measles)',
       'Grape___healthy',
       'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+    ],
+    'apple': [
+      'Apple___Apple_scab',
+      'Apple___Black_rot',
+      'Apple___Cedar_apple_rust',
+      'Apple___healthy',
+    ],
+    'potato': [
+      'Potato___Early_blight',
+      'Potato___Late_blight',
+      'Potato___healthy',
+    ],
+    'tomato': [
+      'Tomato___Bacterial_spot',
+      'Tomato___Early_blight',
+      'Tomato___Late_blight',
+      'Tomato___Leaf_Mold',
+      'Tomato___Septoria_leaf_spot',
+      'Tomato___Spider_mites_Two_spotted_spider_mite',
+      'Tomato___Target_Spot',
+      'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
+      'Tomato___Tomato_mosaic_virus',
+      'Tomato___healthy',
     ],
   };
   Future<_SpeciesResult?> _classifySpecies(Uint8List bytes) async {
