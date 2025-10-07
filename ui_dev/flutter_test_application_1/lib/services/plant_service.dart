@@ -30,6 +30,52 @@ class PlantService {
   CollectionReference get _images => _firestore.collection('images');
   CollectionReference get _users => _firestore.collection('users');
 
+  /// Save per-image latest analysis under users/{uid}/plants/{plantId}/images/{imageId}/analysis/latest
+  Future<void> saveImageAnalysisResult({
+    required String plantId,
+    required String imageId,
+    required Map<String, dynamic> analysis,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+    final docRef = _users
+        .doc(user.uid)
+        .collection('plants')
+        .doc(plantId)
+        .collection('images')
+        .doc(imageId)
+        .collection('analysis')
+        .doc('latest');
+    final now = DateTime.now();
+    final payload = <String, dynamic>{
+      ...analysis,
+      'updatedAt': now,
+      'createdAt': analysis['createdAt'] ?? now,
+    };
+    await docRef.set(payload, SetOptions(merge: true));
+  }
+
+  /// Get per-image latest analysis if exists
+  Future<Map<String, dynamic>?> getLatestImageAnalysisResult({
+    required String plantId,
+    required String imageId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+    final docRef = _users
+        .doc(user.uid)
+        .collection('plants')
+        .doc(plantId)
+        .collection('images')
+        .doc(imageId)
+        .collection('analysis')
+        .doc('latest');
+    final snap = await docRef.get();
+    if (!snap.exists) return null;
+    final data = snap.data() as Map<String, dynamic>?;
+    return data;
+  }
+
   Future<Map<String, dynamic>> uploadAndAnalyzeImage({
     required XFile image,
     String? notes,
@@ -120,6 +166,10 @@ class PlantService {
         images: [imageId],
       );
       await _plants.doc(plantId).set(plantModel.toMap());
+      await _plants.doc(plantId).update({
+        'lastAnalyzedImageId': imageId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       await _plants.doc(plantId).update({'lastAnalyzedImageId': imageId});
       await _users
           .doc(user.uid)
@@ -134,6 +184,7 @@ class PlantService {
       await _plants.doc(plantId).update({
         'images': FieldValue.arrayUnion([imageId]),
         'status': 'processing',
+        'updatedAt': FieldValue.serverTimestamp(),
         'analysisError': FieldValue.delete(),
         'analysisResults': FieldValue.delete(),
       });

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'data/notifiers.dart';
+import 'utils/route_observer.dart';
 import 'views/pages/welcome_page.dart';
 import '../utils/logger.dart';
 
@@ -67,6 +68,7 @@ class _MyAppState extends State<MyApp> {
                     brightness: isDarkMode ? Brightness.dark : Brightness.light,
                   ),
                 ),
+                navigatorObservers: [routeObserver],
                 home: const WelcomePage(),
               );
             },

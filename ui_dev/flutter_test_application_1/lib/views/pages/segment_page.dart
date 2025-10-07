@@ -75,6 +75,7 @@ class _SegmentPageState extends State<SegmentPage> {
   bool _analysisConfirmed = false;
   final ScrollController _scrollController = ScrollController();
   String? _segPreviewUrl;
+  String? _cachedSuggestion;
   String? _forcedSpecies; // if user overrides species selection, use this once
 
   // Cache species classifier labels and last probabilities for UI confidence display
@@ -95,6 +96,113 @@ class _SegmentPageState extends State<SegmentPage> {
     'tomato',
   ];
   List<double>? _lastSpeciesProbs;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCachedAnalysisIfAny();
+  }
+
+  Future<void> _loadCachedAnalysisIfAny() async {
+    try {
+      final cached = await _plantService.getLatestImageAnalysisResult(
+        plantId: widget.plantId,
+        imageId: widget.id,
+      );
+      if (cached != null && mounted) {
+        final String? cachedSegUrl = cached['segmentationUrl'] as String?;
+        final String? cachedDisease = cached['detectedDisease'] as String?;
+        final double? cachedConf = (cached['confidence'] as num?)?.toDouble();
+        final String? cachedRec = cached['recommendation'] as String?;
+        setState(() {
+          _segPreviewUrl = cachedSegUrl;
+          _plantClass = cached['plantSpecies'] as String?;
+          _plantClassConf =
+              (cached['plantSpeciesConfidence'] as num?)?.toDouble();
+          _analysisConfirmed = cachedDisease != null && cachedConf != null;
+          _cachedSuggestion = cachedRec;
+        });
+        if (!_analysisConfirmed && cachedSegUrl != null) {
+          // ignore: unawaited_futures
+          _runDetectionOnCachedSegmentation(cachedSegUrl);
+        }
+      }
+    } catch (e, st) {
+      logger.w('[SegmentPage] Load cached analysis failed: $e\n$st');
+    }
+  }
+
+  Future<void> _persistSuggestion(String suggestion) async {
+    try {
+      await _firestore.collection('plants').doc(widget.plantId).update({
+        'analysisResults.recommendation': suggestion,
+      });
+      await _plantService.saveImageAnalysisResult(
+        plantId: widget.plantId,
+        imageId: widget.id,
+        analysis: {
+          'recommendation': suggestion,
+          'detectionTimestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e, st) {
+      logger.w('[SegmentPage] Persist suggestion failed: $e\n$st');
+    }
+  }
+
+  Future<void> _runDetectionOnCachedSegmentation(String segUrl) async {
+    try {
+      if (mounted) setState(() => _isBusy = true);
+      final resp = await http.get(Uri.parse(segUrl));
+      if (resp.statusCode != 200) {
+        throw Exception('Failed to download segmented image');
+      }
+      final segBytes = resp.bodyBytes;
+
+      if (_plantClass == null) {
+        await _runPlantSpeciesClassifier(segBytes);
+      }
+      final result = await _runDiseaseDetection(segBytes);
+      if (result != null) {
+        final analysisData = {
+          'detectedDisease': result.diseaseName,
+          'confidence': result.confidence,
+          'detectionTimestamp': DateTime.now().toIso8601String(),
+          'segmentationUrl': segUrl,
+          if (_plantClass != null) 'plantSpecies': _plantClass,
+          if (_plantClassConf != null)
+            'plantSpeciesConfidence': _plantClassConf,
+          'model': _selectedSegModel,
+          'manuallyOverridden':
+              _speciesOverrideActive || (_forcedSpecies != null),
+          'source':
+              (_speciesOverrideActive || (_forcedSpecies != null))
+                  ? 'manual'
+                  : 'auto',
+          'analysisStage': 3,
+          'analysisCompleted': true,
+        };
+        await _firestore.collection('plants').doc(widget.plantId).update({
+          'status': 'completed',
+          'analysisResults': analysisData,
+          'analysisError': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        await _plantService.saveImageAnalysisResult(
+          plantId: widget.plantId,
+          imageId: widget.id,
+          analysis: analysisData,
+        );
+        if (mounted) setState(() => _analysisConfirmed = true);
+      }
+    } catch (e, st) {
+      logger.w(
+        '[SegmentPage] Detection on cached segmentation failed: $e\n$st',
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
 
   Future<File> _downloadToTemp(Uint8List bytes) async {
     final dir = Directory.systemTemp;
@@ -367,16 +475,31 @@ class _SegmentPageState extends State<SegmentPage> {
           if (_plantClass != null) 'plantSpecies': _plantClass,
           if (_plantClassConf != null)
             'plantSpeciesConfidence': _plantClassConf,
+          'model': _selectedSegModel,
+          'threshold': null, // optional: add UI threshold if已知
+          'manuallyOverridden':
+              _speciesOverrideActive || (_forcedSpecies != null),
+          'source':
+              (_speciesOverrideActive || (_forcedSpecies != null))
+                  ? 'manual'
+                  : 'auto',
         };
         await _firestore.collection('plants').doc(widget.plantId).update({
           'status': 'completed',
           'analysisResults': analysisData,
           'analysisError': FieldValue.delete(),
         });
+        // Save per-image latest for fast reload
+        await _plantService.saveImageAnalysisResult(
+          plantId: widget.plantId,
+          imageId: widget.id,
+          analysis: analysisData,
+        );
       } else {
         await _firestore.collection('plants').doc(widget.plantId).update({
           'status': 'error',
           'analysisError': 'Local analysis returned no result',
+          'updatedAt': FieldValue.serverTimestamp(),
         });
       }
     } catch (e, st) {
@@ -451,6 +574,20 @@ class _SegmentPageState extends State<SegmentPage> {
             .collection('plants')
             .doc(widget.plantId)
             .update(updates);
+        // Also save image-level latest even if未选择疾病（仅分割/物种）
+        await _plantService.saveImageAnalysisResult(
+          plantId: widget.plantId,
+          imageId: widget.id,
+          analysis: {
+            if (segmentationUrl != null) 'segmentationUrl': segmentationUrl,
+            if (_plantClass != null) 'plantSpecies': _plantClass,
+            if (_plantClassConf != null)
+              'plantSpeciesConfidence': _plantClassConf,
+            'detectionTimestamp': DateTime.now().toIso8601String(),
+            'model': _selectedSegModel,
+            'source': 'auto',
+          },
+        );
       }
       if (mounted)
         setState(() {
@@ -1927,10 +2064,21 @@ class _SegmentPageState extends State<SegmentPage> {
                                     ),
                                   if (_analysisConfirmed)
                                     FutureBuilder<String>(
-                                      future: _generateSuggestion(
-                                        detectedDisease,
-                                        diseaseConfidence,
-                                      ),
+                                      future: () async {
+                                        if (_cachedSuggestion != null &&
+                                            _cachedSuggestion!.isNotEmpty) {
+                                          return _cachedSuggestion!;
+                                        }
+                                        final s = await _generateSuggestion(
+                                          detectedDisease,
+                                          diseaseConfidence,
+                                        );
+                                        _cachedSuggestion = s;
+                                        // fire-and-forget persist
+                                        // ignore: unawaited_futures
+                                        _persistSuggestion(s);
+                                        return s;
+                                      }(),
                                       builder: (context, snapshot) {
                                         if (snapshot.connectionState ==
                                             ConnectionState.waiting) {
