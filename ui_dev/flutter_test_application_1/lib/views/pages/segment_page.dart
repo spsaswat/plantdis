@@ -77,6 +77,9 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _segPreviewUrl;
   String? _cachedSuggestion;
   String? _forcedSpecies; // if user overrides species selection, use this once
+  String? _unsupportedReason; // message for unsupported plant flow
+  String?
+  _lastDiseaseForSuggestion; // remember last disease used for AI suggestion
 
   // Cache species classifier labels and last probabilities for UI confidence display
   static const List<String> _speciesLabels = [
@@ -96,6 +99,16 @@ class _SegmentPageState extends State<SegmentPage> {
     'tomato',
   ];
   List<double>? _lastSpeciesProbs;
+
+  bool _isSupportedPlant(String? species) {
+    final s = species?.toLowerCase().trim();
+    return s == 'corn' ||
+        s == 'pepper' ||
+        s == 'grape' ||
+        s == 'apple' ||
+        s == 'potato' ||
+        s == 'tomato';
+  }
 
   @override
   void initState() {
@@ -866,6 +879,29 @@ class _SegmentPageState extends State<SegmentPage> {
               String displayDiseaseName = UIUtils.formatDiseaseName(
                 detectedDisease,
               );
+
+              // Compute an effective status for UI: if results already contain a detectedDisease
+              // or explicitly set analysisCompleted=true, treat as completed even if backend status lags.
+              final String effectiveStatus =
+                  ((hasResults &&
+                              (analysisResults['detectedDisease'] != null)) ||
+                          (hasResults &&
+                              analysisResults['analysisCompleted'] == true))
+                      ? 'completed'
+                      : status;
+
+              // Reset AI suggestion cache when disease changes.
+              // We avoid setState during build by posting a frame callback.
+              if (_lastDiseaseForSuggestion != detectedDisease) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _lastDiseaseForSuggestion = detectedDisease;
+                    _cachedSuggestion =
+                        null; // force regenerate suggestion for new disease
+                  });
+                });
+              }
 
               String pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
 
@@ -1725,12 +1761,29 @@ class _SegmentPageState extends State<SegmentPage> {
                                                                     _forcedSpecies =
                                                                         _plantClass; // honor current species
                                                                   });
-                                                                  await _runLocalSegmentationAndRetrigger();
-                                                                  if (mounted) {
+                                                                  if (!_isSupportedPlant(
+                                                                    _plantClass,
+                                                                  )) {
                                                                     setState(() {
-                                                                      _forcedSpecies =
-                                                                          null; // clear after one run
+                                                                      _unsupportedReason =
+                                                                          "Sorry, currently we don't support this kind of plant.";
                                                                     });
+                                                                    // Skip default model analysis for unsupported plants
+                                                                    // await _runLocalSegmentationAndRetrigger();
+                                                                    if (mounted) {
+                                                                      setState(() {
+                                                                        _forcedSpecies =
+                                                                            null; // clear after one run
+                                                                      });
+                                                                    }
+                                                                  } else {
+                                                                    await _runLocalSegmentationAndRetrigger();
+                                                                    if (mounted) {
+                                                                      setState(() {
+                                                                        _forcedSpecies =
+                                                                            null; // clear after one run
+                                                                      });
+                                                                    }
                                                                   }
                                                                 },
                                                         child: const Text(
@@ -1920,149 +1973,174 @@ class _SegmentPageState extends State<SegmentPage> {
                                                   ),
                                                 ),
                                               const SizedBox(height: 10),
-                                              // Handle different statuses
-                                              if (status == 'processing' ||
-                                                  status == 'analyzing')
-                                                ListTile(
-                                                  leading:
-                                                      const CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                  title: const Text(
-                                                    'Analysis in progress...',
+                                              // If unsupported plant flow was chosen, show message and skip further status handling
+                                              if (_unsupportedReason != null)
+                                                const ListTile(
+                                                  leading: Icon(
+                                                    Icons.info_outline,
+                                                    color: Colors.orange,
                                                   ),
-                                                  subtitle: const Text(
-                                                    'Results will appear here shortly.',
-                                                  ),
-                                                  trailing: IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete_outline,
-                                                      color: Colors.red,
-                                                    ),
-                                                    onPressed:
-                                                        () => _confirmDelete(
-                                                          context,
-                                                        ),
-                                                    tooltip: 'Cancel analysis',
-                                                  ),
-                                                )
-                                              else if (status == 'error')
-                                                ListTile(
-                                                  leading: const Icon(
-                                                    Icons.error_outline,
-                                                    color: Colors.red,
-                                                  ),
-                                                  title: const Text(
-                                                    'Analysis Failed',
+                                                  title: Text(
+                                                    'Unsupported Plant',
                                                   ),
                                                   subtitle: Text(
-                                                    analysisErrorMsg ??
-                                                        'An unknown error occurred.',
-                                                  ),
-                                                )
-                                              // Display results if completed
-                                              else if (status ==
-                                                  'completed') ...[
-                                                if (hasResults) ...[
-                                                  if (detectedDisease ==
-                                                      'No disease detected')
-                                                    const ListTile(
-                                                      leading: Icon(
-                                                        Icons
-                                                            .check_circle_outline,
-                                                        color: Colors.green,
-                                                      ),
-                                                      title: Text(
-                                                        'Analysis Completed',
-                                                      ),
-                                                      subtitle: Text(
-                                                        'No disease detected above the confidence threshold.',
-                                                      ),
-                                                    )
-                                                  else if (isLowConfidence)
-                                                    _buildLowConfidenceInfo(
-                                                      displayDiseaseName,
-                                                      diseaseConfidence,
-                                                    )
-                                                  else
-                                                    _buildStandardResults(
-                                                      displayDiseaseName,
-                                                      diseaseConfidence,
-                                                    ),
-                                                  // Always show detection time if available
-                                                  _buildResultTile(
-                                                    icon: Icons.timer_outlined,
-                                                    label: 'Detection Time',
-                                                    value: _formatTimestamp(
-                                                      analysisResults['detectionTimestamp']
-                                                          ?.toString(),
-                                                    ),
-                                                  ),
-
-                                                  // Add delete button
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 16.0,
-                                                        ),
-                                                    child: Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment.end,
-                                                      children: [
-                                                        TextButton.icon(
-                                                          style:
-                                                              TextButton.styleFrom(
-                                                                foregroundColor:
-                                                                    Colors.red,
-                                                              ),
-                                                          icon: const Icon(
-                                                            Icons
-                                                                .delete_outline,
-                                                          ),
-                                                          label: const Text(
-                                                            'Delete Result',
-                                                          ),
-                                                          onPressed:
-                                                              () =>
-                                                                  _confirmDelete(
-                                                                    context,
-                                                                  ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ] else
-                                                  const ListTile(
-                                                    leading: Icon(
-                                                      Icons.info_outline,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    title: Text(
-                                                      "No analysis results available.",
-                                                    ),
-                                                    subtitle: Text(
-                                                      "The analysis completed, but no specific results were found.",
-                                                    ),
-                                                  ),
-                                              ] else // Handle other statuses like 'pending' or unknown
-                                                ListTile(
-                                                  leading: const Icon(
-                                                    Icons.hourglass_empty,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  title: const Text(
-                                                    'Analysis Pending',
-                                                  ),
-                                                  subtitle: Text(
-                                                    'Status: $status',
+                                                    "Sorry, currently we don't support this kind of plant.",
                                                   ),
                                                 ),
+                                              if (_unsupportedReason ==
+                                                  null) ...[
+                                                // Handle different statuses
+                                                if (effectiveStatus ==
+                                                        'processing' ||
+                                                    effectiveStatus ==
+                                                        'analyzing')
+                                                  ListTile(
+                                                    leading:
+                                                        const CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                    title: const Text(
+                                                      'Analysis in progress...',
+                                                    ),
+                                                    subtitle: const Text(
+                                                      'Results will appear here shortly.',
+                                                    ),
+                                                    trailing: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.delete_outline,
+                                                        color: Colors.red,
+                                                      ),
+                                                      onPressed:
+                                                          () => _confirmDelete(
+                                                            context,
+                                                          ),
+                                                      tooltip:
+                                                          'Cancel analysis',
+                                                    ),
+                                                  )
+                                                else if (effectiveStatus ==
+                                                    'error')
+                                                  ListTile(
+                                                    leading: const Icon(
+                                                      Icons.error_outline,
+                                                      color: Colors.red,
+                                                    ),
+                                                    title: const Text(
+                                                      'Analysis Failed',
+                                                    ),
+                                                    subtitle: Text(
+                                                      analysisErrorMsg ??
+                                                          'An unknown error occurred.',
+                                                    ),
+                                                  )
+                                                // Display results if completed
+                                                else if (effectiveStatus ==
+                                                    'completed') ...[
+                                                  if (hasResults) ...[
+                                                    if (detectedDisease ==
+                                                        'No disease detected')
+                                                      const ListTile(
+                                                        leading: Icon(
+                                                          Icons
+                                                              .check_circle_outline,
+                                                          color: Colors.green,
+                                                        ),
+                                                        title: Text(
+                                                          'Analysis Completed',
+                                                        ),
+                                                        subtitle: Text(
+                                                          'No disease detected above the confidence threshold.',
+                                                        ),
+                                                      )
+                                                    else if (isLowConfidence)
+                                                      _buildLowConfidenceInfo(
+                                                        displayDiseaseName,
+                                                        diseaseConfidence,
+                                                      )
+                                                    else
+                                                      _buildStandardResults(
+                                                        displayDiseaseName,
+                                                        diseaseConfidence,
+                                                      ),
+                                                    // Always show detection time if available
+                                                    _buildResultTile(
+                                                      icon:
+                                                          Icons.timer_outlined,
+                                                      label: 'Detection Time',
+                                                      value: _formatTimestamp(
+                                                        analysisResults['detectionTimestamp']
+                                                            ?.toString(),
+                                                      ),
+                                                    ),
+
+                                                    // Add delete button
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 16.0,
+                                                          ),
+                                                      child: Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .end,
+                                                        children: [
+                                                          TextButton.icon(
+                                                            style:
+                                                                TextButton.styleFrom(
+                                                                  foregroundColor:
+                                                                      Colors
+                                                                          .red,
+                                                                ),
+                                                            icon: const Icon(
+                                                              Icons
+                                                                  .delete_outline,
+                                                            ),
+                                                            label: const Text(
+                                                              'Delete Result',
+                                                            ),
+                                                            onPressed:
+                                                                () =>
+                                                                    _confirmDelete(
+                                                                      context,
+                                                                    ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ] else
+                                                    const ListTile(
+                                                      leading: Icon(
+                                                        Icons.info_outline,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      title: Text(
+                                                        "No analysis results available.",
+                                                      ),
+                                                      subtitle: Text(
+                                                        "The analysis completed, but no specific results were found.",
+                                                      ),
+                                                    ),
+                                                ] else // Handle other statuses like 'pending' or unknown
+                                                  ListTile(
+                                                    leading: const Icon(
+                                                      Icons.hourglass_empty,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    title: const Text(
+                                                      'Analysis Pending',
+                                                    ),
+                                                    subtitle: Text(
+                                                      'Status: $effectiveStatus',
+                                                    ),
+                                                  ),
+                                              ],
                                             ],
                                           ),
                                         ),
                                       ),
                                     ),
-                                  if (_analysisConfirmed)
+                                  if (_analysisConfirmed &&
+                                      _unsupportedReason == null)
                                     FutureBuilder<String>(
                                       future: () async {
                                         if (_cachedSuggestion != null &&
@@ -2097,7 +2175,8 @@ class _SegmentPageState extends State<SegmentPage> {
                                         }
                                       },
                                     ),
-                                  if (_analysisConfirmed)
+                                  if (_analysisConfirmed &&
+                                      _unsupportedReason == null)
                                     buildAsteriskFootnotes(),
                                 ],
                               ],
