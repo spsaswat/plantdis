@@ -50,7 +50,6 @@ void main() {
     };
 
     // 6) Print friendly output for local debugging
-    // ignore: avoid_print
-    print('App startup took ${startupMs} ms');
+    print('App startup took $startupMs ms');
   });
 }

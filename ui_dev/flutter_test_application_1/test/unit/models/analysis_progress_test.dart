@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_const_declarations
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 
@@ -92,31 +93,46 @@ void main() {
 
     test('should provide correct stage labels', () {
       // Test all stage labels
-      expect(AnalysisProgress(
-        stage: AnalysisStage.preprocessing,
-        progress: 0.1,
-      ).stageLabel, 'Preprocessing');
+      expect(
+        AnalysisProgress(
+          stage: AnalysisStage.preprocessing,
+          progress: 0.1,
+        ).stageLabel,
+        'Preprocessing',
+      );
 
-      expect(AnalysisProgress(
-        stage: AnalysisStage.detecting,
-        progress: 0.5,
-      ).stageLabel, 'Detecting');
+      expect(
+        AnalysisProgress(
+          stage: AnalysisStage.detecting,
+          progress: 0.5,
+        ).stageLabel,
+        'Detecting',
+      );
 
-      expect(AnalysisProgress(
-        stage: AnalysisStage.postprocessing,
-        progress: 0.8,
-      ).stageLabel, 'Post-processing');
+      expect(
+        AnalysisProgress(
+          stage: AnalysisStage.postprocessing,
+          progress: 0.8,
+        ).stageLabel,
+        'Post-processing',
+      );
 
-      expect(AnalysisProgress(
-        stage: AnalysisStage.completed,
-        progress: 1.0,
-      ).stageLabel, 'Completed');
+      expect(
+        AnalysisProgress(
+          stage: AnalysisStage.completed,
+          progress: 1.0,
+        ).stageLabel,
+        'Completed',
+      );
 
-      expect(AnalysisProgress(
-        stage: AnalysisStage.failed,
-        progress: 0.3,
-        errorMessage: 'Network error',
-      ).stageLabel, 'Failed');
+      expect(
+        AnalysisProgress(
+          stage: AnalysisStage.failed,
+          progress: 0.3,
+          errorMessage: 'Network error',
+        ).stageLabel,
+        'Failed',
+      );
     });
 
     test('should handle edge case progress values', () {
@@ -181,7 +197,7 @@ void main() {
         stage: AnalysisStage.detecting,
         progress: 0.001,
       );
-      
+
       expect(microProgress.estimatedRemaining, isA<Duration>());
       expect(microProgress.estimatedRemaining!.inSeconds, greaterThan(10));
     });

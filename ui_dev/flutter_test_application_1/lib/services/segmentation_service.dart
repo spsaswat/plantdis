@@ -15,7 +15,7 @@ class SegmentationService {
 
   // Model configuration constants
   static const String _modelAssetPath = 'assets/models/best_float32.tflite';
-  static const int INPUT_SIZE = 640; // Model input size
+  static const int inputSize = 640; // Model input size
 
   TfliteInterpreter? _interpreter;
   bool _modelLoaded = false;
@@ -65,13 +65,13 @@ class SegmentationService {
   List<List<List<List<double>>>> _preprocessImageNested(img.Image image) {
     final resized = img.copyResize(
       image,
-      width: INPUT_SIZE,
-      height: INPUT_SIZE,
+      width: inputSize,
+      height: inputSize,
       interpolation: img.Interpolation.linear,
     );
     return [
-      List.generate(INPUT_SIZE, (y) {
-        return List.generate(INPUT_SIZE, (x) {
+      List.generate(inputSize, (y) {
+        return List.generate(inputSize, (x) {
           final p = resized.getPixel(x, y);
           return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
         });
@@ -101,10 +101,10 @@ class SegmentationService {
 
   /// Upscale a probability mask (nearest-neighbor) to INPUT_SIZE
   List<List<double>> _upsampleMask(List<List<double>> mask, int inH, int inW) {
-    return List.generate(INPUT_SIZE, (y) {
-      final srcY = (y * inH / INPUT_SIZE).floor().clamp(0, inH - 1);
-      return List.generate(INPUT_SIZE, (x) {
-        final srcX = (x * inW / INPUT_SIZE).floor().clamp(0, inW - 1);
+    return List.generate(inputSize, (y) {
+      final srcY = (y * inH / inputSize).floor().clamp(0, inH - 1);
+      return List.generate(inputSize, (x) {
+        final srcX = (x * inW / inputSize).floor().clamp(0, inW - 1);
         return mask[srcY][srcX];
       });
     });
@@ -112,9 +112,9 @@ class SegmentationService {
 
   /// Apply a probability mask to an image and produce a masked image
   img.Image _applyMaskToImage(List<List<double>> probMask, img.Image original) {
-    final masked = img.Image(width: INPUT_SIZE, height: INPUT_SIZE);
-    for (int y = 0; y < INPUT_SIZE; y++) {
-      for (int x = 0; x < INPUT_SIZE; x++) {
+    final masked = img.Image(width: inputSize, height: inputSize);
+    for (int y = 0; y < inputSize; y++) {
+      for (int x = 0; x < inputSize; x++) {
         if (probMask[y][x] > 0.5) {
           masked.setPixel(x, y, original.getPixel(x, y));
         } else {
@@ -205,8 +205,8 @@ class SegmentationService {
       // Apply mask to resized original
       final resizedForOverlay = img.copyResize(
         decoded,
-        width: INPUT_SIZE,
-        height: INPUT_SIZE,
+        width: inputSize,
+        height: inputSize,
       );
       final maskImage = _applyMaskToImage(upMask, resizedForOverlay);
 

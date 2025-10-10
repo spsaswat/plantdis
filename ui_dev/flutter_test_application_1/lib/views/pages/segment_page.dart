@@ -15,7 +15,7 @@ import 'package:flutter_test_application_1/services/background_detection_service
 
 import 'package:http/http.dart' as http; // Import for http requests
 import 'dart:io';
-import 'dart:typed_data';
+// import 'dart:typed_data'; // All needed types are provided by foundation.dart
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
@@ -59,7 +59,7 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<Map<String, dynamic>>? _backgroundDetectionFuture;
 
   // State variables for segmentation and analysis
-  bool _isAnalysisTriggered = false;
+  final bool _isAnalysisTriggered = false;
 
   static const double decisionThreshold = 0.7; // Leaf decision threshold
 

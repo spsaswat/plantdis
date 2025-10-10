@@ -52,7 +52,7 @@ class ProductionLogOutput extends LogOutput {
 
     // For now, we can just print them, but ideally, we'd send them remotely.
     for (var line in event.lines) {
-      print(line);
+      debugPrint(line);
     }
   }
 }

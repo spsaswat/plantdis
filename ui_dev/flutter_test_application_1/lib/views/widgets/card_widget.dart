@@ -155,7 +155,6 @@ class _CardWidgetState extends State<CardWidget> {
                     String? resolvedImgSrc = await _imageUrlFuture;
                     // Use a single mounted check to guard the context usage
                     if (resolvedImgSrc != null && mounted) {
-                      // ignore: use_build_context_synchronously
                       Navigator.push(
                         context,
                         MaterialPageRoute(

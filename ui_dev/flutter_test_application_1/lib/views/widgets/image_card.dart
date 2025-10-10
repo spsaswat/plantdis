@@ -211,6 +211,7 @@ class ImageCard extends StatelessWidget {
       confirmColor: Colors.red,
     ).then((confirmed) {
       if (confirmed) {
+        if (!context.mounted) return; // silence use_build_context_synchronously
         _deleteImage(context, imageId);
       }
     });

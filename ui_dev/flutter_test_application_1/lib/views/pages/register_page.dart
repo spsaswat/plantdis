@@ -8,10 +8,10 @@ class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
   @override
-  _RegisterPageState createState() => _RegisterPageState();
+  RegisterPageState createState() => RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class RegisterPageState extends State<RegisterPage> {
   TextEditingController controllerEmail = TextEditingController();
   TextEditingController controllerPwd = TextEditingController();
   TextEditingController controllerConfirmPwd = TextEditingController();
@@ -117,9 +117,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           children: [
                             Expanded(child: Divider()),
                             Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
                                 "OR",
                                 style: TextStyle(

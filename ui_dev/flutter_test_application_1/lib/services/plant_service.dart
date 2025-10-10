@@ -26,9 +26,12 @@ class PlantService {
   final InferenceService _inferenceService = InferenceService();
   final SegmentationService _segmentationService = SegmentationService();
 
-  CollectionReference get _plants => _firestore.collection('plants');
-  CollectionReference get _images => _firestore.collection('images');
-  CollectionReference get _users => _firestore.collection('users');
+  CollectionReference<Map<String, dynamic>> get _plants =>
+      _firestore.collection('plants');
+  CollectionReference<Map<String, dynamic>> get _images =>
+      _firestore.collection('images');
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _firestore.collection('users');
 
   /// Save per-image latest analysis under users/{uid}/plants/{plantId}/images/{imageId}/analysis/latest
   Future<void> saveImageAnalysisResult({
@@ -38,7 +41,7 @@ class PlantService {
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
-    final docRef = _users
+    final DocumentReference<Map<String, dynamic>> docRef = _users
         .doc(user.uid)
         .collection('plants')
         .doc(plantId)
@@ -70,9 +73,9 @@ class PlantService {
         .doc(imageId)
         .collection('analysis')
         .doc('latest');
-    final snap = await docRef.get();
+    final DocumentSnapshot<Map<String, dynamic>> snap = await docRef.get();
     if (!snap.exists) return null;
-    final data = snap.data() as Map<String, dynamic>?;
+    final Map<String, dynamic>? data = snap.data();
     return data;
   }
 
@@ -797,10 +800,10 @@ extension on PlantService {
       ];
       final interpreter = TfliteInterpreter();
       await interpreter.loadModel('assets/models/plants_detector.tflite');
-      final output = [List.filled(14, 0.0)];
+      final output = [List<double>.filled(14, 0.0)];
       interpreter.run(input, output);
       interpreter.close();
-      final probs = (output[0] as List).cast<double>();
+      final List<double> probs = output[0];
       int maxIdx = 0;
       double maxVal = -1;
       for (int i = 0; i < probs.length; i++) {
@@ -858,10 +861,10 @@ extension on PlantService {
       final interpreter = TfliteInterpreter();
       await interpreter.loadModel(_speciesModelPath[key]!);
       final labels = _speciesLabels[key]!;
-      final output = [List.filled(labels.length, 0.0)];
+      final output = [List<double>.filled(labels.length, 0.0)];
       interpreter.run(input, output);
       interpreter.close();
-      final probs = (output[0] as List).cast<double>();
+      final List<double> probs = output[0];
       int maxIdx = 0;
       double maxVal = -1;
       for (int i = 0; i < probs.length; i++) {

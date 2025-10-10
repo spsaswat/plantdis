@@ -8,14 +8,14 @@ class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
 
   @override
-  _ChatPageState createState() => _ChatPageState();
+  ChatPageState createState() => ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
   bool _isLoading = false;
   late String _selectedModel;
-  bool _chatGuardEnabled = false; // Start with ChatGuard OFF 
+  bool _chatGuardEnabled = false; // Start with ChatGuard OFF
 
   // Get the instance of ChatService
   final ChatService _chatService = ChatService();
@@ -69,21 +69,23 @@ class _ChatPageState extends State<ChatPage> {
                                 });
                               }
                             },
-                            items: _models.map<DropdownMenuItem<String>>((
-                              String model,
-                            ) {
-                              return DropdownMenuItem<String>(
-                                value: model,
-                                child: Text(model),
-                              );
-                            }).toList(),
+                            items:
+                                _models.map<DropdownMenuItem<String>>((
+                                  String model,
+                                ) {
+                                  return DropdownMenuItem<String>(
+                                    value: model,
+                                    child: Text(model),
+                                  );
+                                }).toList(),
                           ),
                         ),
                         // Spider/ChatGuard button
                         IconButton(
                           icon: Icon(
                             Icons.bug_report,
-                            color: _chatGuardEnabled ? Colors.green : Colors.grey,
+                            color:
+                                _chatGuardEnabled ? Colors.green : Colors.grey,
                           ),
                           onPressed: () {
                             setState(() {
@@ -113,7 +115,8 @@ class _ChatPageState extends State<ChatPage> {
                         padding: const EdgeInsets.all(5.0),
                         child: ListView.builder(
                           shrinkWrap: true,
-                          itemCount: _chatService.messages.length +
+                          itemCount:
+                              _chatService.messages.length +
                               (_isLoading ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (_isLoading &&
@@ -143,12 +146,18 @@ class _ChatPageState extends State<ChatPage> {
                             return ListTile(
                               leading: CircleAvatar(
                                 backgroundColor:
-                                    index >= _chatService.isUserMessage.length ||
+                                    index >=
+                                                _chatService
+                                                    .isUserMessage
+                                                    .length ||
                                             !_chatService.isUserMessage[index]
                                         ? Colors.red
                                         : Colors.green,
                                 child:
-                                    index >= _chatService.isUserMessage.length ||
+                                    index >=
+                                                _chatService
+                                                    .isUserMessage
+                                                    .length ||
                                             !_chatService.isUserMessage[index]
                                         ? const Text('A')
                                         : const Text('U'),
@@ -191,13 +200,14 @@ class _ChatPageState extends State<ChatPage> {
                                 backgroundColor: Colors.teal,
                               ),
                               icon: const Icon(Icons.send),
-                              onPressed: _isLoading
-                                  ? null
-                                  : () {
-                                      if (_controller.text.isNotEmpty) {
-                                        _handleSubmitted(_controller.text);
-                                      }
-                                    },
+                              onPressed:
+                                  _isLoading
+                                      ? null
+                                      : () {
+                                        if (_controller.text.isNotEmpty) {
+                                          _handleSubmitted(_controller.text);
+                                        }
+                                      },
                             ),
                           ],
                         ),
@@ -254,7 +264,10 @@ class _ChatPageState extends State<ChatPage> {
         // Pass ChatGuard status to GeminiService
         // When ChatGuard is enabled, treat as plant-related question
         // When ChatGuard is disabled, treat as general question
-        answer = await _geminiService.getAnswer(text, isPlantRelated: _chatGuardEnabled);
+        answer = await _geminiService.getAnswer(
+          text,
+          isPlantRelated: _chatGuardEnabled,
+        );
       } else if (_selectedModel.startsWith("openrouter")) {
         String modelName;
         if (_selectedModel == "openrouter-Llama4-Scout") {
