@@ -4,7 +4,7 @@ import 'package:flutter_test_application_1/views/widgets/navbar_widget.dart';
 import 'package:flutter_test_application_1/data/notifiers.dart';
 
 void main() {
-  testWidgets('NavBarWidget 渲染测试', (WidgetTester tester) async {
+  testWidgets('NavBarWidget Rendering Test', (WidgetTester tester) async {
     // Initialize the test environment
     await tester.pumpWidget(const MaterialApp(home: Scaffold(bottomNavigationBar: NavBarWidget())));
 

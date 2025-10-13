@@ -11,53 +11,53 @@ void main() {
   });
 
   testWidgets('WelcomePage renders all elements correctly', (tester) async {
-    // 构建测试页面
+    // Build the test page
     await tester.pumpWidget(const MaterialApp(home: WelcomePage()));
     
-    // 验证标题显示
+    // Verify title display
     expect(find.text('PlantDis'), findsOneWidget);
     
-    // 验证按钮显示
+    // Verify button display
     expect(find.text('Login'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('OR'), findsOneWidget);
     expect(find.text('Continue as Guest'), findsOneWidget);
     
-    // 验证Lottie动画存在（如果实际使用了Lottie）
-    // 如果你的项目中没有使用Lottie，可以删除这一行
+    // Verify Lottie animation exists (if Lottie is actually used)
+    // Remove this line if your project doesn't use Lottie
     expect(find.byType(Lottie), findsOneWidget);
   });
   
   testWidgets('Navigate to LoginPage when Login button is pressed', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: WelcomePage()));
     
-    // 点击登录按钮
+    // Tap the login button
     await tester.tap(find.text('Login'));
-    await tester.pumpAndSettle(); // 等待导航完成
+    await tester.pumpAndSettle(); // Wait for navigation to complete
     
-    // 验证是否导航到登录页面
+    // Verify navigation to login page
     expect(find.byType(LoginPage), findsOneWidget);
   });
   
   testWidgets('Navigate to RegisterPage when Register button is pressed', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: WelcomePage()));
     
-    // 点击注册按钮
+    // Tap the register button
     await tester.tap(find.text('Register'));
     await tester.pumpAndSettle();
     
-    // 验证是否导航到注册页面
+    // Verify navigation to register page
     expect(find.byType(RegisterPage), findsOneWidget);
   });
   
   testWidgets('Guest sign in shows loading state', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: WelcomePage()));
     
-    // 点击游客登录按钮
+    // Tap the guest login button
     await tester.tap(find.text('Continue as Guest'));
-    await tester.pump(); // 触发状态更新
+    await tester.pump(); // Trigger state update
     
-    // 验证加载指示器显示
+    // Verify loading indicator display
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
