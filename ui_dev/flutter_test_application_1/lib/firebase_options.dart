@@ -65,12 +65,4 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.plantdis.app',
   );
 
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDQHSmvy5hkg4lUNxH0-HGo7Us4PUYJO_I',
-    appId: '1:748587653216:ios:0ae8fc58b47b2dbe2b8b05',
-    messagingSenderId: '748587653216',
-    projectId: 'plantdis-e42a4',
-    storageBucket: 'plantdis-e42a4.appspot.com',
-    iosBundleId: 'com.plantdis.app',
-  );
 }
