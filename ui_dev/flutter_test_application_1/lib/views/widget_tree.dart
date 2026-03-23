@@ -147,7 +147,7 @@ class _WidgetTreeState extends State<WidgetTree> {
   }
 
   Future<void> _showCamera() async {
-    // Camera plugin 不支持 macOS，改为使用图库选择
+    // Camera plugin not support macOS
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       return _pickImageFromGallery();
     }
