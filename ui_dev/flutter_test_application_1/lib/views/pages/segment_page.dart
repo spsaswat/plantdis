@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // Import for kDebugMode
 import 'package:flutter_test_application_1/data/constants.dart';
@@ -33,11 +35,13 @@ class SegmentPage extends StatefulWidget {
     required this.imgSrc,
     required this.id,
     required this.plantId,
+    this.localImageBytes,
   });
 
   final String imgSrc;
   final String id;
   final String plantId;
+  final List<int>? localImageBytes;
 
   @override
   State<SegmentPage> createState() => _SegmentPageState();
@@ -224,6 +228,23 @@ class _SegmentPageState extends State<SegmentPage> {
     );
     await f.writeAsBytes(bytes);
     return f;
+  }
+
+  Future<Uint8List> _getOriginalImageBytes() async {
+    if (widget.localImageBytes != null && widget.localImageBytes!.isNotEmpty) {
+      return Uint8List.fromList(widget.localImageBytes!);
+    }
+    if (widget.imgSrc.isEmpty) {
+      throw Exception('Image source URL is empty');
+    }
+    final resp = await http.get(Uri.parse(widget.imgSrc));
+    if (resp.statusCode != 200) {
+      throw Exception(
+        'Failed to download image: ${resp.statusCode}. '
+        '402 = Firebase Storage quota/billing.',
+      );
+    }
+    return resp.bodyBytes;
   }
 
   Future<void> _runPlantSpeciesClassifier(Uint8List segBytes) async {
@@ -422,13 +443,9 @@ class _SegmentPageState extends State<SegmentPage> {
     try {
       if (mounted) setState(() => _isBusy = true);
 
-      // 1) Download original image
-      final uri = Uri.parse(widget.imgSrc);
-      final resp = await http.get(uri);
-      if (resp.statusCode != 200) {
-        throw Exception('Failed to download image');
-      }
-      final temp = await _downloadToTemp(resp.bodyBytes);
+      // 1) Get original image bytes (local or download)
+      final imageBytes = await _getOriginalImageBytes();
+      final temp = await _downloadToTemp(imageBytes);
 
       // 2) Segment locally with selected model
       File segmentedFile;
@@ -535,13 +552,9 @@ class _SegmentPageState extends State<SegmentPage> {
         });
       }
 
-      // 1) Download original image
-      final uri = Uri.parse(widget.imgSrc);
-      final resp = await http.get(uri);
-      if (resp.statusCode != 200) {
-        throw Exception('Failed to download image');
-      }
-      final temp = await _downloadToTemp(resp.bodyBytes);
+      // 1) Get original image bytes (local or download)
+      final imageBytes = await _getOriginalImageBytes();
+      final temp = await _downloadToTemp(imageBytes);
 
       // 2) Segment locally with selected model
       File segmentedFile;
@@ -649,26 +662,29 @@ class _SegmentPageState extends State<SegmentPage> {
   /// Detect if image contains plant leaves using background detection model
   Future<Map<String, dynamic>> _detectBackgroundAndLeaves() async {
     try {
-      // Validate image URL
-      if (widget.imgSrc.isEmpty) {
-        throw Exception('Image source URL is empty');
-      }
-
-      // Download image from URL to get bytes with timeout
-      final response = await http
-          .get(Uri.parse(widget.imgSrc))
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Image download timeout after 30 seconds');
-            },
+      List<int> imageBytes;
+      if (widget.localImageBytes != null && widget.localImageBytes!.isNotEmpty) {
+        imageBytes = widget.localImageBytes!;
+      } else {
+        if (widget.imgSrc.isEmpty) {
+          throw Exception('Image source URL is empty');
+        }
+        final response = await http
+            .get(Uri.parse(widget.imgSrc))
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                throw Exception('Image download timeout after 30 seconds');
+              },
+            );
+        if (response.statusCode != 200) {
+          throw Exception(
+            'Failed to download image: ${response.statusCode}. '
+            '402 = Firebase Storage quota/billing. Check Firebase Console.',
           );
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to download image: ${response.statusCode}');
+        }
+        imageBytes = response.bodyBytes;
       }
-
-      final imageBytes = response.bodyBytes;
 
       // Validate image bytes
       if (imageBytes.isEmpty) {
@@ -685,7 +701,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
       // Run background detection
       final backgroundResult = await _backgroundDetectionService.detectLeaves(
-        imageBytes: imageBytes,
+        imageBytes: imageBytes is Uint8List ? imageBytes : Uint8List.fromList(imageBytes),
         confidenceThreshold: threshold,
       );
 

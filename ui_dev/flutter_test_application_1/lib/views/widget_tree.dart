@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
@@ -112,6 +113,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         Navigator.of(context).pop();
 
         if (result.containsKey('plantId')) {
+          final localBytes = await pickedFile.readAsBytes();
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -120,6 +122,7 @@ class _WidgetTreeState extends State<WidgetTree> {
                     imgSrc: result['downloadUrl'],
                     id: result['imageId'],
                     plantId: result['plantId'],
+                    localImageBytes: localBytes,
                   ),
             ),
           );
@@ -144,6 +147,10 @@ class _WidgetTreeState extends State<WidgetTree> {
   }
 
   Future<void> _showCamera() async {
+    // Camera plugin 不支持 macOS，改为使用图库选择
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return _pickImageFromGallery();
+    }
     try {
       final cameras = await availableCameras();
 
@@ -189,6 +196,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         Navigator.of(context).pop();
 
         if (result.containsKey('plantId')) {
+          final localBytes = await capturedImageFile.readAsBytes();
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -197,6 +205,7 @@ class _WidgetTreeState extends State<WidgetTree> {
                     imgSrc: result['downloadUrl'],
                     id: result['imageId'],
                     plantId: result['plantId'],
+                    localImageBytes: localBytes,
                   ),
             ),
           );
