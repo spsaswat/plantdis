@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/data/notifiers.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/views/pages/welcome_page.dart';
 import '../../utils/web_utils.dart';
 import '../pages/settings_page.dart';
@@ -54,7 +55,12 @@ class DrawerWidget extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.logout_outlined),
             title: const Text("Logout"),
-            onTap: () {
+            onTap: () async {
+              final localGuest = LocalGuestService();
+              if (await localGuest.isLocalGuestMode()) {
+                await localGuest.setLocalGuestMode(false);
+              }
+              if (!context.mounted) return;
               selectedPageNotifier.value = 0;
               Navigator.pushReplacement(
                 context,

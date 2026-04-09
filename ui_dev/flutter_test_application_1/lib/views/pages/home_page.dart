@@ -58,7 +58,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       ?.isNotEmpty ??
                   false));
 
-      // 仅当“完成且具备完整结果(疾病+概率+建议)”进入 Results，其余均为 Processing
+      // Only items with complete results (disease + confidence + recommendation)
+      // are shown in Results; all others remain in Processing.
       if (plant.status == 'completed' && hasFullResult) {
         completed.add(plant);
       } else if (plant.status == 'pending' ||

@@ -26,6 +26,7 @@ class BackgroundDetectionService {
   TfliteInterpreterWrapper? _interpreterWrapper;
   bool _isLoadingModel = false;
   bool _modelLoaded = false;
+  bool _modelMissingReported = false;
 
   static int _toByte(num v) {
     // Fast, safe map to 0..255 as int
@@ -63,12 +64,24 @@ class BackgroundDetectionService {
     }
 
     try {
-      // First, verify the model file exists
-      final modelData = await rootBundle.load(_modelAssetPath);
-      if (kDebugMode) {
-        logger.i(
-          '[BackgroundDetectionService] Model file loaded, size: ${modelData.lengthInBytes} bytes',
-        );
+      // Fast path: if model asset is missing, avoid noisy stack traces.
+      try {
+        final modelData = await rootBundle.load(_modelAssetPath);
+        if (kDebugMode) {
+          logger.i(
+            '[BackgroundDetectionService] Model file loaded, size: ${modelData.lengthInBytes} bytes',
+          );
+        }
+      } catch (_) {
+        _modelLoaded = false;
+        if (!_modelMissingReported && kDebugMode) {
+          _modelMissingReported = true;
+          logger.w(
+            '[BackgroundDetectionService] Model asset not found: $_modelAssetPath. '
+            'Background detection will use fallback heuristic.',
+          );
+        }
+        return;
       }
 
       _interpreterWrapper = TfliteInterpreterWrapper();
@@ -93,62 +106,16 @@ class BackgroundDetectionService {
           '[BackgroundDetectionService] Background detection model FAILED to load.',
         );
       }
-    } catch (e, stackTrace) {
-      if (kDebugMode) {
-        logger.e(
-          '[BackgroundDetectionService] Error loading model: $e\n$stackTrace',
+    } catch (e) {
+      if (kDebugMode && !_modelMissingReported) {
+        _modelMissingReported = true;
+        logger.w(
+          '[BackgroundDetectionService] Failed to load TFLite model. '
+          'Fallback heuristic will be used. Error: $e',
         );
-
-        // Additional debugging information
-        try {
-          final modelData = await rootBundle.load(_modelAssetPath);
-          logger.i(
-            '[BackgroundDetectionService] Model file exists and can be loaded, size: ${modelData.lengthInBytes} bytes',
-          );
-
-          // Try to check if it's a valid TFLite file
-          if (modelData.lengthInBytes > 0) {
-            final bytes = modelData.buffer.asUint8List();
-            if (bytes.length >= 4) {
-              final magic = String.fromCharCodes(bytes.take(4));
-              logger.i('[BackgroundDetectionService] File magic bytes: $magic');
-              if (magic == 'TFL3') {
-                logger.i(
-                  '[BackgroundDetectionService] File appears to be a valid TFLite model',
-                );
-
-                // Check TFLite version compatibility
-                if (bytes.length >= 8) {
-                  final versionBytes = bytes.sublist(4, 8);
-                  final version = versionBytes.fold<int>(
-                    0,
-                    (prev, byte) => (prev << 8) | byte,
-                  );
-                  logger.i(
-                    '[BackgroundDetectionService] TFLite version: $version',
-                  );
-
-                  if (version > 12) {
-                    logger.w(
-                      '[BackgroundDetectionService] Model uses TFLite version $version, which may not be compatible with current runtime',
-                    );
-                  }
-                }
-              } else {
-                logger.w(
-                  '[BackgroundDetectionService] File does not appear to be a valid TFLite model',
-                );
-              }
-            }
-          }
-        } catch (fileError) {
-          logger.e(
-            '[BackgroundDetectionService] Error reading model file: $fileError',
-          );
-        }
       }
       _modelLoaded = false;
-      rethrow;
+      return;
     } finally {
       _isLoadingModel = false;
     }

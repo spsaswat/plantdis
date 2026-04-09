@@ -2,12 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_test_application_1/services/user_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final UserService _userService = UserService();
+  final LocalGuestService _localGuestService = LocalGuestService();
 
   AuthService() {
     _initializeGoogleSignIn();
@@ -40,6 +42,7 @@ class AuthService {
         email: email,
         password: password,
       );
+      await _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with IP
       await _userService.createOrUpdateUser(
@@ -66,6 +69,7 @@ class AuthService {
         email: email,
         password: password,
       );
+      await _localGuestService.setLocalGuestMode(false);
       // Create user data in Firestore
       await _userService.createOrUpdateUser(credential.user!);
       return credential;
@@ -94,6 +98,7 @@ class AuthService {
 
       // Sign in with credential
       final userCredential = await _auth.signInWithCredential(credential);
+      await _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with IP address
       await _userService.createOrUpdateUser(
@@ -118,6 +123,7 @@ class AuthService {
       final ipAddress = await _userService.getUserIpAddress();
 
       final userCredential = await _auth.signInAnonymously();
+      await _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with additional guest info and IP
       await _userService.createOrUpdateUser(

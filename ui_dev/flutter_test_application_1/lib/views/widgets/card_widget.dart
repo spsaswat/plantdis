@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_test_application_1/models/image_model.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
@@ -33,6 +35,7 @@ class CardWidget extends StatefulWidget {
 
 class _CardWidgetState extends State<CardWidget> {
   final PlantService _plantService = PlantService();
+  final LocalGuestService _localGuestService = LocalGuestService();
   Future<String?>? _imageUrlFuture;
   String? _heroTag;
   bool _isDeleting = false;
@@ -48,6 +51,10 @@ class _CardWidgetState extends State<CardWidget> {
 
   Future<String?> _fetchImageUrl(String plantId, String imageId) async {
     try {
+      if (await _localGuestService.isLocalGuestMode()) {
+        final plant = await _localGuestService.getPlantById(plantId);
+        return plant?.analysisResults?['localImagePath'] as String?;
+      }
       List<ImageModel> images = await _plantService.getPlantImages(plantId);
       var imageMatch =
           images.where((img) => img.imageId == imageId).firstOrNull;
@@ -152,11 +159,11 @@ class _CardWidgetState extends State<CardWidget> {
           onTap:
               widget.completed && _imageUrlFuture != null
                   ? () async {
+                    final navigator = Navigator.of(context);
                     String? resolvedImgSrc = await _imageUrlFuture;
                     // Use a single mounted check to guard the context usage
                     if (resolvedImgSrc != null && mounted) {
-                      Navigator.push(
-                        context,
+                      navigator.push(
                         MaterialPageRoute(
                           builder:
                               (context) => SegmentPage(
@@ -194,42 +201,71 @@ class _CardWidgetState extends State<CardWidget> {
                         if (snapshot.hasError ||
                             !snapshot.hasData ||
                             snapshot.data == null) {
-                          return Image.asset(
-                            'assets/images/error_icon.png',
-                            fit: BoxFit.cover,
+                          return const Center(
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.grey,
+                              size: 22,
+                            ),
                           );
                         }
 
                         final imageUrl = snapshot.data!;
-                        final imageWidget = Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  value:
-                                      loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress
-                                                  .cumulativeBytesLoaded /
-                                              loadingProgress
-                                                  .expectedTotalBytes!
-                                          : null,
+                        final bool isLocalFile =
+                            imageUrl.startsWith('/') ||
+                            imageUrl.startsWith('file://');
+                        final imageWidget = isLocalFile
+                            ? Image.file(
+                                File(
+                                  imageUrl.startsWith('file://')
+                                      ? Uri.parse(imageUrl).toFilePath()
+                                      : imageUrl,
                                 ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              'assets/images/error_icon.png',
-                              fit: BoxFit.cover,
-                            );
-                          },
-                        );
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Center(
+                                    child: Icon(
+                                      Icons.broken_image_outlined,
+                                      color: Colors.grey,
+                                      size: 22,
+                                    ),
+                                  );
+                                },
+                              )
+                            : Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                loadingBuilder:
+                                    (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        value:
+                                            loadingProgress.expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                        .cumulativeBytesLoaded /
+                                                    loadingProgress
+                                                        .expectedTotalBytes!
+                                                : null,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Center(
+                                    child: Icon(
+                                      Icons.broken_image_outlined,
+                                      color: Colors.grey,
+                                      size: 22,
+                                    ),
+                                  );
+                                },
+                              );
 
                         if (widget.completed) {
                           return SegmentHero(imgSrc: imageUrl, id: _heroTag!);

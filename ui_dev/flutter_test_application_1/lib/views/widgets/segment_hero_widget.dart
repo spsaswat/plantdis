@@ -16,6 +16,13 @@ class SegmentHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLocalFile = imgSrc.startsWith('file://') || imgSrc.startsWith('/');
+    final imageProvider = isLocalFile
+        ? Image.file(
+            File(imgSrc.startsWith('file://') ? Uri.parse(imgSrc).toFilePath() : imgSrc),
+          ).image
+        : Image.network(imgSrc).image;
+
     return Hero(
       tag: id,
       child: Column(
@@ -26,7 +33,7 @@ class SegmentHero extends StatelessWidget {
               onTap: () {
                 showImageViewer(
                   context,
-                  Image.network(imgSrc).image,
+                  imageProvider,
                   swipeDismissible: true,
                   doubleTapZoomable: true,
                   onViewerDismissed: () {},
@@ -34,11 +41,21 @@ class SegmentHero extends StatelessWidget {
               },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(5.0),
-                child: Image.network(
-                  imgSrc,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
+                child: isLocalFile
+                    ? Image.file(
+                        File(
+                          imgSrc.startsWith('file://')
+                              ? Uri.parse(imgSrc).toFilePath()
+                              : imgSrc,
+                        ),
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        imgSrc,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
           ),

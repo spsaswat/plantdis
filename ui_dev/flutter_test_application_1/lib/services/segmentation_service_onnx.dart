@@ -5,9 +5,9 @@ import 'package:image/image.dart' as img;
 import 'package:onnxruntime/onnxruntime.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
-/// ONNX 分割服务（基于之前的实现）
+/// ONNX segmentation service (based on previous implementation)
 class OnnxSegmentationService {
-  // 单例
+  // Singleton
   static final OnnxSegmentationService _instance =
       OnnxSegmentationService._internal();
   factory OnnxSegmentationService() => _instance;
@@ -62,7 +62,7 @@ class OnnxSegmentationService {
       final img.Image? decoded = img.decodeImage(imgBytes);
       if (decoded == null) throw Exception('Failed to decode image.');
 
-      // 简化：使用原始尺寸按通道打平成 Float32（RGB，0..1）
+      // Simplified: flatten original-size pixels by channel to Float32 (RGB, 0..1)
       final int imageHeight = decoded.height;
       final int imageWidth = decoded.width;
       final r = <double>[];
@@ -85,7 +85,7 @@ class OnnxSegmentationService {
       final runOptions = OrtRunOptions();
       final outputs = _session!.run(runOptions, {'input': inputOrt});
 
-      // 假设 masks 输出位于 outputs[3]
+      // Assume masks output is located at outputs[3]
       final masks4D = outputs[3]!.value as List; // [N,1,H,W]
       final List<List<List<double>>> rawMasks =
           masks4D.map((detection) {
@@ -95,7 +95,7 @@ class OnnxSegmentationService {
                 .toList();
           }).toList();
 
-      // 合并掩码
+      // Merge masks
       final int h = rawMasks.first.length;
       final int w = rawMasks.first[0].length;
       final unionMask = List.generate(h, (_) => List<bool>.filled(w, false));

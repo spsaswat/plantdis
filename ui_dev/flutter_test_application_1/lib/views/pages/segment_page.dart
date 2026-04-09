@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // Import for kDebugMode
@@ -27,6 +28,7 @@ import 'package:flutter_test_application_1/services/segmentation_service.dart'
 import 'package:flutter_test_application_1/services/segmentation_service_onnx.dart'
     as seg_onnx;
 import 'package:flutter_test_application_1/services/inference_service.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
 
 class SegmentPage extends StatefulWidget {
@@ -52,6 +54,7 @@ class _SegmentPageState extends State<SegmentPage> {
       FirebaseFirestore.instance; // Firestore instance
   final PlantService _plantService =
       PlantService(); // Plant service for deletion
+  final LocalGuestService _localGuestService = LocalGuestService();
 
   // Background detection service
   final BackgroundDetectionService _backgroundDetectionService =
@@ -73,6 +76,8 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _plantClass;
   double? _plantClassConf;
   bool _speciesLoading = false;
+  bool _isLocalGuestMode = false;
+  bool _segModelMissingHintShown = false;
   bool _manualOverride = false;
   bool _speciesOverrideActive = false;
   String? _speciesOverrideSelection;
@@ -117,7 +122,94 @@ class _SegmentPageState extends State<SegmentPage> {
   @override
   void initState() {
     super.initState();
+    _initGuestMode();
     _loadCachedAnalysisIfAny();
+  }
+
+  Future<void> _initGuestMode() async {
+    final enabled = await _localGuestService.isLocalGuestMode();
+    if (mounted) {
+      setState(() {
+        _isLocalGuestMode = enabled;
+      });
+    }
+  }
+
+  Stream<PlantModel?> _plantStream() {
+    if (_isLocalGuestMode) {
+      return _localGuestService.plantsStream().map((plants) {
+        try {
+          return plants.firstWhere((p) => p.plantId == widget.plantId);
+        } catch (_) {
+          return null;
+        }
+      });
+    }
+    return _firestore
+        .collection('plants')
+        .doc(widget.plantId)
+        .snapshots()
+        .map((snap) => snap.exists ? PlantModel.fromMap(snap.data()!) : null);
+  }
+
+  Future<void> _updatePlantAnalysis(Map<String, dynamic> analysisData) async {
+    if (_isLocalGuestMode) {
+      final current = await _localGuestService.getPlantById(widget.plantId);
+      final merged = <String, dynamic>{
+        ...?current?.analysisResults,
+        ...analysisData,
+      };
+      await _localGuestService.updatePlant(
+        plantId: widget.plantId,
+        status: 'completed',
+        analysisResults: merged,
+      );
+      return;
+    }
+    await _firestore.collection('plants').doc(widget.plantId).update({
+      'status': 'completed',
+      'analysisResults': analysisData,
+      'analysisError': FieldValue.delete(),
+    });
+  }
+
+  Future<bool> _assetExists(String path) async {
+    try {
+      await rootBundle.load(path);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<File?> _segmentWithSelectedModel(File temp) async {
+    final String modelPath = _selectedSegModel == 'onnx'
+        ? 'assets/models/leaf_mask_rcnn_v2.onnx'
+        : 'assets/models/best_float32.tflite';
+    final bool exists = await _assetExists(modelPath);
+    if (!exists) {
+      if (!_segModelMissingHintShown && mounted) {
+        _segModelMissingHintShown = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Segmentation model is missing ($modelPath). Running classification without segmentation.',
+            ),
+          ),
+        );
+      }
+      logger.w('[SegmentPage] Segmentation model missing: $modelPath');
+      return null;
+    }
+
+    if (_selectedSegModel == 'onnx') {
+      final svc = seg_onnx.OnnxSegmentationService();
+      await svc.loadModel();
+      return svc.segment(temp);
+    }
+    final svc = seg_tfl.SegmentationService();
+    await svc.loadModel();
+    return svc.segment(temp);
   }
 
   Future<void> _loadCachedAnalysisIfAny() async {
@@ -151,9 +243,21 @@ class _SegmentPageState extends State<SegmentPage> {
 
   Future<void> _persistSuggestion(String suggestion) async {
     try {
-      await _firestore.collection('plants').doc(widget.plantId).update({
-        'analysisResults.recommendation': suggestion,
-      });
+      if (_isLocalGuestMode) {
+        final current = await _localGuestService.getPlantById(widget.plantId);
+        final merged = <String, dynamic>{
+          ...?current?.analysisResults,
+          'recommendation': suggestion,
+        };
+        await _localGuestService.updatePlant(
+          plantId: widget.plantId,
+          analysisResults: merged,
+        );
+      } else {
+        await _firestore.collection('plants').doc(widget.plantId).update({
+          'analysisResults.recommendation': suggestion,
+        });
+      }
       await _plantService.saveImageAnalysisResult(
         plantId: widget.plantId,
         imageId: widget.id,
@@ -199,12 +303,7 @@ class _SegmentPageState extends State<SegmentPage> {
           'analysisStage': 3,
           'analysisCompleted': true,
         };
-        await _firestore.collection('plants').doc(widget.plantId).update({
-          'status': 'completed',
-          'analysisResults': analysisData,
-          'analysisError': FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        await _updatePlantAnalysis(analysisData);
         await _plantService.saveImageAnalysisResult(
           plantId: widget.plantId,
           imageId: widget.id,
@@ -447,36 +546,33 @@ class _SegmentPageState extends State<SegmentPage> {
       final imageBytes = await _getOriginalImageBytes();
       final temp = await _downloadToTemp(imageBytes);
 
-      // 2) Segment locally with selected model
-      File segmentedFile;
-      if (_selectedSegModel == 'onnx') {
-        final svc = seg_onnx.OnnxSegmentationService();
-        await svc.loadModel();
-        segmentedFile = await svc.segment(temp);
-      } else {
-        final svc = seg_tfl.SegmentationService();
-        await svc.loadModel();
-        segmentedFile = await svc.segment(temp);
-      }
+      // 2) Segment locally when model exists; otherwise fallback to original
+      final File? segmentedFile = await _segmentWithSelectedModel(temp);
 
       // 3) Upload segmented image (optional but populates segmentationUrl)
       String? segmentationUrl;
-      try {
-        segmentationUrl = await _plantService.saveProcessedImage(
-          segmentedFile,
-          widget.plantId,
-          widget.id,
-          'segmentation',
-        );
-        await _firestore.collection('images').doc(widget.id).update({
-          'processedUrls.segmentation': segmentationUrl,
-        });
-      } catch (_) {
-        // Continue even if upload fails
+      if (_isLocalGuestMode && segmentedFile != null) {
+        segmentationUrl = segmentedFile.uri.toString();
+      } else if (segmentedFile != null) {
+        try {
+          segmentationUrl = await _plantService.saveProcessedImage(
+            segmentedFile,
+            widget.plantId,
+            widget.id,
+            'segmentation',
+          );
+          await _firestore.collection('images').doc(widget.id).update({
+            'processedUrls.segmentation': segmentationUrl,
+          });
+        } catch (_) {
+          // Continue even if upload fails
+        }
       }
 
       // 4) Run detection on segmented image bytes (local inference)
-      final segBytes = await segmentedFile.readAsBytes();
+      final segBytes = segmentedFile != null
+          ? await segmentedFile.readAsBytes()
+          : imageBytes;
 
       // 4a) Determine plant species
       if (_forcedSpecies != null) {
@@ -506,7 +602,7 @@ class _SegmentPageState extends State<SegmentPage> {
           if (_plantClassConf != null)
             'plantSpeciesConfidence': _plantClassConf,
           'model': _selectedSegModel,
-          'threshold': null, // optional: add UI threshold if已知
+          'threshold': null, // optional: add UI threshold if known
           'manuallyOverridden':
               _speciesOverrideActive || (_forcedSpecies != null),
           'source':
@@ -514,11 +610,7 @@ class _SegmentPageState extends State<SegmentPage> {
                   ? 'manual'
                   : 'auto',
         };
-        await _firestore.collection('plants').doc(widget.plantId).update({
-          'status': 'completed',
-          'analysisResults': analysisData,
-          'analysisError': FieldValue.delete(),
-        });
+        await _updatePlantAnalysis(analysisData);
         // Save per-image latest for fast reload
         await _plantService.saveImageAnalysisResult(
           plantId: widget.plantId,
@@ -526,11 +618,24 @@ class _SegmentPageState extends State<SegmentPage> {
           analysis: analysisData,
         );
       } else {
-        await _firestore.collection('plants').doc(widget.plantId).update({
-          'status': 'error',
-          'analysisError': 'Local analysis returned no result',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        if (_isLocalGuestMode) {
+          final current = await _localGuestService.getPlantById(widget.plantId);
+          await _localGuestService.updatePlant(
+            plantId: widget.plantId,
+            status: 'error',
+            analysisResults: {
+              ...?current?.analysisResults,
+              'analysisError': 'Local analysis returned no result',
+              'updatedAt': DateTime.now().toIso8601String(),
+            },
+          );
+        } else {
+          await _firestore.collection('plants').doc(widget.plantId).update({
+            'status': 'error',
+            'analysisError': 'Local analysis returned no result',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
     } catch (e, st) {
       logger.e('[SegmentPage] Re-segment/detect failed: $e\n$st');
@@ -556,34 +661,31 @@ class _SegmentPageState extends State<SegmentPage> {
       final imageBytes = await _getOriginalImageBytes();
       final temp = await _downloadToTemp(imageBytes);
 
-      // 2) Segment locally with selected model
-      File segmentedFile;
-      if (_selectedSegModel == 'onnx') {
-        final svc = seg_onnx.OnnxSegmentationService();
-        await svc.loadModel();
-        segmentedFile = await svc.segment(temp);
-      } else {
-        final svc = seg_tfl.SegmentationService();
-        await svc.loadModel();
-        segmentedFile = await svc.segment(temp);
-      }
+      // 2) Segment locally when model exists; otherwise fallback to original
+      final File? segmentedFile = await _segmentWithSelectedModel(temp);
 
       // 3) Upload segmented image (populate segmentationUrl)
       String? segmentationUrl;
-      try {
-        segmentationUrl = await _plantService.saveProcessedImage(
-          segmentedFile,
-          widget.plantId,
-          widget.id,
-          'segmentation',
-        );
-        await _firestore.collection('images').doc(widget.id).update({
-          'processedUrls.segmentation': segmentationUrl,
-        });
-      } catch (_) {}
+      if (_isLocalGuestMode && segmentedFile != null) {
+        segmentationUrl = segmentedFile.uri.toString();
+      } else if (segmentedFile != null) {
+        try {
+          segmentationUrl = await _plantService.saveProcessedImage(
+            segmentedFile,
+            widget.plantId,
+            widget.id,
+            'segmentation',
+          );
+          await _firestore.collection('images').doc(widget.id).update({
+            'processedUrls.segmentation': segmentationUrl,
+          });
+        } catch (_) {}
+      }
 
       // 4) Run plant species classifier for UI display
-      final segBytes = await segmentedFile.readAsBytes();
+      final segBytes = segmentedFile != null
+          ? await segmentedFile.readAsBytes()
+          : imageBytes;
       await _runPlantSpeciesClassifier(segBytes);
 
       // 5) Persist minimal analysisResults (segmentationUrl and optional species)
@@ -596,11 +698,27 @@ class _SegmentPageState extends State<SegmentPage> {
           'analysisResults.plantSpeciesConfidence': _plantClassConf,
       };
       if (updates.isNotEmpty) {
-        await _firestore
-            .collection('plants')
-            .doc(widget.plantId)
-            .update(updates);
-        // Also save image-level latest even if未选择疾病（仅分割/物种）
+        if (_isLocalGuestMode) {
+          final current = await _localGuestService.getPlantById(widget.plantId);
+          final merged = <String, dynamic>{...?current?.analysisResults};
+          updates.forEach((key, value) {
+            if (key.startsWith('analysisResults.')) {
+              merged[key.replaceFirst('analysisResults.', '')] = value;
+            } else {
+              merged[key] = value;
+            }
+          });
+          await _localGuestService.updatePlant(
+            plantId: widget.plantId,
+            analysisResults: merged,
+          );
+        } else {
+          await _firestore
+              .collection('plants')
+              .doc(widget.plantId)
+              .update(updates);
+        }
+        // Also save image-level latest even when only segmentation/species is available
         await _plantService.saveImageAnalysisResult(
           plantId: widget.plantId,
           imageId: widget.id,
@@ -773,9 +891,8 @@ class _SegmentPageState extends State<SegmentPage> {
       appBar: const AppbarWidget(),
       body: Stack(
         children: [
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream:
-                _firestore.collection('plants').doc(widget.plantId).snapshots(),
+          StreamBuilder<PlantModel?>(
+            stream: _plantStream(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -811,7 +928,7 @@ class _SegmentPageState extends State<SegmentPage> {
                 );
               }
 
-              if (!snapshot.hasData || !snapshot.data!.exists) {
+              if (!snapshot.hasData || snapshot.data == null) {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(30.0),
@@ -868,12 +985,10 @@ class _SegmentPageState extends State<SegmentPage> {
               }
 
               // Data is available, parse it
-              final docData = snapshot.data!.data()!;
-              PlantModel plant = PlantModel.fromMap(docData);
+              final PlantModel plant = snapshot.data!;
               Map<String, dynamic>? analysisResults = plant.analysisResults;
               String status = plant.status;
-              // Read analysisError directly from the document data
-              String? analysisErrorMsg = docData['analysisError'] as String?;
+              String? analysisErrorMsg = null;
 
               // Determine display state based on results and confidence
               bool hasResults =

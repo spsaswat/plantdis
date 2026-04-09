@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test_application_1/data/constants.dart';
 import 'package:flutter_test_application_1/services/auth_service.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/views/pages/login_page.dart';
 import 'package:flutter_test_application_1/views/pages/register_page.dart';
 import 'package:flutter_test_application_1/views/widget_tree.dart';
@@ -19,6 +21,7 @@ class _WelcomePageState extends State<WelcomePage> {
   bool _isGuestSignInLoading = false;
   String? _errorMessage;
   final _authService = AuthService();
+  final _localGuestService = LocalGuestService();
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +176,13 @@ class _WelcomePageState extends State<WelcomePage> {
     });
 
     try {
-      await _authService.signInAnonymously();
+      // macOS guest mode: stay fully local without Firebase account.
+      if (LocalGuestService.isMacOS && !kIsWeb) {
+        await _localGuestService.setLocalGuestMode(true);
+      } else {
+        await _localGuestService.setLocalGuestMode(false);
+        await _authService.signInAnonymously();
+      }
       navigateToHome();
     } catch (e) {
       setState(() {

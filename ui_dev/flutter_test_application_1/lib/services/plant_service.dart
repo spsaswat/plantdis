@@ -16,6 +16,7 @@ import '../models/detection_result.dart';
 import '../utils/storage_utils.dart';
 import '../utils/logger.dart';
 import './inference_service.dart';
+import './local_guest_service.dart';
 import './segmentation_service.dart';
 // import 'package:flutter/material.dart'; // Removed as it did not seem directly used by PlantService logic
 
@@ -25,6 +26,7 @@ class PlantService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final InferenceService _inferenceService = InferenceService();
   final SegmentationService _segmentationService = SegmentationService();
+  final LocalGuestService _localGuestService = LocalGuestService();
 
   CollectionReference<Map<String, dynamic>> get _plants =>
       _firestore.collection('plants');
@@ -39,6 +41,14 @@ class PlantService {
     required String imageId,
     required Map<String, dynamic> analysis,
   }) async {
+    if (await _localGuestService.isLocalGuestMode()) {
+      await _localGuestService.saveImageAnalysisResult(
+        plantId: plantId,
+        imageId: imageId,
+        analysis: analysis,
+      );
+      return;
+    }
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
     final DocumentReference<Map<String, dynamic>> docRef = _users
@@ -63,6 +73,12 @@ class PlantService {
     required String plantId,
     required String imageId,
   }) async {
+    if (await _localGuestService.isLocalGuestMode()) {
+      return _localGuestService.getLatestImageAnalysisResult(
+        plantId: plantId,
+        imageId: imageId,
+      );
+    }
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
     final docRef = _users
@@ -84,6 +100,11 @@ class PlantService {
     String? notes,
     String? existingPlantId,
   }) async {
+    if (await _localGuestService.isLocalGuestMode()) {
+      final Uint8List imageBytes = await image.readAsBytes();
+      return _localGuestService.createLocalPlantFromImage(imageBytes: imageBytes);
+    }
+
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
 
@@ -566,6 +587,10 @@ class PlantService {
   }
 
   Future<void> deletePlant(String plantId) async {
+    if (await _localGuestService.isLocalGuestMode()) {
+      await _localGuestService.deletePlant(plantId);
+      return;
+    }
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not authenticated');
     try {
@@ -674,6 +699,53 @@ class PlantService {
   }
 
   Stream<List<PlantModel>> userPlantsStream() {
+    // macOS local guest mode: stream purely local history.
+    if (LocalGuestService.isMacOS) {
+      return Stream.fromFuture(_localGuestService.isLocalGuestMode()).asyncExpand((
+        enabled,
+      ) {
+        if (enabled) return _localGuestService.plantsStream();
+        final user = _auth.currentUser;
+        if (user == null) {
+          return Stream.error(Exception('User not authenticated'));
+        }
+        final controller = StreamController<List<PlantModel>>.broadcast();
+        void fetchData(bool withOrderBy) {
+          Query query = _plants.where('userId', isEqualTo: user.uid);
+          if (withOrderBy) {
+            query = query.orderBy('createdAt', descending: true);
+          }
+          query.snapshots().listen(
+            (snapshot) {
+              final list =
+                  snapshot.docs
+                      .map(
+                        (doc) =>
+                            PlantModel.fromMap(doc.data() as Map<String, dynamic>),
+                      )
+                      .toList();
+              if (!withOrderBy && snapshot.docs.isNotEmpty) {
+                list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              }
+              if (!controller.isClosed) controller.add(list);
+            },
+            onError: (error) {
+              if (withOrderBy &&
+                  (error.toString().contains('failed-precondition') ||
+                      error.toString().contains('requires an index'))) {
+                fetchData(false);
+              } else if (!controller.isClosed) {
+                controller.addError(error);
+              }
+            },
+          );
+        }
+
+        fetchData(true);
+        return controller.stream;
+      });
+    }
+
     final user = _auth.currentUser;
     if (user == null) {
       return Stream.error(Exception('User not authenticated'));
