@@ -10,10 +10,15 @@ import 'package:flutter_test_application_1/services/user_service.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 class DatabaseService {
-  final User _user = FirebaseAuth.instance.currentUser!;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseAuth? _authInstance;
+  FirebaseStorage? _storageInstance;
+  FirebaseFirestore? _firestoreInstance;
+
+  late final User _user = _auth.currentUser!;
+  FirebaseAuth get _auth => _authInstance ??= FirebaseAuth.instance;
+  FirebaseStorage get _storage => _storageInstance ??= FirebaseStorage.instance;
+  FirebaseFirestore get _firestore =>
+      _firestoreInstance ??= FirebaseFirestore.instance;
   final UserService _userService = UserService();
 
   // Reference to the users collection

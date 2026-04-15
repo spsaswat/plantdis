@@ -5,6 +5,8 @@ import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
+import '../../services/local_guest_service.dart';
+
 class ProcessingPage extends StatefulWidget {
   const ProcessingPage({super.key, required this.pendingPlants});
 
@@ -17,6 +19,7 @@ class ProcessingPage extends StatefulWidget {
 class _ProcessingPageState extends State<ProcessingPage> {
   final PlantService _plantService = PlantService();
   late List<PlantModel> _displayedPlants;
+  final LocalGuestService _localGuestService = LocalGuestService();
 
   @override
   void initState() {
@@ -26,7 +29,9 @@ class _ProcessingPageState extends State<ProcessingPage> {
 
   void _refreshProcessingList() async {
     try {
-      final plants = await _plantService.getUserPlants();
+      final plants = await _localGuestService.isLocalGuestMode() ?
+                      await _localGuestService.getPlants() :
+                      await _plantService.getUserPlants();
       final pendingPlants =
           plants
               .where(

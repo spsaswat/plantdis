@@ -6,10 +6,12 @@ import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirebaseAuth? _authInstance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final UserService _userService = UserService();
   final LocalGuestService _localGuestService = LocalGuestService();
+
+  FirebaseAuth get _auth => _authInstance ??= FirebaseAuth.instance;
 
   AuthService() {
     _initializeGoogleSignIn();

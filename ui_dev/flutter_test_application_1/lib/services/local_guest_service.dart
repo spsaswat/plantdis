@@ -18,9 +18,10 @@ class LocalGuestService {
       StreamController<List<PlantModel>>.broadcast();
 
   static bool get isMacOS => !kIsWeb && io.Platform.isMacOS;
+  static bool get isDesktopApp => io.Platform.isMacOS || io.Platform.isWindows || io.Platform.isLinux;
 
   Future<bool> isLocalGuestMode() async {
-    if (!isMacOS) return false;
+    if (!isDesktopApp) return false;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_guestModeKey) ?? false;
   }

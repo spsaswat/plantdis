@@ -31,7 +31,6 @@ class _WidgetTreeState extends State<WidgetTree> {
   XFile? xfile;
   final PlantService _plantService = PlantService();
 
-  DatabaseService database = DatabaseService();
 
   @override
   Widget build(BuildContext context) {

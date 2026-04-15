@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test_application_1/data/constants.dart';
@@ -9,6 +10,8 @@ import 'package:flutter_test_application_1/views/widget_tree.dart';
 import 'package:flutter_test_application_1/views/widgets/google_sign_in_button.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../firebase_options.dart';
+
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
 
@@ -17,11 +20,22 @@ class WelcomePage extends StatefulWidget {
 }
 
 class _WelcomePageState extends State<WelcomePage> {
+  static bool isFirebaseInitialized = false;
   bool _isGoogleSignInLoading = false;
   bool _isGuestSignInLoading = false;
   String? _errorMessage;
-  final _authService = AuthService();
+  AuthService? _authServiceInstance;
+  AuthService? get _authService => _authServiceInstance ??= AuthService();
   final _localGuestService = LocalGuestService();
+
+  Future<void> initFireBase() async {
+    if (isFirebaseInitialized) {
+      return;
+    }
+    isFirebaseInitialized = true;
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +79,8 @@ class _WelcomePageState extends State<WelcomePage> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onPressed: () {
+                          onPressed: () async {
+                            await initFireBase();
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -86,7 +101,8 @@ class _WelcomePageState extends State<WelcomePage> {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          onPressed: () {
+                          onPressed: () async {
+                            await initFireBase();
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -120,7 +136,8 @@ class _WelcomePageState extends State<WelcomePage> {
 
                         GoogleSignInButton(
                           isLoading: _isGoogleSignInLoading,
-                          onSignInComplete: (isSuccess, errorMessage) {
+                          onSignInComplete: (isSuccess, errorMessage) async {
+                            await initFireBase();
                             if (isSuccess) {
                               navigateToHome();
                             } else {
@@ -176,12 +193,13 @@ class _WelcomePageState extends State<WelcomePage> {
     });
 
     try {
-      // macOS guest mode: stay fully local without Firebase account.
-      if (LocalGuestService.isMacOS && !kIsWeb) {
+      // Desktop guest mode: stay fully local without Firebase account.
+      if (LocalGuestService.isDesktopApp) {
         await _localGuestService.setLocalGuestMode(true);
       } else {
+        await initFireBase();
         await _localGuestService.setLocalGuestMode(false);
-        await _authService.signInAnonymously();
+        await _authService!.signInAnonymously();
       }
       navigateToHome();
     } catch (e) {

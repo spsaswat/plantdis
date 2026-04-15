@@ -50,11 +50,12 @@ class SegmentPage extends StatefulWidget {
 }
 
 class _SegmentPageState extends State<SegmentPage> {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance; // Firestore instance
+  FirebaseFirestore? _firestoreInstance; // Firestore instance
   final PlantService _plantService =
       PlantService(); // Plant service for deletion
   final LocalGuestService _localGuestService = LocalGuestService();
+  FirebaseFirestore get _firestore =>
+      _firestoreInstance ??= FirebaseFirestore.instance;
 
   // Background detection service
   final BackgroundDetectionService _backgroundDetectionService =
@@ -76,7 +77,7 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _plantClass;
   double? _plantClassConf;
   bool _speciesLoading = false;
-  bool _isLocalGuestMode = false;
+  bool _isLocalGuestMode = true;
   bool _segModelMissingHintShown = false;
   bool _manualOverride = false;
   bool _speciesOverrideActive = false;

@@ -21,9 +21,13 @@ import './segmentation_service.dart';
 // import 'package:flutter/material.dart'; // Removed as it did not seem directly used by PlantService logic
 
 class PlantService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseAuth? _authInstance;
+  FirebaseStorage? _storageInstance;
+  FirebaseFirestore? _firestoreInstance;
+
+  FirebaseAuth get _auth => _authInstance ??= FirebaseAuth.instance;
+  FirebaseStorage get _storage => _storageInstance ??= FirebaseStorage.instance;
+  FirebaseFirestore get _firestore => _firestoreInstance ??= FirebaseFirestore.instance;
   final InferenceService _inferenceService = InferenceService();
   final SegmentationService _segmentationService = SegmentationService();
   final LocalGuestService _localGuestService = LocalGuestService();
@@ -699,8 +703,8 @@ class PlantService {
   }
 
   Stream<List<PlantModel>> userPlantsStream() {
-    // macOS local guest mode: stream purely local history.
-    if (LocalGuestService.isMacOS) {
+    // Desktop local guest mode: stream purely local history.
+    if (LocalGuestService.isDesktopApp) {
       return Stream.fromFuture(_localGuestService.isLocalGuestMode()).asyncExpand((
         enabled,
       ) {

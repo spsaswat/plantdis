@@ -20,9 +20,6 @@ void main() async {
   // Initialize TFLite factories
   initializeTfliteFactories();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(const MyApp());
 }
 

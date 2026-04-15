@@ -16,8 +16,12 @@ class ProfilePage extends StatefulWidget {
 
 // TODO: Implement user settings and preferences
 class _ProfilePageState extends State<ProfilePage> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseAuth? _authInstance;
+  FirebaseFirestore? _firestoreInstance;
+
+  FirebaseAuth get _auth => _authInstance ??= FirebaseAuth.instance;
+  FirebaseFirestore get _firestore =>
+      _firestoreInstance ??= FirebaseFirestore.instance;
   String? _userName;
   String? _userEmail;
   String? _avatarUrl;
