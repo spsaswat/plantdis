@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test_application_1/data/constants.dart';
 import 'package:flutter_test_application_1/services/auth_service.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';

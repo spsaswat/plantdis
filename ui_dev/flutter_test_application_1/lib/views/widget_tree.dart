@@ -1,7 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter_test_application_1/services/database_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
