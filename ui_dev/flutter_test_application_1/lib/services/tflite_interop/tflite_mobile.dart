@@ -1,4 +1,4 @@
-import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
+import 'package:flutter_litert/flutter_litert.dart' as tfl;
 import 'tflite_interface.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
