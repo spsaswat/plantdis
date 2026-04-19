@@ -29,7 +29,7 @@ class _ProcessingPageState extends State<ProcessingPage> {
 
   void _refreshProcessingList() async {
     try {
-      final plants = await _localGuestService.isLocalGuestMode() ?
+      final plants = _localGuestService.isLocalGuestMode() ?
                       await _localGuestService.getPlants() :
                       await _plantService.getUserPlants();
       final pendingPlants =

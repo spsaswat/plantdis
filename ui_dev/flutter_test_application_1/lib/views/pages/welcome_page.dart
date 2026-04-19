@@ -194,10 +194,10 @@ class _WelcomePageState extends State<WelcomePage> {
     try {
       // Desktop guest mode: stay fully local without Firebase account.
       if (LocalGuestService.isDesktopApp) {
-        await _localGuestService.setLocalGuestMode(true);
+        _localGuestService.setLocalGuestMode(true);
       } else {
         await initFireBase();
-        await _localGuestService.setLocalGuestMode(false);
+        _localGuestService.setLocalGuestMode(false);
         await _authService!.signInAnonymously();
       }
       navigateToHome();

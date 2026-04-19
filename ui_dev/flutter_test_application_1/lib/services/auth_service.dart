@@ -44,7 +44,7 @@ class AuthService {
         email: email,
         password: password,
       );
-      await _localGuestService.setLocalGuestMode(false);
+      _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with IP
       await _userService.createOrUpdateUser(
@@ -71,7 +71,7 @@ class AuthService {
         email: email,
         password: password,
       );
-      await _localGuestService.setLocalGuestMode(false);
+      _localGuestService.setLocalGuestMode(false);
       // Create user data in Firestore
       await _userService.createOrUpdateUser(credential.user!);
       return credential;
@@ -100,7 +100,7 @@ class AuthService {
 
       // Sign in with credential
       final userCredential = await _auth.signInWithCredential(credential);
-      await _localGuestService.setLocalGuestMode(false);
+      _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with IP address
       await _userService.createOrUpdateUser(
@@ -125,7 +125,7 @@ class AuthService {
       final ipAddress = await _userService.getUserIpAddress();
 
       final userCredential = await _auth.signInAnonymously();
-      await _localGuestService.setLocalGuestMode(false);
+      _localGuestService.setLocalGuestMode(false);
 
       // Create or update user data in Firestore with additional guest info and IP
       await _userService.createOrUpdateUser(

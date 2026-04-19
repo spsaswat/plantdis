@@ -51,7 +51,7 @@ class _CardWidgetState extends State<CardWidget> {
 
   Future<String?> _fetchImageUrl(String plantId, String imageId) async {
     try {
-      if (await _localGuestService.isLocalGuestMode()) {
+      if (_localGuestService.isLocalGuestMode()) {
         final plant = await _localGuestService.getPlantById(plantId);
         return plant?.analysisResults?['localImagePath'] as String?;
       }

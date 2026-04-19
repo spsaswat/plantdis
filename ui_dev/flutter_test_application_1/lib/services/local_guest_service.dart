@@ -11,6 +11,7 @@ class LocalGuestService {
   static const String _guestModeKey = 'macos_local_guest_mode';
   static const String _plantsKey = 'macos_local_guest_plants_v1';
   static const String _analysisKey = 'macos_local_guest_analysis_v1';
+  static bool localGuestMode = false;
 
   final ValueNotifier<List<PlantModel>> _plantsNotifier =
       ValueNotifier<List<PlantModel>>(<PlantModel>[]);
@@ -20,18 +21,12 @@ class LocalGuestService {
   static bool get isMacOS => !kIsWeb && io.Platform.isMacOS;
   static bool get isDesktopApp => io.Platform.isMacOS || io.Platform.isWindows || io.Platform.isLinux;
 
-  Future<bool> isLocalGuestMode() async {
-    if (!isDesktopApp) return false;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_guestModeKey) ?? false;
+  bool isLocalGuestMode() {
+    return localGuestMode;
   }
 
-  Future<void> setLocalGuestMode(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_guestModeKey, enabled);
-    if (!enabled) {
-      _plantsNotifier.value = <PlantModel>[];
-    }
+  void setLocalGuestMode(bool enabled) {
+    localGuestMode = enabled;
   }
 
   Stream<List<PlantModel>> plantsStream() async* {

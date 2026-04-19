@@ -57,8 +57,8 @@ class DrawerWidget extends StatelessWidget {
             title: const Text("Logout"),
             onTap: () async {
               final localGuest = LocalGuestService();
-              if (await localGuest.isLocalGuestMode()) {
-                await localGuest.setLocalGuestMode(false);
+              if (localGuest.isLocalGuestMode()) {
+                localGuest.setLocalGuestMode(false);
               }
               if (!context.mounted) return;
               selectedPageNotifier.value = 0;

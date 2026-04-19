@@ -128,7 +128,7 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   Future<void> _initGuestMode() async {
-    final enabled = await _localGuestService.isLocalGuestMode();
+    final enabled = _localGuestService.isLocalGuestMode();
     if (mounted) {
       setState(() {
         _isLocalGuestMode = enabled;

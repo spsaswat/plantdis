@@ -45,7 +45,7 @@ class PlantService {
     required String imageId,
     required Map<String, dynamic> analysis,
   }) async {
-    if (await _localGuestService.isLocalGuestMode()) {
+    if (_localGuestService.isLocalGuestMode()) {
       await _localGuestService.saveImageAnalysisResult(
         plantId: plantId,
         imageId: imageId,
@@ -77,7 +77,7 @@ class PlantService {
     required String plantId,
     required String imageId,
   }) async {
-    if (await _localGuestService.isLocalGuestMode()) {
+    if (_localGuestService.isLocalGuestMode()) {
       return _localGuestService.getLatestImageAnalysisResult(
         plantId: plantId,
         imageId: imageId,
@@ -104,7 +104,7 @@ class PlantService {
     String? notes,
     String? existingPlantId,
   }) async {
-    if (await _localGuestService.isLocalGuestMode()) {
+    if (_localGuestService.isLocalGuestMode()) {
       final Uint8List imageBytes = await image.readAsBytes();
       return _localGuestService.createLocalPlantFromImage(imageBytes: imageBytes);
     }
@@ -591,7 +591,7 @@ class PlantService {
   }
 
   Future<void> deletePlant(String plantId) async {
-    if (await _localGuestService.isLocalGuestMode()) {
+    if (_localGuestService.isLocalGuestMode()) {
       await _localGuestService.deletePlant(plantId);
       return;
     }
@@ -704,50 +704,8 @@ class PlantService {
 
   Stream<List<PlantModel>> userPlantsStream() {
     // Desktop local guest mode: stream purely local history.
-    if (LocalGuestService.isDesktopApp) {
-      return Stream.fromFuture(_localGuestService.isLocalGuestMode()).asyncExpand((
-        enabled,
-      ) {
-        if (enabled) return _localGuestService.plantsStream();
-        final user = _auth.currentUser;
-        if (user == null) {
-          return Stream.error(Exception('User not authenticated'));
-        }
-        final controller = StreamController<List<PlantModel>>.broadcast();
-        void fetchData(bool withOrderBy) {
-          Query query = _plants.where('userId', isEqualTo: user.uid);
-          if (withOrderBy) {
-            query = query.orderBy('createdAt', descending: true);
-          }
-          query.snapshots().listen(
-            (snapshot) {
-              final list =
-                  snapshot.docs
-                      .map(
-                        (doc) =>
-                            PlantModel.fromMap(doc.data() as Map<String, dynamic>),
-                      )
-                      .toList();
-              if (!withOrderBy && snapshot.docs.isNotEmpty) {
-                list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              }
-              if (!controller.isClosed) controller.add(list);
-            },
-            onError: (error) {
-              if (withOrderBy &&
-                  (error.toString().contains('failed-precondition') ||
-                      error.toString().contains('requires an index'))) {
-                fetchData(false);
-              } else if (!controller.isClosed) {
-                controller.addError(error);
-              }
-            },
-          );
-        }
-
-        fetchData(true);
-        return controller.stream;
-      });
+    if (_localGuestService.isLocalGuestMode()) {
+      return _localGuestService.plantsStream();
     }
 
     final user = _auth.currentUser;
