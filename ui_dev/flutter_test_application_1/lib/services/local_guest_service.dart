@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
 
 class LocalGuestService {
-  static const String _guestModeKey = 'macos_local_guest_mode';
   static const String _plantsKey = 'macos_local_guest_plants_v1';
   static const String _analysisKey = 'macos_local_guest_analysis_v1';
   static bool localGuestMode = false;
