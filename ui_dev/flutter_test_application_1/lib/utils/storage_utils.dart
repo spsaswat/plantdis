@@ -1,7 +1,14 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 class StorageUtils {
   static const _uuid = Uuid();
+
+  /// Folder under [getApplicationSupportDirectory] that mirrors Firebase Storage
+  /// object keys (`users/...`) for offline / guest assets.
+  static const String localStorageMirrorRoot = 'fb_storage_mirror';
 
   /// Generates a timestamp-based ID with UUID
   static String generateTimeBasedId(String prefix) {
@@ -44,6 +51,46 @@ class StorageUtils {
     String extension,
   ) {
     return 'users/$userId/plants/$plantId/processed/${imageId}_$processType.$extension';
+  }
+
+  /// Local [File] using the same path segments as Firebase Storage
+  /// ([getProcessedImagePath]), rooted under [applicationSupportDir].
+  ///
+  /// Use extension `png` when saving encoded PNGs; Firebase uploads often use
+  /// `jpg` in the key while local segmentation writes PNG bytes.
+  static File localProcessedImageFile(
+    Directory applicationSupportDir,
+    String userId,
+    String plantId,
+    String imageId,
+    String processType,
+    String extension,
+  ) {
+    return localMirrorFileForRelativePath(
+      applicationSupportDir,
+      getProcessedImagePath(
+        userId,
+        plantId,
+        imageId,
+        processType,
+        extension,
+      ),
+    );
+  }
+
+  /// Resolves a Firebase-style relative path (`users/...`) under the mirror root.
+  static File localMirrorFileForRelativePath(
+    Directory applicationSupportDir,
+    String firebaseStyleRelativePath,
+  ) {
+    final segments = firebaseStyleRelativePath.split('/');
+    return File(
+      p.join(
+        applicationSupportDir.path,
+        localStorageMirrorRoot,
+        p.joinAll(segments),
+      ),
+    );
   }
 
   /// Gets the storage path for a reference plant image

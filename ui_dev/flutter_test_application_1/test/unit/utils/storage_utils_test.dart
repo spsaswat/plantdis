@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_test_application_1/utils/storage_utils.dart';
 
@@ -89,6 +91,28 @@ void main() {
           path,
           'users/user123/plants/plant456/processed/img789_thumbnail.jpg',
         );
+      });
+
+      test('localProcessedImageFile mirrors Firebase-style segments', () {
+        final baseDir = Directory.systemTemp.createTempSync('storage_utils_');
+        try {
+          final file = StorageUtils.localProcessedImageFile(
+            baseDir,
+            'user123',
+            'plant456',
+            'img789',
+            'segmentation',
+            'png',
+          );
+          expect(
+            file.path,
+            contains(StorageUtils.localStorageMirrorRoot),
+          );
+          expect(file.path, contains('users${Platform.pathSeparator}user123'));
+          expect(file.path, endsWith('img789_segmentation.png'));
+        } finally {
+          baseDir.deleteSync(recursive: true);
+        }
       });
 
       test('should generate correct reference plant image path', () {

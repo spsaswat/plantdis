@@ -135,9 +135,24 @@ class _SegmentPageState extends State<SegmentPage> {
   @override
   void didUpdateWidget(SegmentPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.plantId != widget.plantId || oldWidget.id != widget.id) {
-      _didHydrateUiFromPlantDoc = false;
-    }
+    final idChanged =
+        oldWidget.plantId != widget.plantId || oldWidget.id != widget.id;
+    final imgChanged = oldWidget.imgSrc != widget.imgSrc;
+    if (!idChanged && !imgChanged) return;
+
+    _didHydrateUiFromPlantDoc = false;
+    _backgroundDetectionFuture = null;
+    _backgroundDetectionResult = null;
+    _isBackgroundDetectionComplete = false;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _segPreviewUrl = null;
+      });
+      // ignore: unawaited_futures
+      _loadCachedAnalysisIfAny();
+    });
   }
 
   void _maybeHydrateUiFromStoredPlant(PlantModel plant) {
@@ -177,13 +192,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
   Stream<PlantModel?> _plantStream() {
     if (_isLocalGuestMode) {
-      return _localGuestService.plantsStream().map((plants) {
-        try {
-          return plants.firstWhere((p) => p.plantId == widget.plantId);
-        } catch (_) {
-          return null;
-        }
-      });
+      return _localGuestService.plantStreamForPlantId(widget.plantId);
     }
     return _firestore
         .collection('plants')
@@ -194,15 +203,10 @@ class _SegmentPageState extends State<SegmentPage> {
 
   Future<void> _updatePlantAnalysis(Map<String, dynamic> analysisData) async {
     if (_isLocalGuestMode) {
-      final current = await _localGuestService.getPlantById(widget.plantId);
-      final merged = <String, dynamic>{
-        ...?current?.analysisResults,
-        ...analysisData,
-      };
-      await _localGuestService.updatePlant(
+      await _localGuestService.mergeAnalysisResultsIntoPlant(
         plantId: widget.plantId,
         status: 'completed',
-        analysisResults: merged,
+        patch: analysisData,
       );
       return;
     }
@@ -242,14 +246,19 @@ class _SegmentPageState extends State<SegmentPage> {
       return null;
     }
 
+    final out = await _localGuestService.segmentationOutputFileForWrite(
+      plantId: widget.plantId,
+      imageId: widget.id,
+    );
+
     if (_selectedSegModel == 'onnx') {
       final svc = seg_onnx.OnnxSegmentationService();
       await svc.loadModel();
-      return svc.segment(temp);
+      return svc.segment(temp, outputFile: out);
     }
     final svc = seg_tfl.SegmentationService();
     await svc.loadModel();
-    return svc.segment(temp);
+    return svc.segment(temp, outputFile: out);
   }
 
   Future<void> _loadCachedAnalysisIfAny() async {
@@ -284,14 +293,9 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<void> _persistSuggestion(String suggestion) async {
     try {
       if (_isLocalGuestMode) {
-        final current = await _localGuestService.getPlantById(widget.plantId);
-        final merged = <String, dynamic>{
-          ...?current?.analysisResults,
-          'recommendation': suggestion,
-        };
-        await _localGuestService.updatePlant(
+        await _localGuestService.mergeAnalysisResultsIntoPlant(
           plantId: widget.plantId,
-          analysisResults: merged,
+          patch: {'recommendation': suggestion},
         );
       } else {
         await _firestore.collection('plants').doc(widget.plantId).update({
@@ -634,10 +638,14 @@ class _SegmentPageState extends State<SegmentPage> {
       // 2) Segment locally when model exists; otherwise fallback to original
       final File? segmentedFile = await _segmentWithSelectedModel(temp);
 
-      // 3) Upload segmented image (optional but populates segmentationUrl)
+      // 3) Upload segmented image (Firebase) or persist local mirror path (Guest)
       String? segmentationUrl;
       if (_isLocalGuestMode && segmentedFile != null) {
-        segmentationUrl = segmentedFile.uri.toString();
+        segmentationUrl = await _localGuestService.persistSegmentationLocalUri(
+          segmentedFile,
+          plantId: widget.plantId,
+          imageId: widget.id,
+        );
       } else if (segmentedFile != null) {
         try {
           segmentationUrl = await _plantService.saveProcessedImage(
@@ -704,15 +712,9 @@ class _SegmentPageState extends State<SegmentPage> {
         );
       } else {
         if (_isLocalGuestMode) {
-          final current = await _localGuestService.getPlantById(widget.plantId);
-          await _localGuestService.updatePlant(
-            plantId: widget.plantId,
-            status: 'error',
-            analysisResults: {
-              ...?current?.analysisResults,
-              'analysisError': 'Local analysis returned no result',
-              'updatedAt': DateTime.now().toIso8601String(),
-            },
+          await _localGuestService.markPlantAnalysisError(
+            widget.plantId,
+            'Local analysis returned no result',
           );
         } else {
           await _firestore.collection('plants').doc(widget.plantId).update({
@@ -757,10 +759,14 @@ class _SegmentPageState extends State<SegmentPage> {
       // 2) Segment locally when model exists; otherwise fallback to original
       final File? segmentedFile = await _segmentWithSelectedModel(temp);
 
-      // 3) Upload segmented image (populate segmentationUrl)
+      // 3) Upload segmented image (Firebase) or persist local mirror path (Guest)
       String? segmentationUrl;
       if (_isLocalGuestMode && segmentedFile != null) {
-        segmentationUrl = segmentedFile.uri.toString();
+        segmentationUrl = await _localGuestService.persistSegmentationLocalUri(
+          segmentedFile,
+          plantId: widget.plantId,
+          imageId: widget.id,
+        );
       } else if (segmentedFile != null) {
         try {
           segmentationUrl = await _plantService.saveProcessedImage(
@@ -792,18 +798,9 @@ class _SegmentPageState extends State<SegmentPage> {
       };
       if (updates.isNotEmpty) {
         if (_isLocalGuestMode) {
-          final current = await _localGuestService.getPlantById(widget.plantId);
-          final merged = <String, dynamic>{...?current?.analysisResults};
-          updates.forEach((key, value) {
-            if (key.startsWith('analysisResults.')) {
-              merged[key.replaceFirst('analysisResults.', '')] = value;
-            } else {
-              merged[key] = value;
-            }
-          });
-          await _localGuestService.updatePlant(
+          await _localGuestService.applyNestedAnalysisResultUpdates(
             plantId: widget.plantId,
-            analysisResults: merged,
+            updates: updates,
           );
         } else {
           await _firestore

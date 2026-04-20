@@ -125,8 +125,11 @@ class SegmentationService {
     return masked;
   }
 
-  /// Performs segmentation on an input image
-  Future<File> segment(File inputFile) async {
+  /// Performs segmentation on an input image.
+  ///
+  /// When [outputFile] is set, the mask is written there (parent dirs created).
+  /// Otherwise a unique file under the system temp directory is used.
+  Future<File> segment(File inputFile, {File? outputFile}) async {
     if (!_modelLoaded) {
       await loadModel();
       if (!_modelLoaded || _interpreter == null) {
@@ -210,13 +213,17 @@ class SegmentationService {
       );
       final maskImage = _applyMaskToImage(upMask, resizedForOverlay);
 
-      // Save
-      final outputFile = File('${Directory.systemTemp.path}/mask_result.png');
-      await outputFile.writeAsBytes(img.encodePng(maskImage));
+      final File out = outputFile ??
+          File(
+            '${Directory.systemTemp.path}${Platform.pathSeparator}'
+            'mask_result_${DateTime.now().microsecondsSinceEpoch}.png',
+          );
+      out.parent.createSync(recursive: true);
+      await out.writeAsBytes(img.encodePng(maskImage));
       if (kDebugMode) {
         logger.i('[SegmentationService] Mask saved (confidence: $bestScore)');
       }
-      return outputFile;
+      return out;
     } catch (e, st) {
       if (kDebugMode) {
         logger.e('[SegmentationService] Segmentation failed: $e\n$st');

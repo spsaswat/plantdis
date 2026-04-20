@@ -49,7 +49,11 @@ class OnnxSegmentationService {
     }
   }
 
-  Future<File> segment(File inputFile, {bool useUnionMask = true}) async {
+  Future<File> segment(
+    File inputFile, {
+    bool useUnionMask = true,
+    File? outputFile,
+  }) async {
     if (!_modelLoaded) {
       await loadModel();
       if (!_modelLoaded || _session == null) {
@@ -116,7 +120,12 @@ class OnnxSegmentationService {
           }
         }
       }
-      final out = File('${Directory.systemTemp.path}/mask_union_onnx.png');
+      final File out = outputFile ??
+          File(
+            '${Directory.systemTemp.path}${Platform.pathSeparator}'
+            'mask_union_onnx_${DateTime.now().microsecondsSinceEpoch}.png',
+          );
+      out.parent.createSync(recursive: true);
       await out.writeAsBytes(img.encodePng(maskImage));
 
       inputOrt.release();

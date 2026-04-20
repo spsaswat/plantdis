@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
+import 'package:flutter_test_application_1/utils/logger.dart';
+import 'package:flutter_test_application_1/utils/storage_utils.dart';
 
 class LocalGuestService {
   LocalGuestService._();
@@ -33,6 +36,115 @@ class LocalGuestService {
     localGuestMode = enabled;
   }
 
+  /// One plant, or `null` if missing — mirrors a single Firestore plant doc stream.
+  Stream<PlantModel?> plantStreamForPlantId(String plantId) {
+    return plantsStream().map((plants) {
+      try {
+        return plants.firstWhere((p) => p.plantId == plantId);
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  /// Merge keys into [analysisResults], optionally set [status].
+  Future<void> mergeAnalysisResultsIntoPlant({
+    required String plantId,
+    required Map<String, dynamic> patch,
+    String? status,
+  }) async {
+    final current = await getPlantById(plantId);
+    if (current == null) return;
+    final merged = <String, dynamic>{
+      ...?current.analysisResults,
+      ...patch,
+    };
+    await updatePlant(
+      plantId: plantId,
+      status: status,
+      analysisResults: merged,
+    );
+  }
+
+  /// Firestore-style map keys like `analysisResults.segmentationUrl` → flat merge into analysisResults.
+  Future<void> applyNestedAnalysisResultUpdates({
+    required String plantId,
+    required Map<String, Object?> updates,
+  }) async {
+    final current = await getPlantById(plantId);
+    final merged = <String, dynamic>{...?current?.analysisResults};
+    for (final e in updates.entries) {
+      final key = e.key;
+      final value = e.value;
+      if (key.startsWith('analysisResults.')) {
+        merged[key.replaceFirst('analysisResults.', '')] = value;
+      } else {
+        merged[key] = value;
+      }
+    }
+    await updatePlant(plantId: plantId, analysisResults: merged);
+  }
+
+  Future<void> markPlantAnalysisError(String plantId, String message) async {
+    await mergeAnalysisResultsIntoPlant(
+      plantId: plantId,
+      status: 'error',
+      patch: {
+        'analysisError': message,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+    );
+  }
+
+  /// Target file for segmentation mask (Firebase Storage–style path under Application Support).
+  /// Returns `null` when not in guest mode or when the mirror path cannot be resolved.
+  Future<io.File?> segmentationOutputFileForWrite({
+    required String plantId,
+    required String imageId,
+  }) async {
+    if (!isLocalGuestMode()) return null;
+    try {
+      final base = await getApplicationSupportDirectory();
+      final plant = await getPlantById(plantId);
+      final userId = plant?.userId ?? 'local_guest';
+      final file = StorageUtils.localProcessedImageFile(
+        base,
+        userId,
+        plantId,
+        imageId,
+        'segmentation',
+        'png',
+      );
+      file.parent.createSync(recursive: true);
+      return file;
+    } catch (e, st) {
+      logger.w(
+        '[LocalGuestService] Segmentation mirror path failed, will use temp: $e\n$st',
+      );
+      return null;
+    }
+  }
+
+  /// URI stored in analysis / prefs: always the mirror path; copies [segmentedFile] if needed.
+  Future<String> persistSegmentationLocalUri(
+    io.File segmentedFile, {
+    required String plantId,
+    required String imageId,
+  }) async {
+    final mirror = await segmentationOutputFileForWrite(
+      plantId: plantId,
+      imageId: imageId,
+    );
+    if (mirror == null) {
+      return segmentedFile.uri.toString();
+    }
+    if (segmentedFile.path != mirror.path) {
+      mirror.parent.createSync(recursive: true);
+      await segmentedFile.copy(mirror.path);
+    }
+    return mirror.uri.toString();
+  }
+
   Stream<List<PlantModel>> plantsStream() async* {
     await _reloadPlants();
     yield _plantsNotifier.value;
@@ -53,7 +165,7 @@ class LocalGuestService {
     final sep = io.Platform.pathSeparator;
     final base = io.Directory.systemTemp.path;
     final path =
-        base.endsWith(sep) ? '${base}$imageId.jpg' : '$base$sep$imageId.jpg';
+        base.endsWith(sep) ? '$base$imageId.jpg' : '$base$sep$imageId.jpg';
     final file = io.File(path);
     await file.writeAsBytes(imageBytes, flush: true);
 
@@ -140,12 +252,23 @@ class LocalGuestService {
 
   Future<void> deletePlant(String plantId) async {
     await _reloadPlants();
+    PlantModel? removed;
+    for (final p in _plantsNotifier.value) {
+      if (p.plantId == plantId) {
+        removed = p;
+        break;
+      }
+    }
     final next = _plantsNotifier.value
         .where((p) => p.plantId != plantId)
         .toList(growable: false);
     _plantsNotifier.value = next;
     _plantsController.add(next);
     await _persistPlants(next);
+
+    if (removed != null) {
+      await _deleteLocalStorageMirrorForPlant(removed.userId, plantId);
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_analysisKey);
@@ -198,6 +321,30 @@ class LocalGuestService {
     }).toList(growable: false);
     _plantsNotifier.value = plants;
     _plantsController.add(plants);
+  }
+
+  /// Removes mirrored files under Application Support (same layout as Firebase).
+  Future<void> _deleteLocalStorageMirrorForPlant(
+    String userId,
+    String plantId,
+  ) async {
+    if (kIsWeb) return;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final root = io.Directory(
+        p.join(
+          dir.path,
+          StorageUtils.localStorageMirrorRoot,
+          'users',
+          userId,
+          'plants',
+          plantId,
+        ),
+      );
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    } catch (_) {}
   }
 
   Future<void> _persistPlants(List<PlantModel> plants) async {
