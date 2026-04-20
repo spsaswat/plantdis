@@ -423,14 +423,17 @@ class BackgroundDetectionService {
       throw Exception('Unsupported number of outputs: $outSize');
     }
 
-    final bool hasLeaves = leafProb >= confidenceThreshold;
+    // Class = leaf iff leaf is the dominant class (same as argmax on [bg, leaf]).
+    // Using only confidenceThreshold here made hasLeaves false when e.g. leaf=55% and UI threshold=80%,
+    // while the bars still showed "more leaf than background" — inconsistent with Windows/user expectation.
+    final bool hasLeaves = leafProb >= backgroundProb;
 
     if (kDebugMode) {
       logger.i(
         '[BackgroundDetectionService] TFLite result: '
         'leafProb=${(leafProb * 100).toStringAsFixed(1)}%, '
         'backgroundProb=${(backgroundProb * 100).toStringAsFixed(1)}%, '
-        'hasLeaves=$hasLeaves (threshold=${(confidenceThreshold * 100).toStringAsFixed(0)}%)',
+        'hasLeaves=$hasLeaves (leaf>=background; settings threshold=${(confidenceThreshold * 100).toStringAsFixed(0)}%)',
       );
     }
 

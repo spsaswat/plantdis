@@ -11,13 +11,14 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:flutter_test_application_1/models/plant_model.dart'; // Import PlantModel
 import 'package:flutter_test_application_1/services/plant_service.dart'; // Import PlantService
 import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUtils
+import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'dart:async'; // Import for TimeoutException
 import 'package:flutter_test_application_1/utils/logger.dart';
 import '../services/openrouter_service.dart';
 import 'package:flutter_test_application_1/services/background_detection_service.dart'; // Import background detection service
 
 import 'package:http/http.dart' as http; // Import for http requests
-import 'dart:io';
+import 'dart:io' show Directory, File, Platform;
 // import 'dart:typed_data'; // All needed types are provided by foundation.dart
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter/services.dart' show rootBundle;
@@ -71,13 +72,13 @@ class _SegmentPageState extends State<SegmentPage> {
 
   static const double decisionThreshold = 0.7; // Leaf decision threshold
 
-  // Segmentation model selector
-  String _selectedSegModel = 'onnx'; // 'tflite' | 'onnx'
+  // Segmentation model selector (align default with Settings: TFLite / best_float32.tflite)
+  String _selectedSegModel = 'tflite'; // 'tflite' | 'onnx'
   bool _isBusy = false;
   String? _plantClass;
   double? _plantClassConf;
   bool _speciesLoading = false;
-  bool _isLocalGuestMode = true;
+  late bool _isLocalGuestMode;
   bool _segModelMissingHintShown = false;
   bool _manualOverride = false;
   bool _speciesOverrideActive = false;
@@ -90,6 +91,10 @@ class _SegmentPageState extends State<SegmentPage> {
   String? _unsupportedReason; // message for unsupported plant flow
   String?
   _lastDiseaseForSuggestion; // remember last disease used for AI suggestion
+
+  /// After reopening a record, disease may live on `plant.analysisResults` while
+  /// per-image prefs cache is empty — still show Analysis Results.
+  bool _didHydrateUiFromPlantDoc = false;
 
   // Cache species classifier labels and last probabilities for UI confidence display
   static const List<String> _speciesLabels = [
@@ -123,17 +128,51 @@ class _SegmentPageState extends State<SegmentPage> {
   @override
   void initState() {
     super.initState();
-    _initGuestMode();
+    _isLocalGuestMode = _localGuestService.isLocalGuestMode();
     _loadCachedAnalysisIfAny();
   }
 
-  Future<void> _initGuestMode() async {
-    final enabled = _localGuestService.isLocalGuestMode();
-    if (mounted) {
-      setState(() {
-        _isLocalGuestMode = enabled;
-      });
+  @override
+  void didUpdateWidget(SegmentPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plantId != widget.plantId || oldWidget.id != widget.id) {
+      _didHydrateUiFromPlantDoc = false;
     }
+  }
+
+  void _maybeHydrateUiFromStoredPlant(PlantModel plant) {
+    if (_didHydrateUiFromPlantDoc) return;
+    final ar = plant.analysisResults;
+    if (ar == null || ar.isEmpty) return;
+
+    final Object? dis = ar['detectedDisease'];
+    final Object? conf = ar['confidence'];
+    if (dis == null || conf == null) return;
+    if (dis.toString() == 'N/A') return;
+
+    _didHydrateUiFromPlantDoc = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _analysisConfirmed = true;
+        final seg = ar['segmentationUrl'] as String?;
+        if (_segPreviewUrl == null && seg != null && seg.isNotEmpty) {
+          _segPreviewUrl = seg;
+        }
+        if (_plantClass == null && ar['plantSpecies'] != null) {
+          _plantClass = ar['plantSpecies'] as String?;
+        }
+        if (_plantClassConf == null && ar['plantSpeciesConfidence'] != null) {
+          _plantClassConf = (ar['plantSpeciesConfidence'] as num).toDouble();
+        }
+        if (_cachedSuggestion == null && ar['recommendation'] != null) {
+          final r = ar['recommendation'];
+          if (r is String && r.isNotEmpty) {
+            _cachedSuggestion = r;
+          }
+        }
+      });
+    });
   }
 
   Stream<PlantModel?> _plantStream() {
@@ -275,11 +314,20 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<void> _runDetectionOnCachedSegmentation(String segUrl) async {
     try {
       if (mounted) setState(() => _isBusy = true);
-      final resp = await http.get(Uri.parse(segUrl));
-      if (resp.statusCode != 200) {
-        throw Exception('Failed to download segmented image');
+      final Uint8List segBytes;
+      if (isLocalFilesystemPath(segUrl)) {
+        final file = File(toLocalFilePath(segUrl));
+        if (!await file.exists()) {
+          throw Exception('Segmented image file not found: $segUrl');
+        }
+        segBytes = await file.readAsBytes();
+      } else {
+        final resp = await http.get(Uri.parse(segUrl));
+        if (resp.statusCode != 200) {
+          throw Exception('Failed to download segmented image');
+        }
+        segBytes = resp.bodyBytes;
       }
-      final segBytes = resp.bodyBytes;
 
       if (_plantClass == null) {
         await _runPlantSpeciesClassifier(segBytes);
@@ -322,10 +370,13 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   Future<File> _downloadToTemp(Uint8List bytes) async {
-    final dir = Directory.systemTemp;
-    final f = File(
-      '${dir.path}/seg_input_${DateTime.now().millisecondsSinceEpoch}.png',
-    );
+    final base = Directory.systemTemp.path;
+    final sep = Platform.pathSeparator;
+    final path =
+        base.endsWith(sep)
+            ? '${base}seg_input_${DateTime.now().millisecondsSinceEpoch}.png'
+            : '$base${sep}seg_input_${DateTime.now().millisecondsSinceEpoch}.png';
+    final f = File(path);
     await f.writeAsBytes(bytes);
     return f;
   }
@@ -337,7 +388,25 @@ class _SegmentPageState extends State<SegmentPage> {
     if (widget.imgSrc.isEmpty) {
       throw Exception('Image source URL is empty');
     }
-    final resp = await http.get(Uri.parse(widget.imgSrc));
+    final src = widget.imgSrc;
+
+    if (isLocalFilesystemPath(src)) {
+      final filePath = toLocalFilePath(src);
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('Image file not found: $src');
+      }
+      return file.readAsBytes();
+    }
+
+    final resp = await http
+        .get(Uri.parse(src))
+        .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw Exception('Image download timeout after 30 seconds');
+          },
+        );
     if (resp.statusCode != 200) {
       throw Exception(
         'Failed to download image: ${resp.statusCode}. '
@@ -528,6 +597,13 @@ class _SegmentPageState extends State<SegmentPage> {
     if (_speciesLoading || _plantClass != null) return;
     _speciesLoading = true;
     try {
+      if (isLocalFilesystemPath(url)) {
+        final file = File(toLocalFilePath(url));
+        if (await file.exists()) {
+          await _runPlantSpeciesClassifier(await file.readAsBytes());
+        }
+        return;
+      }
       final resp = await http.get(Uri.parse(url));
       if (resp.statusCode == 200) {
         await _runPlantSpeciesClassifier(resp.bodyBytes);
@@ -542,6 +618,14 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<void> _resegmentAndDetectAndWrite() async {
     try {
       if (mounted) setState(() => _isBusy = true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final segModelPref = prefs.getString('seg_default_model') ?? 'tflite';
+      if (mounted) {
+        setState(() => _selectedSegModel = segModelPref);
+      } else {
+        _selectedSegModel = segModelPref;
+      }
 
       // 1) Get original image bytes (local or download)
       final imageBytes = await _getOriginalImageBytes();
@@ -656,6 +740,14 @@ class _SegmentPageState extends State<SegmentPage> {
         setState(() {
           _isBusy = true;
         });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final segModelPref = prefs.getString('seg_default_model') ?? 'tflite';
+      if (mounted) {
+        setState(() => _selectedSegModel = segModelPref);
+      } else {
+        _selectedSegModel = segModelPref;
       }
 
       // 1) Get original image bytes (local or download)
@@ -781,31 +873,8 @@ class _SegmentPageState extends State<SegmentPage> {
   /// Detect if image contains plant leaves using background detection model
   Future<Map<String, dynamic>> _detectBackgroundAndLeaves() async {
     try {
-      List<int> imageBytes;
-      if (widget.localImageBytes != null && widget.localImageBytes!.isNotEmpty) {
-        imageBytes = widget.localImageBytes!;
-      } else {
-        if (widget.imgSrc.isEmpty) {
-          throw Exception('Image source URL is empty');
-        }
-        final response = await http
-            .get(Uri.parse(widget.imgSrc))
-            .timeout(
-              const Duration(seconds: 30),
-              onTimeout: () {
-                throw Exception('Image download timeout after 30 seconds');
-              },
-            );
-        if (response.statusCode != 200) {
-          throw Exception(
-            'Failed to download image: ${response.statusCode}. '
-            '402 = Firebase Storage quota/billing. Check Firebase Console.',
-          );
-        }
-        imageBytes = response.bodyBytes;
-      }
+      final Uint8List imageBytes = await _getOriginalImageBytes();
 
-      // Validate image bytes
       if (imageBytes.isEmpty) {
         throw Exception('Downloaded image is empty');
       }
@@ -814,13 +883,12 @@ class _SegmentPageState extends State<SegmentPage> {
       final prefs = await SharedPreferences.getInstance();
       final int uiThreshold = prefs.getInt('seg_conf_threshold') ?? 80;
       final double threshold = (uiThreshold.clamp(0, 100)) / 100.0;
-      // Load default segmentation model
-      _selectedSegModel =
-          prefs.getString('seg_default_model') ?? _selectedSegModel;
+      // Load default segmentation model (same fallback as Settings page)
+      _selectedSegModel = prefs.getString('seg_default_model') ?? 'tflite';
 
       // Run background detection
       final backgroundResult = await _backgroundDetectionService.detectLeaves(
-        imageBytes: imageBytes is Uint8List ? imageBytes : Uint8List.fromList(imageBytes),
+        imageBytes: imageBytes,
         confidenceThreshold: threshold,
       );
 
@@ -863,6 +931,69 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   // removed unused _triggerPlantAnalysis
+
+  /// Segmentation preview: local guest mode uses `file://` URLs; [Image.network] cannot load those.
+  Widget _buildSegmentationPreviewImage(String? url) {
+    final u = url ?? '';
+    if (u.isEmpty) {
+      return _segmentationPreviewPlaceholder(
+        subtitle: 'No segmentation image yet',
+      );
+    }
+    if (isLocalFilesystemPath(u)) {
+      final file = File(toLocalFilePath(u));
+      return Image.file(
+        file,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            _segmentationPreviewPlaceholder(),
+      );
+    }
+    return Image.network(
+      u,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          _segmentationPreviewPlaceholder(),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          width: double.infinity,
+          height: 200,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(5.0),
+          ),
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      },
+    );
+  }
+
+  Widget _segmentationPreviewPlaceholder({String subtitle = 'Failed to load image'}) {
+    return Container(
+      width: double.infinity,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(5.0),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// Format method name for display
   String _formatMethodName(String method) {
@@ -987,6 +1118,7 @@ class _SegmentPageState extends State<SegmentPage> {
 
               // Data is available, parse it
               final PlantModel plant = snapshot.data!;
+              _maybeHydrateUiFromStoredPlant(plant);
               Map<String, dynamic>? analysisResults = plant.analysisResults;
               String status = plant.status;
               String? analysisErrorMsg = null;
@@ -1646,8 +1778,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                       ),
                                     ),
 
-                                  // Check for segmentation result in analysisResults
-                                  // Only show if leaves are detected OR manual override is active
+                                  // Same as Windows: only show when background says leaves (or manual override).
                                   if (((hasResults &&
                                               analysisResults['segmentationUrl'] !=
                                                   null) ||
@@ -1725,85 +1856,10 @@ class _SegmentPageState extends State<SegmentPage> {
                                               ClipRRect(
                                                 borderRadius:
                                                     BorderRadius.circular(5.0),
-                                                child: Image.network(
-                                                  (_segPreviewUrl ??
-                                                          (analysisResults?['segmentationUrl']
-                                                              as String?)) ??
-                                                      '',
-                                                  width: double.infinity,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) {
-                                                    return Container(
-                                                      width: double.infinity,
-                                                      height: 200,
-                                                      decoration: BoxDecoration(
-                                                        color:
-                                                            Colors
-                                                                .grey
-                                                                .shade200,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              5.0,
-                                                            ),
-                                                      ),
-                                                      child: const Center(
-                                                        child: Column(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            Icon(
-                                                              Icons
-                                                                  .broken_image,
-                                                              size: 48,
-                                                              color:
-                                                                  Colors.grey,
-                                                            ),
-                                                            SizedBox(height: 8),
-                                                            Text(
-                                                              'Failed to load image',
-                                                              style: TextStyle(
-                                                                color:
-                                                                    Colors.grey,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                  loadingBuilder: (
-                                                    context,
-                                                    child,
-                                                    loadingProgress,
-                                                  ) {
-                                                    if (loadingProgress ==
-                                                        null) {
-                                                      return child;
-                                                    }
-                                                    return Container(
-                                                      width: double.infinity,
-                                                      height: 200,
-                                                      decoration: BoxDecoration(
-                                                        color:
-                                                            Colors
-                                                                .grey
-                                                                .shade100,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              5.0,
-                                                            ),
-                                                      ),
-                                                      child: const Center(
-                                                        child:
-                                                            CircularProgressIndicator(),
-                                                      ),
-                                                    );
-                                                  },
+                                                child: _buildSegmentationPreviewImage(
+                                                  _segPreviewUrl ??
+                                                      (analysisResults?['segmentationUrl']
+                                                          as String?),
                                                 ),
                                               ),
                                               const SizedBox(height: 12),

@@ -6,6 +6,7 @@ import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
+import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'dart:async'; // Import for TimeoutException
 
 import '../../data/constants.dart';
@@ -37,15 +38,20 @@ class _CardWidgetState extends State<CardWidget> {
   final PlantService _plantService = PlantService();
   final LocalGuestService _localGuestService = LocalGuestService();
   Future<String?>? _imageUrlFuture;
+  /// Logged-in only: Hero + legacy SegmentPage id (imageId or plantId+UniqueKey).
   String? _heroTag;
   bool _isDeleting = false;
+
+  bool get _guest => _localGuestService.isLocalGuestMode();
 
   @override
   void initState() {
     super.initState();
-    _heroTag = widget.imageId ?? widget.plantId + UniqueKey().toString();
     if (widget.imageId != null) {
       _imageUrlFuture = _fetchImageUrl(widget.plantId, widget.imageId!);
+    }
+    if (!_guest) {
+      _heroTag = widget.imageId ?? widget.plantId + UniqueKey().toString();
     }
   }
 
@@ -112,18 +118,21 @@ class _CardWidgetState extends State<CardWidget> {
         );
       }
 
-      // Notify parent immediately to refresh the list
-      if (widget.onDelete != null) {
-        widget.onDelete!();
+      try {
+        await _plantService.deletePlant(widget.plantId);
+        if (widget.onDelete != null) {
+          widget.onDelete!();
+        }
+      } catch (e, st) {
+        logger.e('CardWidget deletePlant failed: $e\n$st');
+        if (mounted) {
+          UIUtils.showErrorSnackBar(
+            currentContext,
+            'Could not delete: $e',
+          );
+        }
       }
 
-      // Start deletion in background immediately
-      _plantService.deletePlant(widget.plantId).catchError((e) {
-        // Log background errors but don't bother the user
-        logger.w("Background deletion error (CardWidget, ignored): $e");
-      });
-
-      // Reset deleting state immediately after triggering background task
       if (mounted) {
         setState(() {
           _isDeleting = false;
@@ -156,24 +165,39 @@ class _CardWidgetState extends State<CardWidget> {
         color: widget.completed ? null : Colors.white12,
         child: InkWell(
           borderRadius: borderRadius,
+          // Guest: pending + completed can open detail with real imageId + snackbar on failure.
+          // Logged-in: unchanged — only completed cards navigate; no snackbar (silent skip).
           onTap:
-              widget.completed && _imageUrlFuture != null
+              (_guest
+                      ? (widget.imageId != null && _imageUrlFuture != null)
+                      : (widget.completed &&
+                          _imageUrlFuture != null &&
+                          _heroTag != null))
                   ? () async {
                     final navigator = Navigator.of(context);
                     String? resolvedImgSrc = await _imageUrlFuture;
-                    // Use a single mounted check to guard the context usage
-                    if (resolvedImgSrc != null && mounted) {
-                      navigator.push(
-                        MaterialPageRoute(
-                          builder:
-                              (context) => SegmentPage(
-                                imgSrc: resolvedImgSrc,
-                                id: _heroTag!,
-                                plantId: widget.plantId,
-                              ),
-                        ),
-                      );
+                    if (!mounted) return;
+                    if (resolvedImgSrc == null) {
+                      if (_guest) {
+                        UIUtils.showErrorSnackBar(
+                          context,
+                          'Could not load image for this record. Try again or re-upload.',
+                        );
+                      }
+                      return;
                     }
+                    final String segmentId =
+                        _guest ? widget.imageId! : _heroTag!;
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder:
+                            (context) => SegmentPage(
+                              imgSrc: resolvedImgSrc,
+                              id: segmentId,
+                              plantId: widget.plantId,
+                            ),
+                      ),
+                    );
                   }
                   : null,
           child: Padding(
@@ -211,16 +235,13 @@ class _CardWidgetState extends State<CardWidget> {
                         }
 
                         final imageUrl = snapshot.data!;
+                        logger.d('Image URL: $imageUrl');
                         final bool isLocalFile =
-                            imageUrl.startsWith('/') ||
-                            imageUrl.startsWith('file://');
+                            isLocalFilesystemPath(imageUrl);
+                        logger.d('Is Local File: $isLocalFile');
                         final imageWidget = isLocalFile
                             ? Image.file(
-                                File(
-                                  imageUrl.startsWith('file://')
-                                      ? Uri.parse(imageUrl).toFilePath()
-                                      : imageUrl,
-                                ),
+                                File(toLocalFilePath(imageUrl)),
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
                                   return const Center(
@@ -268,7 +289,11 @@ class _CardWidgetState extends State<CardWidget> {
                               );
 
                         if (widget.completed) {
-                          return SegmentHero(imgSrc: imageUrl, id: _heroTag!);
+                          final heroId = _guest ? widget.imageId! : _heroTag!;
+                          return SegmentHero(
+                            imgSrc: imageUrl,
+                            id: heroId,
+                          );
                         } else {
                           return Opacity(opacity: 0.75, child: imageWidget);
                         }

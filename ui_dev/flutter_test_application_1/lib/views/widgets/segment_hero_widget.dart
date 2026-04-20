@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 
 class SegmentHero extends StatelessWidget {
   const SegmentHero({
@@ -16,10 +17,11 @@ class SegmentHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLocalFile = imgSrc.startsWith('file://') || imgSrc.startsWith('/');
+    final isLocalFile = isLocalFilesystemPath(imgSrc);
+    final localPath = toLocalFilePath(imgSrc);
     final imageProvider = isLocalFile
         ? Image.file(
-            File(imgSrc.startsWith('file://') ? Uri.parse(imgSrc).toFilePath() : imgSrc),
+            File(localPath),
           ).image
         : Image.network(imgSrc).image;
 
@@ -43,11 +45,7 @@ class SegmentHero extends StatelessWidget {
                 borderRadius: BorderRadius.circular(5.0),
                 child: isLocalFile
                     ? Image.file(
-                        File(
-                          imgSrc.startsWith('file://')
-                              ? Uri.parse(imgSrc).toFilePath()
-                              : imgSrc,
-                        ),
+                        File(localPath),
                         width: double.infinity,
                         fit: BoxFit.cover,
                       )

@@ -27,20 +27,44 @@ class _ProcessingPageState extends State<ProcessingPage> {
     _displayedPlants = List.from(widget.pendingPlants);
   }
 
+  bool _hasFullResult(PlantModel plant) {
+    final ar = plant.analysisResults;
+    return ar != null &&
+        (ar['detectedDisease'] as String?) != null &&
+        (ar['detectedDisease'] as String?) != 'N/A' &&
+        ar['confidence'] != null &&
+        (ar['recommendation'] as String?) != null &&
+        ((ar['recommendation'] as String?)?.isNotEmpty ?? false);
+  }
+
   void _refreshProcessingList() async {
     try {
       final plants = _localGuestService.isLocalGuestMode() ?
                       await _localGuestService.getPlants() :
                       await _plantService.getUserPlants();
-      final pendingPlants =
-          plants
-              .where(
-                (p) =>
-                    p.status == 'pending' ||
-                    p.status == 'processing' ||
-                    p.status == 'analyzing',
-              )
-              .toList();
+      final List<PlantModel> pendingPlants;
+      if (_localGuestService.isLocalGuestMode()) {
+        pendingPlants =
+            plants
+                .where(
+                  (p) =>
+                      p.status == 'pending' ||
+                      p.status == 'processing' ||
+                      p.status == 'analyzing' ||
+                      (p.status == 'completed' && !_hasFullResult(p)),
+                )
+                .toList();
+      } else {
+        pendingPlants =
+            plants
+                .where(
+                  (p) =>
+                      p.status == 'pending' ||
+                      p.status == 'processing' ||
+                      p.status == 'analyzing',
+                )
+                .toList();
+      }
 
       if (mounted) {
         setState(() {
@@ -71,6 +95,41 @@ class _ProcessingPageState extends State<ProcessingPage> {
                   final plant = _displayedPlants[index];
                   final imageId =
                       plant.images.isNotEmpty ? plant.images.first : null;
+
+                  if (_localGuestService.isLocalGuestMode()) {
+                    final ar = plant.analysisResults;
+                    final hasDet =
+                        ar != null &&
+                        ar.containsKey('detectedDisease') &&
+                        ar['detectedDisease'] != null &&
+                        ar.containsKey('confidence') &&
+                        ar['confidence'] != null;
+                    final hasFull = _hasFullResult(plant);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: CardWidget(
+                        title:
+                            (hasFull || hasDet)
+                                ? (plant.analysisResults?['plantName'] ??
+                                    'Plant Analysis Results')
+                                : 'Plant Analysis in Progress',
+                        description:
+                            hasFull
+                                ? (plant.analysisResults?['description'] ??
+                                    'Analysis completed')
+                                : hasDet
+                                ? 'Detection available — tap to open (AI suggestion may still be loading)'
+                                : (plant.status == 'processing' ||
+                                        plant.status == 'analyzing')
+                                ? 'Processing...'
+                                : 'Pending analysis...',
+                        completed: hasFull,
+                        imageId: imageId,
+                        plantId: plant.plantId,
+                        onDelete: _refreshProcessingList,
+                      ),
+                    );
+                  }
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),

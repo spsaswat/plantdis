@@ -8,6 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
 
 class LocalGuestService {
+  LocalGuestService._();
+  /// Single instance so all screens share the same plant stream/notifier and prefs stay in sync.
+  static final LocalGuestService _instance = LocalGuestService._();
+  factory LocalGuestService() => _instance;
+
   static const String _plantsKey = 'macos_local_guest_plants_v1';
   static const String _analysisKey = 'macos_local_guest_analysis_v1';
   static bool localGuestMode = false;
@@ -45,7 +50,11 @@ class LocalGuestService {
     final now = DateTime.now();
     final plantId = 'local_plant_${now.microsecondsSinceEpoch}';
     final imageId = 'local_img_${now.microsecondsSinceEpoch}';
-    final file = io.File('${io.Directory.systemTemp.path}/$imageId.jpg');
+    final sep = io.Platform.pathSeparator;
+    final base = io.Directory.systemTemp.path;
+    final path =
+        base.endsWith(sep) ? '${base}$imageId.jpg' : '$base$sep$imageId.jpg';
+    final file = io.File(path);
     await file.writeAsBytes(imageBytes, flush: true);
 
     final plant = PlantModel(
@@ -137,6 +146,14 @@ class LocalGuestService {
     _plantsNotifier.value = next;
     _plantsController.add(next);
     await _persistPlants(next);
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_analysisKey);
+    if (raw != null && raw.isNotEmpty) {
+      final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      map.removeWhere((k, _) => k.startsWith('$plantId::'));
+      await prefs.setString(_analysisKey, jsonEncode(map));
+    }
   }
 
   Future<void> clearAllLocalData() async {

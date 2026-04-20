@@ -1,0 +1,7 @@
+// 本地签名：将 DeveloperTeam.local.xcconfig.example 复制为
+// DeveloperTeam.local.xcconfig，并把 DEVELOPMENT_TEAM 设为你在 Xcode → Settings →
+// Accounts 里对应团队的 10 位 Team ID。
+// 首次在命令行构建前，建议在 Xcode 中打开 macos/Runner.xcworkspace，选中 Runner 目标，
+// 在 Signing & Capabilities 里勾选 Automatically manage signing 并选好 Team，让 Xcode
+// 生成 Mac 开发描述文件；之后 flutter run -d macos 即可。
+#include? "DeveloperTeam.local.xcconfig"

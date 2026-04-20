@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/models/plant_model.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/hero_widget.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
 
 class ResultsPage extends StatefulWidget {
@@ -16,6 +18,7 @@ class ResultsPage extends StatefulWidget {
 
 class _ResultsPageState extends State<ResultsPage> {
   final PlantService _plantService = PlantService();
+  final LocalGuestService _localGuestService = LocalGuestService();
   late List<CardWidget> _displayedCards;
 
   @override
@@ -24,27 +27,56 @@ class _ResultsPageState extends State<ResultsPage> {
     _displayedCards = List.from(widget.cardList);
   }
 
+  bool _hasFullResult(PlantModel plant) {
+    final ar = plant.analysisResults;
+    return ar != null &&
+        (ar['detectedDisease'] as String?) != null &&
+        (ar['detectedDisease'] as String?) != 'N/A' &&
+        ar['confidence'] != null &&
+        (ar['recommendation'] as String?) != null &&
+        ((ar['recommendation'] as String?)?.isNotEmpty ?? false);
+  }
+
   void _refreshCards() async {
-    // Fetch latest completed plants
     final plants = await _plantService.getUserPlants();
     final completedPlants =
-        plants.where((p) => p.status == 'completed').toList();
+        plants
+            .where(
+              (p) =>
+                  p.status == 'completed' &&
+                  (_localGuestService.isLocalGuestMode()
+                      ? _hasFullResult(p)
+                      : true),
+            )
+            .toList();
 
     final updatedCards =
         completedPlants.map((plant) {
           final firstImageId =
               plant.images.isNotEmpty ? plant.images.first : null;
 
-          // Get disease name from analysis results
           String diseaseName = 'No disease detected';
           if (plant.analysisResults != null &&
               plant.analysisResults!.containsKey('detectedDisease')) {
             diseaseName =
                 plant.analysisResults!['detectedDisease'] as String? ??
                 diseaseName;
-
-            // Format disease name to show spaces instead of underscores
             diseaseName = UIUtils.formatDiseaseName(diseaseName);
+          }
+
+          if (_localGuestService.isLocalGuestMode()) {
+            return CardWidget(
+              title:
+                  plant.analysisResults?['plantName'] ??
+                  'Plant Analysis Results',
+              description:
+                  (plant.analysisResults?['description'] as String?) ??
+                      diseaseName,
+              completed: true,
+              imageId: firstImageId,
+              plantId: plant.plantId,
+              onDelete: _refreshCards,
+            );
           }
 
           return CardWidget(
