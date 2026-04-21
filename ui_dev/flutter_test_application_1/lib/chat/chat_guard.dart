@@ -36,7 +36,7 @@ class ChatGuard {
 
     // Model-specific customization if needed
     switch (modelId) {
-      case 'gemini-1.5-pro':
+      case 'openrouter-Gemma-3-27B':
         return outOfScopeReply;
       case 'claude-3-haiku':
         return outOfScopeReply;

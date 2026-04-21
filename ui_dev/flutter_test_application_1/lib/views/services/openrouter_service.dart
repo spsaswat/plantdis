@@ -1,8 +1,26 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+class OpenRouterAnswerResult {
+  final String content;
+  final String requestedModel;
+  final String usedModel;
+
+  const OpenRouterAnswerResult({
+    required this.content,
+    required this.requestedModel,
+    required this.usedModel,
+  });
+
+  bool get usedFallback => requestedModel != usedModel;
+}
+
 class OpenRouterService {
   static final OpenRouterService _instance = OpenRouterService._internal();
+  static const List<String> _fallbackModels = [
+    'qwen/qwen3-30b-a3b:free',
+    'meta-llama/llama-4-scout:free',
+  ];
 
   // It's generally better practice to load secrets from a configuration file or environment variables
   // rather than hardcoding them directly in the source code.
@@ -16,7 +34,55 @@ class OpenRouterService {
 
   OpenRouterService._internal();
 
-  Future<String> getAnswer(String userQuestion, {String model = "qwen/qwen3-30b-a3b:free"}) async {
+  Future<String> getAnswer(
+    String userQuestion, {
+    String model = "qwen/qwen3-30b-a3b:free",
+    bool allowFallback = false,
+  }) async {
+    final result = await getAnswerWithMeta(
+      userQuestion,
+      model: model,
+      allowFallback: allowFallback,
+    );
+    return result.content;
+  }
+
+  Future<OpenRouterAnswerResult> getAnswerWithMeta(
+    String userQuestion, {
+    String model = "qwen/qwen3-30b-a3b:free",
+    bool allowFallback = false,
+  }) async {
+    final modelsToTry =
+        allowFallback
+            ? <String>[model, ..._fallbackModels.where((m) => m != model)]
+            : <String>[model];
+    Exception? lastError;
+
+    for (final currentModel in modelsToTry) {
+      try {
+        final content = await _requestAnswer(userQuestion, model: currentModel);
+        return OpenRouterAnswerResult(
+          content: content,
+          requestedModel: model,
+          usedModel: currentModel,
+        );
+      } catch (e) {
+        if (e is! Exception) rethrow;
+        lastError = e;
+        if (!_shouldFallback(e)) {
+          rethrow;
+        }
+      }
+    }
+
+    throw lastError ??
+        Exception('Failed to fetch answer: all models are currently unavailable.');
+  }
+
+  Future<String> _requestAnswer(
+    String userQuestion, {
+    required String model,
+  }) async {
     final url = Uri.parse('https://openrouter.ai/api/v1/chat/completions');
     _apiKey = part1 + part2;
     final headers = {
@@ -58,17 +124,11 @@ Your knowledge is strictly confined to the following topics:
 
     final body = jsonEncode({
       "model": model,
-      // Best practice: Use 'system' for the metaprompt and 'user' for the actual user query.
-      "messages": [
-        {
-          "role": "system",
-          "content": systemPrompt,
-        },
-        {
-          "role": "user",
-          "content": userQuestion, // The user's question is now clean and separate.
-        }
-      ],
+      "messages": _buildMessages(
+        model: model,
+        systemPrompt: systemPrompt,
+        userQuestion: userQuestion,
+      ),
       // Consider setting a lower temperature for more factual, less creative responses.
       "temperature": 0.3,
     });
@@ -81,7 +141,67 @@ Your knowledge is strictly confined to the following topics:
       return content.trim();
     } else {
       // Provide more detailed error information for debugging.
-      throw Exception('Failed to fetch answer: ${response.statusCode} ${response.reasonPhrase} - ${response.body}');
+      throw Exception(_formatOpenRouterError(response, model));
     }
+  }
+
+  bool _isRateLimitError(Exception e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('429') ||
+        msg.contains('rate limit') ||
+        msg.contains('temporarily rate-limited');
+  }
+
+  bool _isProviderInstructionError(Exception e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('developer instruction is not enabled') ||
+        msg.contains('invalid_argument');
+  }
+
+  bool _shouldFallback(Exception e) {
+    return _isRateLimitError(e) || _isProviderInstructionError(e);
+  }
+
+  String _formatOpenRouterError(http.Response response, String model) {
+    try {
+      final dynamic data = jsonDecode(response.body);
+      final message = (data['error']?['message'] ?? '').toString();
+      if (response.statusCode == 404 && message.contains('No endpoints found')) {
+        return 'Model unavailable for this account: $model. '
+            'OpenRouter reports no active endpoint for this model right now.';
+      }
+      return 'Failed to fetch answer: ${response.statusCode} ${response.reasonPhrase} - ${response.body}';
+    } catch (_) {
+      return 'Failed to fetch answer: ${response.statusCode} ${response.reasonPhrase} - ${response.body}';
+    }
+  }
+
+  List<Map<String, String>> _buildMessages({
+    required String model,
+    required String systemPrompt,
+    required String userQuestion,
+  }) {
+    // Some providers for Gemma reject system/developer role instructions.
+    // For those models, inline guidance into the user message.
+    if (model.contains('gemma-3-27b-it')) {
+      return [
+        {
+          "role": "user",
+          "content":
+              '$systemPrompt\n\nUser question:\n$userQuestion',
+        },
+      ];
+    }
+
+    return [
+      {
+        "role": "system",
+        "content": systemPrompt,
+      },
+      {
+        "role": "user",
+        "content": userQuestion,
+      },
+    ];
   }
 }

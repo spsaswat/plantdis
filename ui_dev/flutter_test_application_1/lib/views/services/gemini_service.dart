@@ -8,9 +8,9 @@ class GeminiService {
 
   // List of model names to try
   final List<String> _modelNames = [
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
+    'gemma-3-27b-it',
     'gemini-2.0-flash',
+    'gemini-1.5-flash',
   ];
 
   factory GeminiService() {
@@ -18,8 +18,7 @@ class GeminiService {
   }
 
   // Private constructor to initialize the API
-  GeminiService._internal()
-    : _apiKey = 'AIzaSyDfDxPC2xc06Qj9qriKp1TUlhLt-ek5Y3Q' {
+  GeminiService._internal() : _apiKey = 'AIzaSyAD3F5KoVeDBqsd_9BR0kK2S2ODXk099Kk' {
     if (_apiKey.isEmpty) {
       developer.log('API Key is empty', error: 'API key not found');
       throw Exception('API key not found');
@@ -31,11 +30,22 @@ class GeminiService {
   Future<String> getAnswer(
     String question, {
     bool isPlantRelated = true,
+    String? preferredModel,
+    bool allowFallback = false,
   }) async {
     developer.log('Sending question to Gemini: $question');
+    final bool hasPreferred = preferredModel != null && preferredModel.isNotEmpty;
+    final List<String> modelsToTry =
+        (hasPreferred && !allowFallback)
+            ? [preferredModel!]
+            : [
+              if (hasPreferred) preferredModel!,
+              ..._modelNames.where((m) => m != preferredModel),
+            ];
+    String? lastError;
 
     // Try each model until one works
-    for (final modelName in _modelNames) {
+    for (final modelName in modelsToTry) {
       try {
         developer.log('Trying model: $modelName');
 
@@ -84,13 +94,17 @@ Important formatting requirements:
         // Clean up any potential markdown or special formatting
         return _cleanResponseFormat(responseText);
       } catch (e) {
-        developer.log('Error with model $modelName: ${e.toString()}');
+        final err = e.toString();
+        developer.log('Error with model $modelName: $err');
+        lastError = 'model=$modelName error=$err';
         // Continue to the next model
       }
     }
 
     // If all models failed
-    return 'Error: Could not connect to any Gemini models. Please check your API key permissions.';
+    final detail =
+        lastError == null ? '' : '\nDetails: $lastError';
+    return 'Error: Could not connect to Google AI models.$detail';
   }
 
   // Helper method to clean and format the response text

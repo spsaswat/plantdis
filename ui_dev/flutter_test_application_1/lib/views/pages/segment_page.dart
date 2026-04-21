@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // Import for kDebugMode
 import 'package:flutter_test_application_1/data/constants.dart';
+import 'package:flutter_test_application_1/data/disease_suggestion_fallbacks.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
 import 'package:intl/intl.dart'; // Import for date formatting
@@ -14,7 +15,7 @@ import 'package:flutter_test_application_1/utils/ui_utils.dart'; // Import UIUti
 import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'dart:async'; // Import for TimeoutException
 import 'package:flutter_test_application_1/utils/logger.dart';
-import '../services/openrouter_service.dart';
+import '../services/gemini_service.dart';
 import 'package:flutter_test_application_1/services/background_detection_service.dart'; // Import background detection service
 
 import 'package:http/http.dart' as http; // Import for http requests
@@ -2522,6 +2523,9 @@ class _SegmentPageState extends State<SegmentPage> {
     double diseaseConfidence,
   ) async {
     final String formatted = UIUtils.formatDiseaseName(detectedDisease);
+    final String fallbackSuggestion =
+        fallbackSuggestionForDisease(detectedDisease) ??
+        'No suggestion available for "$detectedDisease".';
 
     // 1. If the result is background (not a leaf)
     if (formatted == 'Background without leaves') {
@@ -2535,8 +2539,8 @@ class _SegmentPageState extends State<SegmentPage> {
 
     // 3. If the detected result is a healthy label
     if (formatted.endsWith(' healthy')) {
-      final plantName = formatted.replaceAll(RegExp(r'\s+healthy$'), '');
-      return 'Congratulations! Your $plantName leaf appears to be healthy!';
+      return fallbackSuggestionForDisease(detectedDisease) ??
+          'Congratulations! Your leaf appears to be healthy!';
     }
 
     // 4. For specific plant diseases, call Gemini to generate advice
@@ -2544,19 +2548,20 @@ class _SegmentPageState extends State<SegmentPage> {
         'What is the best way to identify, manage, or treat the plant disease "$formatted"?';
 
     try {
-      final response = await OpenRouterService().getAnswer(
+      final response = await GeminiService().getAnswer(
         prompt,
-        model: 'qwen/qwen3-30b-a3b:free',
+        preferredModel: 'gemma-3-27b-it',
+        isPlantRelated: true,
       );
 
       // Basic cleanup if needed
       if (response.isEmpty) {
-        return 'No suggestion could be generated for "$detectedDisease".';
+        return fallbackSuggestion;
       }
 
       return response;
     } catch (e) {
-      return 'Error generating suggestion for "$detectedDisease": ${e.toString()}';
+      return fallbackSuggestion;
     }
   }
 

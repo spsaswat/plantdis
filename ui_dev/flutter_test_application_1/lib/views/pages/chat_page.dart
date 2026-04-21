@@ -21,12 +21,18 @@ class ChatPageState extends State<ChatPage> {
   final ChatService _chatService = ChatService();
 
   final List<String> _models = [
-    "gemini-1.5-pro",
+    "gemma-3-27b-it",
+    "gemini-2.0-flash",
     "openrouter-Llama4-Scout",
     "openrouter-Qwen3--30b",
   ];
+  final Map<String, String> _modelLabels = {
+    "gemma-3-27b-it": "Gemma",
+    "gemini-2.0-flash": "Gemini",
+    "openrouter-Llama4-Scout": "Llama 4 Scout",
+    "openrouter-Qwen3--30b": "Qwen3 30B",
+  };
 
-  // Initialize Gemini service
   final GeminiService _geminiService = GeminiService();
   // Initialize openrouter service
   final OpenRouterService _openRouterService = OpenRouterService();
@@ -75,7 +81,7 @@ class ChatPageState extends State<ChatPage> {
                                 ) {
                                   return DropdownMenuItem<String>(
                                     value: model,
-                                    child: Text(model),
+                                    child: Text(_modelLabels[model] ?? model),
                                   );
                                 }).toList(),
                           ),
@@ -260,13 +266,11 @@ class ChatPageState extends State<ChatPage> {
       // Proceed with normal flow - message is on-topic or ChatGuard is disabled
       String answer;
 
-      if (_selectedModel.startsWith("gemini")) {
-        // Pass ChatGuard status to GeminiService
-        // When ChatGuard is enabled, treat as plant-related question
-        // When ChatGuard is disabled, treat as general question
+      if (!_selectedModel.startsWith("openrouter")) {
         answer = await _geminiService.getAnswer(
           text,
           isPlantRelated: _chatGuardEnabled,
+          preferredModel: _selectedModel,
         );
       } else if (_selectedModel.startsWith("openrouter")) {
         String modelName;
@@ -277,7 +281,16 @@ class ChatPageState extends State<ChatPage> {
         } else {
           modelName = "qwen/qwen3-30b-a3b:free"; // fallback
         }
-        answer = await _openRouterService.getAnswer(text, model: modelName);
+        final result = await _openRouterService.getAnswerWithMeta(
+          text,
+          model: modelName,
+          allowFallback: false,
+        );
+        final routeTag =
+            result.usedFallback
+                ? '[Route: fallback -> ${result.usedModel}]'
+                : '[Route: primary -> ${result.usedModel}]';
+        answer = '${result.content}\n\n$routeTag';
       } else {
         answer = "Unknown model selected.";
       }
