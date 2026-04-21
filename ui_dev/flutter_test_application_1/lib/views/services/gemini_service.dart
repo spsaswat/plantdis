@@ -34,13 +34,14 @@ class GeminiService {
     bool allowFallback = false,
   }) async {
     developer.log('Sending question to Gemini: $question');
-    final bool hasPreferred = preferredModel != null && preferredModel.isNotEmpty;
+    final String normalizedPreferred = (preferredModel ?? '').trim();
+    final bool hasPreferred = normalizedPreferred.isNotEmpty;
     final List<String> modelsToTry =
         (hasPreferred && !allowFallback)
-            ? [preferredModel!]
+            ? [normalizedPreferred]
             : [
-              if (hasPreferred) preferredModel!,
-              ..._modelNames.where((m) => m != preferredModel),
+              if (hasPreferred) normalizedPreferred,
+              ..._modelNames.where((m) => m != normalizedPreferred),
             ];
     String? lastError;
 
