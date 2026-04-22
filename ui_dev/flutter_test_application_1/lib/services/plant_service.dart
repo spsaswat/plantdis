@@ -771,9 +771,9 @@ extension on PlantService {
     'corn': 'assets/models/corn_disease_detector.tflite',
     'pepper': 'assets/models/pepper_disease_detector.tflite',
     'grape': 'assets/models/grape_disease_detector.tflite',
-    'tomato': 'assets/models/tomato_disease_detactor.tflite',
-    'potato': 'assets/models/potato_disease_detactor.tflite',
-    'apple': 'assets/models/apple_disease_detactor.tflite',
+    'tomato': 'assets/models/tomato_disease_detector.tflite',
+    'potato': 'assets/models/potato_disease_detector.tflite',
+    'apple': 'assets/models/apple_disease_detector.tflite',
   };
 
   static const Map<String, List<String>> _speciesLabels = {
@@ -798,8 +798,8 @@ extension on PlantService {
     ],
     'potato': [
       'Potato___Early_blight',
-      'Potato___Late_blight',
       'Potato___healthy',
+      'Potato___Late_blight',
     ],
     'tomato': [
       'Tomato___Bacterial_spot',
