@@ -96,15 +96,19 @@ class BackgroundDetectionService {
 
       await _interpreterWrapper!.loadModel(_modelAssetPath, options: options);
 
-      if (kDebugMode && _interpreterWrapper!.isModelLoaded) {
-        logger.i(
-          '[BackgroundDetectionService] Background detection model loaded successfully.',
-        );
+      if (_interpreterWrapper!.isModelLoaded) {
         _modelLoaded = true;
-      } else if (kDebugMode) {
-        logger.w(
-          '[BackgroundDetectionService] Background detection model FAILED to load.',
-        );
+        if (kDebugMode) {
+          logger.i(
+            '[BackgroundDetectionService] Background detection model loaded successfully.',
+          );
+        }
+      } else {
+        if (kDebugMode) {
+          logger.w(
+            '[BackgroundDetectionService] Background detection model FAILED to load.',
+          );
+        }
       }
     } catch (e) {
       if (kDebugMode && !_modelMissingReported) {
