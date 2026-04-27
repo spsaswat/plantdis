@@ -42,6 +42,8 @@ __pycache__/
 .ipynb_checkpoints/
 venv/
 .env
+# Flutter app: copy from api_config.json.example, do not commit
+ui_dev/flutter_test_application_1/api_config.json
 coverage.xml
 test_results.xml
 

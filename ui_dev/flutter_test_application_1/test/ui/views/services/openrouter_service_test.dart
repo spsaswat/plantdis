@@ -1,9 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
 import 'package:flutter_test_application_1/views/services/openrouter_service.dart';
 
 void main() {
   group('OpenRouterService', () {
     late OpenRouterService openRouterService;
+
+    setUpAll(() async {
+      await ApiRuntimeSecrets.init();
+    });
 
     setUp(() {
       openRouterService = OpenRouterService();
@@ -23,15 +28,16 @@ void main() {
       });
     });
 
-    group('API Key Construction Tests', () {
-      test('API key parts should be correct format', () {
-        expect(openRouterService.part1, equals('sk-or-v1'));
-        expect(openRouterService.part2.startsWith('-'), true);
-        expect(openRouterService.part2.length, greaterThan(20));
-      });
-    });
-
     group('Real API Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'getAnswer returns response for plant disease question',
         () async {
@@ -141,6 +147,15 @@ void main() {
     });
 
     group('Edge Cases Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'getAnswer handles empty question',
         () async {
@@ -216,6 +231,15 @@ void main() {
     });
 
     group('Response Quality Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'response should be properly trimmed',
         () async {
@@ -281,6 +305,15 @@ void main() {
     });
 
     group('Error Handling Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'getAnswer handles API errors gracefully',
         () async {
@@ -311,12 +344,19 @@ void main() {
         final service2 = OpenRouterService();
 
         expect(identical(service1, service2), true);
-        expect(service1.part1, equals(service2.part1));
-        expect(service1.part2, equals(service2.part2));
       });
     });
 
     group('System Prompt Compliance Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'AI should stay within plant health scope',
         () async {
@@ -392,6 +432,15 @@ void main() {
     });
 
     group('Multiple Calls Test', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.openrouterApiKey,
+          isNotEmpty,
+          reason:
+              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'multiple consecutive calls should work',
         () async {

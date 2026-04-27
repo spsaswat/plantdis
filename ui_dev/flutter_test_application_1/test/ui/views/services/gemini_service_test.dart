@@ -1,10 +1,15 @@
 // ignore_for_file: avoid_print
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
 import 'package:flutter_test_application_1/views/services/gemini_service.dart';
 
 void main() {
   group('GeminiService', () {
     late GeminiService geminiService;
+
+    setUpAll(() async {
+      await ApiRuntimeSecrets.init();
+    });
 
     setUp(() {
       geminiService = GeminiService();
@@ -25,6 +30,15 @@ void main() {
     });
 
     group('getAnswer Method Tests', () {
+      setUp(() {
+        expect(
+          ApiRuntimeSecrets.geminiApiKey,
+          isNotEmpty,
+          reason:
+              'Set geminiApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
+        );
+      });
+
       test(
         'getAnswer returns string for plant related question',
         () async {

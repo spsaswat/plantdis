@@ -9,11 +9,14 @@ import '../utils/logger.dart';
 
 // Import for tflite factories initialization
 import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
+import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   setupLogging();
+
+  await ApiRuntimeSecrets.init();
 
   // Initialize TFLite factories
   initializeTfliteFactories();

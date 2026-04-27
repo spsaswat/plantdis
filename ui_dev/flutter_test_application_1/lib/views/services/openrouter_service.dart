@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
+
 class OpenRouterAnswerResult {
   final String content;
   final String requestedModel;
@@ -21,12 +23,6 @@ class OpenRouterService {
     'qwen/qwen3-30b-a3b:free',
     'meta-llama/llama-4-scout:free',
   ];
-
-  // It's generally better practice to load secrets from a configuration file or environment variables
-  // rather than hardcoding them directly in the source code.
-  final String part1 = 'sk-or-v1';
-  final String part2 = '-f381cf86eb82382709b76024ba028d6119865c3036873b77f84263d10122ea05';
-  String _apiKey = '';
 
   factory OpenRouterService() {
     return _instance;
@@ -83,10 +79,23 @@ class OpenRouterService {
     String userQuestion, {
     required String model,
   }) async {
+    if (ApiRuntimeSecrets.openrouterApiKey.isEmpty) {
+      await ApiRuntimeSecrets.init();
+    }
+    final apiKey = ApiRuntimeSecrets.openrouterApiKey;
+    if (apiKey.isEmpty) {
+      final pathHint = ApiRuntimeSecrets.configFilePathHint;
+      final fileHint = pathHint != null
+          ? 'Add `openrouterApiKey` in: $pathHint (on sandboxed macOS, use this file; the app cannot read the repo’s `api_config.json`). '
+          : 'Use `api_config.json` (see `api_config.json.example`), ';
+      throw Exception(
+        'Missing OpenRouter API key. $fileHint'
+        'or env `PLANTDIS_API_CONFIG`, or --dart-define=OPENROUTER_API_KEY=...',
+      );
+    }
     final url = Uri.parse('https://openrouter.ai/api/v1/chat/completions');
-    _apiKey = part1 + part2;
     final headers = {
-      'Authorization': 'Bearer $_apiKey',
+      'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
       // The HTTP-Referer header is a good practice for identifying your app to the API provider.
       'HTTP-Referer': 'https://github.com/spsaswat/plantdis',

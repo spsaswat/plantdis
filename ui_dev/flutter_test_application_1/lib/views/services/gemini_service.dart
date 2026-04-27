@@ -1,10 +1,11 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'dart:developer' as developer;
 
+import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
+
 class GeminiService {
   static final GeminiService _instance = GeminiService._internal();
   GenerativeModel? _model;
-  final String _apiKey;
 
   // List of model names to try
   final List<String> _modelNames = [
@@ -17,13 +18,7 @@ class GeminiService {
     return _instance;
   }
 
-  // Private constructor to initialize the API
-  GeminiService._internal() : _apiKey = 'AIzaSyAD3F5KoVeDBqsd_9BR0kK2S2ODXk099Kk' {
-    if (_apiKey.isEmpty) {
-      developer.log('API Key is empty', error: 'API key not found');
-      throw Exception('API key not found');
-    }
-  }
+  GeminiService._internal();
 
   // Send a question and get an answer
   // Added isPlantRelated parameter to control prompt type
@@ -32,7 +27,19 @@ class GeminiService {
     bool isPlantRelated = true,
     String? preferredModel,
     bool allowFallback = false,
-  }) async {
+  }  ) async {
+    if (ApiRuntimeSecrets.geminiApiKey.isEmpty) {
+      await ApiRuntimeSecrets.init();
+    }
+    final apiKey = ApiRuntimeSecrets.geminiApiKey;
+    if (apiKey.isEmpty) {
+      final pathHint = ApiRuntimeSecrets.configFilePathHint;
+      final fileHint = pathHint != null
+          ? 'Add `geminiApiKey` in: $pathHint (on sandboxed macOS, paste from your project `api_config.json` into this file; the app cannot read the repo path). '
+          : 'Add keys in `api_config.json` (see `api_config.json.example`). ';
+      return 'Error: Missing Gemini API key. $fileHint'
+          'Or set env `PLANTDIS_API_CONFIG` to a readable JSON file, or --dart-define=GEMINI_API_KEY=...';
+    }
     developer.log('Sending question to Gemini: $question');
     final String normalizedPreferred = (preferredModel ?? '').trim();
     final bool hasPreferred = normalizedPreferred.isNotEmpty;
@@ -50,7 +57,7 @@ class GeminiService {
       try {
         developer.log('Trying model: $modelName');
 
-        _model = GenerativeModel(model: modelName, apiKey: _apiKey);
+        _model = GenerativeModel(model: modelName, apiKey: apiKey);
 
         // Use different prompts based on whether the question is plant-related
         String prompt;

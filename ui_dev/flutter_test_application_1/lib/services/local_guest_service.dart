@@ -162,10 +162,15 @@ class LocalGuestService {
     final now = DateTime.now();
     final plantId = 'local_plant_${now.microsecondsSinceEpoch}';
     final imageId = 'local_img_${now.microsecondsSinceEpoch}';
-    final sep = io.Platform.pathSeparator;
-    final base = io.Directory.systemTemp.path;
-    final path =
-        base.endsWith(sep) ? '$base$imageId.jpg' : '$base$sep$imageId.jpg';
+    // Persist under Application Support (system temp is cleared and breaks FileImage on restart).
+    final support = await getApplicationSupportDirectory();
+    final dir = io.Directory(
+      p.join(support.path, 'local_guest', 'images'),
+    );
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final path = p.join(dir.path, '$imageId.jpg');
     final file = io.File(path);
     await file.writeAsBytes(imageBytes, flush: true);
 
@@ -267,6 +272,7 @@ class LocalGuestService {
     await _persistPlants(next);
 
     if (removed != null) {
+      await _deleteGuestOriginalImage(removed);
       await _deleteLocalStorageMirrorForPlant(removed.userId, plantId);
     }
 
@@ -321,6 +327,23 @@ class LocalGuestService {
     }).toList(growable: false);
     _plantsNotifier.value = plants;
     _plantsController.add(plants);
+  }
+
+  /// Deletes the on-disk file referenced by [analysisResults.localImagePath] (if any).
+  Future<void> _deleteGuestOriginalImage(PlantModel plant) async {
+    if (kIsWeb) return;
+    try {
+      final pth = plant.analysisResults?['localImagePath'] as String?;
+      if (pth == null || pth.isEmpty) return;
+      final f = io.File(pth);
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (e, st) {
+      logger.w(
+        '[LocalGuestService] Could not delete guest image file: $e\n$st',
+      );
+    }
   }
 
   /// Removes mirrored files under Application Support (same layout as Firebase).

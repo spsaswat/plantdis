@@ -15,15 +15,24 @@ class SegmentHero extends StatelessWidget {
   final String id;
   final File? segmentationFile;
 
+  static const Widget _missingLocal = Center(
+    child: Icon(
+      Icons.broken_image_outlined,
+      color: Colors.grey,
+      size: 48,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final isLocalFile = isLocalFilesystemPath(imgSrc);
     final localPath = toLocalFilePath(imgSrc);
-    final imageProvider = isLocalFile
-        ? Image.file(
-            File(localPath),
-          ).image
-        : Image.network(imgSrc).image;
+    final localFile = isLocalFile ? File(localPath) : null;
+    final localMissing = isLocalFile && !(localFile?.existsSync() ?? false);
+    final ImageProvider? fullScreenProvider =
+        !isLocalFile
+            ? NetworkImage(imgSrc)
+            : (localMissing ? null : FileImage(File(localPath)));
 
     return Hero(
       tag: id,
@@ -32,23 +41,30 @@ class SegmentHero extends StatelessWidget {
           AspectRatio(
             aspectRatio: 16 / 9,
             child: GestureDetector(
-              onTap: () {
-                showImageViewer(
-                  context,
-                  imageProvider,
-                  swipeDismissible: true,
-                  doubleTapZoomable: true,
-                  onViewerDismissed: () {},
-                );
-              },
+              onTap:
+                  fullScreenProvider == null
+                      ? null
+                      : () {
+                          showImageViewer(
+                            context,
+                            fullScreenProvider,
+                            swipeDismissible: true,
+                            doubleTapZoomable: true,
+                            onViewerDismissed: () {},
+                          );
+                        },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(5.0),
                 child: isLocalFile
-                    ? Image.file(
-                        File(localPath),
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      )
+                    ? (localMissing
+                        ? _missingLocal
+                        : Image.file(
+                            File(localPath),
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _missingLocal,
+                          ))
                     : Image.network(
                         imgSrc,
                         width: double.infinity,
@@ -66,27 +82,42 @@ class SegmentHero extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 5),
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: GestureDetector(
-                onTap: () {
-                  showImageViewer(
-                    context,
-                    Image.file(segmentationFile!).image,
-                    swipeDismissible: true,
-                    doubleTapZoomable: true,
-                    onViewerDismissed: () {},
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5.0),
-                  child: Image.file(
-                    segmentationFile!,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+            Builder(
+              builder: (context) {
+                final seg = segmentationFile!;
+                final segMissing = !seg.existsSync();
+                final segProvider =
+                    segMissing ? null : FileImage(seg);
+                return AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: GestureDetector(
+                    onTap:
+                        segProvider == null
+                            ? null
+                            : () {
+                              showImageViewer(
+                                context,
+                                segProvider,
+                                swipeDismissible: true,
+                                doubleTapZoomable: true,
+                                onViewerDismissed: () {},
+                              );
+                            },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(5.0),
+                      child: segMissing
+                          ? _missingLocal
+                          : Image.file(
+                              seg,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _missingLocal,
+                            ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ],
         ],

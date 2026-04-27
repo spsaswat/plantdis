@@ -1,0 +1,4 @@
+{
+  "geminiApiKey": "YOUR_GEMINI_API_KEY",
+  "openrouterApiKey": "YOUR_OPENROUTER_API_KEY"
+}
