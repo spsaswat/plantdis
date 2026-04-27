@@ -73,8 +73,8 @@ class _SegmentPageState extends State<SegmentPage> {
 
   static const double decisionThreshold = 0.7; // Leaf decision threshold
 
-  // Segmentation model selector (align default with Settings: TFLite / best_float32.tflite)
-  String _selectedSegModel = 'tflite'; // 'tflite' | 'onnx'
+  // Segmentation model selector
+  String _selectedSegModel = 'onnx'; // 'tflite' | 'onnx'
   bool _isBusy = false;
   String? _plantClass;
   double? _plantClassConf;
@@ -131,6 +131,15 @@ class _SegmentPageState extends State<SegmentPage> {
     super.initState();
     _isLocalGuestMode = _localGuestService.isLocalGuestMode();
     _loadCachedAnalysisIfAny();
+    _loadSegModelPref();
+  }
+
+  Future<void> _loadSegModelPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pref = prefs.getString('seg_default_model');
+    if (pref != null && mounted) {
+      setState(() => _selectedSegModel = pref);
+    }
   }
 
   @override
@@ -624,14 +633,6 @@ class _SegmentPageState extends State<SegmentPage> {
     try {
       if (mounted) setState(() => _isBusy = true);
 
-      final prefs = await SharedPreferences.getInstance();
-      final segModelPref = prefs.getString('seg_default_model') ?? 'tflite';
-      if (mounted) {
-        setState(() => _selectedSegModel = segModelPref);
-      } else {
-        _selectedSegModel = segModelPref;
-      }
-
       // 1) Get original image bytes (local or download)
       final imageBytes = await _getOriginalImageBytes();
       final temp = await _downloadToTemp(imageBytes);
@@ -743,14 +744,6 @@ class _SegmentPageState extends State<SegmentPage> {
         setState(() {
           _isBusy = true;
         });
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final segModelPref = prefs.getString('seg_default_model') ?? 'tflite';
-      if (mounted) {
-        setState(() => _selectedSegModel = segModelPref);
-      } else {
-        _selectedSegModel = segModelPref;
       }
 
       // 1) Get original image bytes (local or download)
@@ -881,8 +874,6 @@ class _SegmentPageState extends State<SegmentPage> {
       final prefs = await SharedPreferences.getInstance();
       final int uiThreshold = prefs.getInt('seg_conf_threshold') ?? 80;
       final double threshold = (uiThreshold.clamp(0, 100)) / 100.0;
-      // Load default segmentation model (same fallback as Settings page)
-      _selectedSegModel = prefs.getString('seg_default_model') ?? 'tflite';
 
       // Run background detection
       final backgroundResult = await _backgroundDetectionService.detectLeaves(
@@ -2015,7 +2006,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                                           child: DropdownButtonFormField<
                                                             String
                                                           >(
-                                                            value:
+                                                            initialValue:
                                                                 _speciesOverrideSelection,
                                                             decoration: const InputDecoration(
                                                               isDense: true,

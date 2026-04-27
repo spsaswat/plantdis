@@ -90,7 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
             future: SharedPreferences.getInstance(),
             builder: (context, snap) {
               final prefs = snap.data;
-              final model = prefs?.getString('seg_default_model') ?? 'tflite';
+              final model = prefs?.getString('seg_default_model') ?? 'onnx';
               return ListTile(
                 leading: const Icon(Icons.memory),
                 title: const Text('Default Segmentation Model'),
