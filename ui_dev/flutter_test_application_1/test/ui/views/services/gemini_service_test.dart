@@ -8,6 +8,7 @@ void main() {
     late GeminiService geminiService;
 
     setUpAll(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
       await ApiRuntimeSecrets.init();
     });
 

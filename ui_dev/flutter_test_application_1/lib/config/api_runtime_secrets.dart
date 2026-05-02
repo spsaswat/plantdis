@@ -1,17 +1,18 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'api_runtime_secrets_load_io.dart'
     if (dart.library.html) 'api_runtime_secrets_load_stub.dart' as config_file;
 import 'package:flutter_test_application_1/utils/logger.dart';
 
-/// Loads API keys at runtime from [apiFileName] (default `api_config.json`).
+/// Loads API keys from (in order of merge per field):
+/// 1. **Flutter asset** [apiFileName] (embedded at build time — must be listed in pubspec).
+/// 2. **Filesystem** (see [config_file.readConfigJsonFile]): env / bundle Resources / App Support / cwd walk.
+/// 3. **`--dart-define=GEMINI_API_KEY` / `OPENROUTER_API_KEY`** for any slot still empty.
 ///
-/// Resolution (IO): `PLANTDIS_API_CONFIG` → **macOS:** `Contents/Resources/` inside
-/// the `.app` (populated from the project root at **Xcode build** for local dev) →
-/// Application Support → walk from binary/cwd. Missing keys use
-/// `--dart-define=GEMINI_API_KEY` / `OPENROUTER_API_KEY`.
+/// For each key, a non-empty filesystem value overrides the bundled asset (handy for local dev).
 class ApiRuntimeSecrets {
   ApiRuntimeSecrets._();
 
@@ -24,58 +25,91 @@ class ApiRuntimeSecrets {
   static String get geminiApiKey => _gemini;
   static String get openrouterApiKey => _openrouter;
 
-  /// Path of the `api_config.json` that was actually read, if any (e.g. App Support on macOS).
+  /// Source hint: filesystem path, or `asset:api_config.json` when keys came only from the bundle.
   static String? get configFilePathHint => _configFilePathHint;
+
+  static (String, String) _parseApiKeysFromJsonText(String raw) {
+    try {
+      var text = raw.trim();
+      if (text.isNotEmpty && text.codeUnitAt(0) == 0xFEFF) {
+        text = text.substring(1);
+      }
+      final m = jsonDecode(text) as Map<String, dynamic>;
+      final g = (m['geminiApiKey'] as String? ?? '').trim();
+      final o = (m['openrouterApiKey'] as String? ?? '').trim();
+      return (g, o);
+    } catch (e, st) {
+      if (kDebugMode) {
+        logger.e('[ApiConfig] JSON parse error: $e\n$st');
+      }
+      return ('', '');
+    }
+  }
 
   static Future<void> init({String apiFileName = defaultConfigFileName}) async {
     _gemini = '';
     _openrouter = '';
+    _configFilePathHint = null;
+
     if (kDebugMode) {
       if (kIsWeb) {
         logger.d(
-          '[ApiConfig] init() on web: no local api_config.json; use --dart-define=GEMINI_API_KEY / OPENROUTER_API_KEY',
+          '[ApiConfig] init() $apiFileName (embedded asset + dart-define; no local file on web)',
         );
       } else {
-        logger.d('[ApiConfig] init() loading $apiFileName');
+        logger.d(
+          '[ApiConfig] init() $apiFileName (embedded asset + filesystem + dart-define)',
+        );
       }
     }
-    _configFilePathHint = null;
-    final raw = await config_file.readConfigJsonFile(apiFileName);
-    _configFilePathHint = config_file.lastReadableApiConfigPath;
-    if (raw == null || raw.trim().isEmpty) {
+
+    var geminiAsset = '';
+    var openAsset = '';
+    try {
+      final rawAsset = await rootBundle.loadString(apiFileName);
+      final p = _parseApiKeysFromJsonText(rawAsset);
+      geminiAsset = p.$1;
+      openAsset = p.$2;
       if (kDebugMode) {
-        logger.w(
-          '[ApiConfig] no config file text (null or empty). Check logs above for paths tried.',
+        logger.d(
+          '[ApiConfig] embedded asset lengths: gemini=${geminiAsset.length} openrouter=${openAsset.length}',
         );
       }
-    } else {
-      try {
-        // UTF-8 BOM (common for files saved with Windows Notepad) breaks jsonDecode.
-        var text = raw.trim();
-        if (text.isNotEmpty && text.codeUnitAt(0) == 0xFEFF) {
-          text = text.substring(1);
-        }
-        final m = jsonDecode(text) as Map<String, dynamic>;
-        _gemini = (m['geminiApiKey'] as String? ?? '').trim();
-        _openrouter = (m['openrouterApiKey'] as String? ?? '').trim();
-        if (kDebugMode) {
-          logger.d(
-            '[ApiConfig] parsed keys: geminiLength=${_gemini.length} openrouterLength=${_openrouter.length} (values not logged)',
-          );
-        }
-        if (_gemini.isEmpty && _openrouter.isEmpty) {
-          logger.w(
-            '[ApiConfig] Config JSON loaded but both keys are empty. '
-            'Use string keys exactly "geminiApiKey" and "openrouterApiKey" (see api_config.json.example), '
-            'save the file, then send another message (the app will re-read) or hot-restart (R).',
-          );
-        }
-      } catch (e, st) {
-        logger.e(
-          '[ApiConfig] JSON parse failed (file may be invalid or wrong format): $e\n$st',
-        );
+    } catch (e) {
+      if (kDebugMode) {
+        logger.d('[ApiConfig] embedded asset not available ($apiFileName): $e');
       }
     }
+
+    final rawFile = await config_file.readConfigJsonFile(apiFileName);
+    _configFilePathHint = config_file.lastReadableApiConfigPath;
+
+    var geminiFile = '';
+    var openFile = '';
+    if (rawFile != null && rawFile.trim().isNotEmpty) {
+      final p = _parseApiKeysFromJsonText(rawFile);
+      geminiFile = p.$1;
+      openFile = p.$2;
+      if (kDebugMode) {
+        logger.d(
+          '[ApiConfig] filesystem lengths: gemini=${geminiFile.length} openrouter=${openFile.length}',
+        );
+      }
+    } else if (kDebugMode && !kIsWeb) {
+      logger.w(
+        '[ApiConfig] no filesystem config text (null or empty). Check logs above for paths tried.',
+      );
+    }
+
+    _gemini = geminiFile.isNotEmpty ? geminiFile : geminiAsset;
+    _openrouter = openFile.isNotEmpty ? openFile : openAsset;
+
+    if (geminiFile.isNotEmpty || openFile.isNotEmpty) {
+      _configFilePathHint = config_file.lastReadableApiConfigPath;
+    } else if (geminiAsset.isNotEmpty || openAsset.isNotEmpty) {
+      _configFilePathHint = 'asset:$apiFileName';
+    }
+
     const dGemini = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
     const dOpen = String.fromEnvironment('OPENROUTER_API_KEY', defaultValue: '');
     if (_gemini.isEmpty && dGemini.isNotEmpty) {
@@ -93,6 +127,14 @@ class ApiRuntimeSecrets {
     if (kDebugMode) {
       logger.d(
         '[ApiConfig] after init: gemini=${_gemini.isNotEmpty} openrouter=${_openrouter.isNotEmpty}',
+      );
+    }
+    if (_gemini.isEmpty && _openrouter.isEmpty) {
+      logger.w(
+        '[ApiConfig] Config JSON loaded but both keys are empty. '
+        'Use string keys exactly "geminiApiKey" and "openrouterApiKey" (see api_config.json.example), '
+        'ensure api_config.json exists for build (Flutter asset), save filesystem overrides, '
+        'or use --dart-define=GEMINI_API_KEY / OPENROUTER_API_KEY.',
       );
     }
   }

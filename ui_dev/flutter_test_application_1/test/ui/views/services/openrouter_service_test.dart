@@ -7,6 +7,7 @@ void main() {
     late OpenRouterService openRouterService;
 
     setUpAll(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
       await ApiRuntimeSecrets.init();
     });
 

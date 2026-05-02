@@ -1,4 +1,5 @@
-/// Non-`dart:io` platforms (e.g. web): no local file; use `--dart-define` only.
+/// Non-`dart:io` platforms (e.g. web): no filesystem config.
+/// [ApiRuntimeSecrets.init] still loads the embedded asset + `--dart-define`.
 String? lastReadableApiConfigPath;
 
 Future<String?> readConfigJsonFile(String fileName) async {

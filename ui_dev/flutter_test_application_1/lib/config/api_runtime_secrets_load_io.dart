@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -8,6 +9,22 @@ import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// Set when [readConfigJsonFile] successfully read a file (for user-facing errors).
 String? lastReadableApiConfigPath;
+
+/// Same key rules as [ApiRuntimeSecrets.init]: both empty → treat as "no usable config".
+bool _bothApiKeysEmptyInConfigJson(String raw) {
+  try {
+    var text = raw.trim();
+    if (text.isNotEmpty && text.codeUnitAt(0) == 0xFEFF) {
+      text = text.substring(1);
+    }
+    final m = jsonDecode(text) as Map<String, dynamic>;
+    final g = (m['geminiApiKey'] as String? ?? '').trim();
+    final o = (m['openrouterApiKey'] as String? ?? '').trim();
+    return g.isEmpty && o.isEmpty;
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Reads [fileName] (default `api_config.json`) for API keys.
 ///
@@ -84,9 +101,16 @@ Future<String?> readConfigJsonFile(String fileName) async {
       text = await _readFileIfPermitted(inSupport, 'app support after template');
     }
     if (text != null) {
-      lastReadableApiConfigPath = inSupport.path;
-      d('using app support file');
-      return text;
+      // Empty template in Application Support must not shadow a filled repo api_config.json.
+      if (_bothApiKeysEmptyInConfigJson(text)) {
+        d(
+          'app support $fileName has both keys empty — skipping so exe/cwd search can find your project file',
+        );
+      } else {
+        lastReadableApiConfigPath = inSupport.path;
+        d('using app support file');
+        return text;
+      }
     }
   } catch (e, st) {
     logger.w('[ApiConfig] getApplicationSupportDirectory failed: $e\n$st');

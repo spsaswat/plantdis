@@ -4,7 +4,6 @@ import 'package:flutter_test_application_1/models/image_model.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
-import 'package:flutter_test_application_1/views/widgets/segment_hero_widget.dart';
 import 'package:flutter_test_application_1/utils/ui_utils.dart';
 import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'dart:async'; // Import for TimeoutException
@@ -288,15 +287,11 @@ class _CardWidgetState extends State<CardWidget> {
                                 },
                               );
 
-                        if (widget.completed) {
-                          final heroId = _guest ? widget.imageId! : _heroTag!;
-                          return SegmentHero(
-                            imgSrc: imageUrl,
-                            id: heroId,
-                          );
-                        } else {
-                          return Opacity(opacity: 0.75, child: imageWidget);
-                        }
+                        // Do not use [SegmentHero] here: list tiles are fixed 50×50; SegmentHero uses
+                        // Hero + AspectRatio (16×9 Column) which breaks thumbnails and yields “broken image”.
+                        return widget.completed
+                            ? imageWidget
+                            : Opacity(opacity: 0.75, child: imageWidget);
                       },
                     ),
                   ),

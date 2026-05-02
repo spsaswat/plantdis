@@ -22,10 +22,23 @@ class _WelcomePageState extends State<WelcomePage> {
   static bool isFirebaseInitialized = false;
   bool _isGoogleSignInLoading = false;
   bool _isGuestSignInLoading = false;
+  /// When false: hide Login / Register / Google and use fully local guest (no Firebase).
+  /// Linux does not show this switch (always local-only welcome).
+  bool _saveDataOnCloud = true;
   String? _errorMessage;
   AuthService? _authServiceInstance;
   AuthService? get _authService => _authServiceInstance ??= AuthService();
   final _localGuestService = LocalGuestService();
+
+  /// Login / Register / Google — hidden when cloud save is off or unsupported (e.g. Linux).
+  bool get _showFirebaseAuthOptions =>
+      LocalGuestService.supportsFirebaseCloudToggle && _saveDataOnCloud;
+
+  bool get _useLocalGuestWithoutFirebase {
+    if (LocalGuestService.isLinux) return true;
+    if (!LocalGuestService.supportsFirebaseCloudToggle) return true;
+    return !_saveDataOnCloud;
+  }
 
   Future<void> initFireBase() async {
     if (isFirebaseInitialized) {
@@ -70,83 +83,85 @@ class _WelcomePageState extends State<WelcomePage> {
                             ),
                           ),
 
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            textStyle: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                        if (_showFirebaseAuthOptions) ...[
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
+                            onPressed: () async {
+                              await initFireBase();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) {
+                                    return const LoginPage();
+                                  },
+                                ),
+                              );
+                            },
+                            child: const Text("Login"),
                           ),
-                          onPressed: () async {
-                            await initFireBase();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) {
-                                  return const LoginPage();
-                                },
-                              ),
-                            );
-                          },
-                          child: const Text("Login"),
-                        ),
 
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            textStyle: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
+                            onPressed: () async {
+                              await initFireBase();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) {
+                                    return const RegisterPage();
+                                  },
+                                ),
+                              );
+                            },
+                            child: const Text("Register"),
                           ),
-                          onPressed: () async {
-                            await initFireBase();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) {
-                                  return const RegisterPage();
-                                },
-                              ),
-                            );
-                          },
-                          child: const Text("Register"),
-                        ),
 
-                        const Row(
-                          children: [
-                            Expanded(child: Divider()),
-                            Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                              ),
-                              child: Text(
-                                "OR",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.bold,
+                          const Row(
+                            children: [
+                              Expanded(child: Divider()),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                ),
+                                child: Text(
+                                  "OR",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Expanded(child: Divider()),
-                          ],
-                        ),
+                              Expanded(child: Divider()),
+                            ],
+                          ),
 
-                        GoogleSignInButton(
-                          isLoading: _isGoogleSignInLoading,
-                          onSignInComplete: (isSuccess, errorMessage) async {
-                            await initFireBase();
-                            if (isSuccess) {
-                              navigateToHome();
-                            } else {
-                              setState(() {
-                                _isGoogleSignInLoading = false;
-                                _errorMessage = errorMessage;
-                              });
-                            }
-                          },
-                        ),
+                          GoogleSignInButton(
+                            isLoading: _isGoogleSignInLoading,
+                            onSignInComplete: (isSuccess, errorMessage) async {
+                              await initFireBase();
+                              if (isSuccess) {
+                                navigateToHome();
+                              } else {
+                                setState(() {
+                                  _isGoogleSignInLoading = false;
+                                  _errorMessage = errorMessage;
+                                });
+                              }
+                            },
+                          ),
+                        ],
 
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
@@ -173,6 +188,37 @@ class _WelcomePageState extends State<WelcomePage> {
                           onPressed:
                               _isGuestSignInLoading ? null : _signInAsGuest,
                         ),
+
+                        if (LocalGuestService.supportsFirebaseCloudToggle) ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Switch(
+                                  value: _saveDataOnCloud,
+                                  onChanged: (v) {
+                                    setState(() => _saveDataOnCloud = v);
+                                  },
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    'Save data on cloud',
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.85),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   );
@@ -192,8 +238,8 @@ class _WelcomePageState extends State<WelcomePage> {
     });
 
     try {
-      // Desktop guest mode: stay fully local without Firebase account.
-      if (LocalGuestService.isDesktopApp) {
+      // Linux, unsupported platforms, or cloud save off: fully local without Firebase.
+      if (_useLocalGuestWithoutFirebase) {
         _localGuestService.setLocalGuestMode(true);
       } else {
         await initFireBase();

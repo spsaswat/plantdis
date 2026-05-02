@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
+import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 import 'package:flutter_test_application_1/utils/storage_utils.dart';
 
@@ -26,7 +27,18 @@ class LocalGuestService {
       StreamController<List<PlantModel>>.broadcast();
 
   static bool get isMacOS => !kIsWeb && io.Platform.isMacOS;
+  static bool get isLinux => !kIsWeb && io.Platform.isLinux;
   static bool get isDesktopApp => io.Platform.isMacOS || io.Platform.isWindows || io.Platform.isLinux;
+
+  /// Android / iOS / macOS / Windows: welcome can offer Firebase (login + cloud guest).
+  /// Linux targets omit Firebase; use local guest only (no toggle on welcome).
+  static bool get supportsFirebaseCloudToggle {
+    if (kIsWeb) return false;
+    return io.Platform.isAndroid ||
+        io.Platform.isIOS ||
+        io.Platform.isMacOS ||
+        io.Platform.isWindows;
+  }
 
   bool isLocalGuestMode() {
     return localGuestMode;
@@ -333,8 +345,9 @@ class LocalGuestService {
   Future<void> _deleteGuestOriginalImage(PlantModel plant) async {
     if (kIsWeb) return;
     try {
-      final pth = plant.analysisResults?['localImagePath'] as String?;
-      if (pth == null || pth.isEmpty) return;
+      final pthRaw = plant.analysisResults?['localImagePath'] as String?;
+      if (pthRaw == null || pthRaw.trim().isEmpty) return;
+      final pth = toLocalFilePath(pthRaw.trim());
       final f = io.File(pth);
       if (await f.exists()) {
         await f.delete();
