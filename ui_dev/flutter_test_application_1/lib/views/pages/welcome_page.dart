@@ -94,6 +94,7 @@ class _WelcomePageState extends State<WelcomePage> {
                             ),
                             onPressed: () async {
                               await initFireBase();
+                              if (!context.mounted) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -116,6 +117,7 @@ class _WelcomePageState extends State<WelcomePage> {
                             ),
                             onPressed: () async {
                               await initFireBase();
+                              if (!context.mounted) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(

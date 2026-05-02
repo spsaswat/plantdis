@@ -8,8 +8,8 @@ import 'api_runtime_secrets_load_io.dart'
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// Loads API keys from (in order of merge per field):
-/// 1. **Flutter asset** [apiFileName] (embedded at build time — must be listed in pubspec).
-/// 2. **Filesystem** (see [config_file.readConfigJsonFile]): env / bundle Resources / App Support / cwd walk.
+/// 1. **Flutter asset** [bundledConfigAssetPath] (committed placeholder; listed in pubspec).
+/// 2. **Filesystem** [apiFileName] (see [config_file.readConfigJsonFile]): env / bundle Resources / etc.
 /// 3. **`--dart-define=GEMINI_API_KEY` / `OPENROUTER_API_KEY`** for any slot still empty.
 ///
 /// For each key, a non-empty filesystem value overrides the bundled asset (handy for local dev).
@@ -17,6 +17,7 @@ class ApiRuntimeSecrets {
   ApiRuntimeSecrets._();
 
   static const String defaultConfigFileName = 'api_config.json';
+  static const String bundledConfigAssetPath = 'assets/secrets/api_config.json';
 
   static String _gemini = '';
   static String _openrouter = '';
@@ -25,7 +26,7 @@ class ApiRuntimeSecrets {
   static String get geminiApiKey => _gemini;
   static String get openrouterApiKey => _openrouter;
 
-  /// Source hint: filesystem path, or `asset:api_config.json` when keys came only from the bundle.
+  /// Source hint: filesystem path, or `asset:assets/secrets/api_config.json` when keys came only from the bundle.
   static String? get configFilePathHint => _configFilePathHint;
 
   static (String, String) _parseApiKeysFromJsonText(String raw) {
@@ -66,7 +67,7 @@ class ApiRuntimeSecrets {
     var geminiAsset = '';
     var openAsset = '';
     try {
-      final rawAsset = await rootBundle.loadString(apiFileName);
+      final rawAsset = await rootBundle.loadString(bundledConfigAssetPath);
       final p = _parseApiKeysFromJsonText(rawAsset);
       geminiAsset = p.$1;
       openAsset = p.$2;
@@ -77,7 +78,9 @@ class ApiRuntimeSecrets {
       }
     } catch (e) {
       if (kDebugMode) {
-        logger.d('[ApiConfig] embedded asset not available ($apiFileName): $e');
+        logger.d(
+          '[ApiConfig] embedded asset not available ($bundledConfigAssetPath): $e',
+        );
       }
     }
 
@@ -107,7 +110,7 @@ class ApiRuntimeSecrets {
     if (geminiFile.isNotEmpty || openFile.isNotEmpty) {
       _configFilePathHint = config_file.lastReadableApiConfigPath;
     } else if (geminiAsset.isNotEmpty || openAsset.isNotEmpty) {
-      _configFilePathHint = 'asset:$apiFileName';
+      _configFilePathHint = 'asset:$bundledConfigAssetPath';
     }
 
     const dGemini = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
@@ -133,7 +136,7 @@ class ApiRuntimeSecrets {
       logger.w(
         '[ApiConfig] Config JSON loaded but both keys are empty. '
         'Use string keys exactly "geminiApiKey" and "openrouterApiKey" (see api_config.json.example), '
-        'ensure api_config.json exists for build (Flutter asset), save filesystem overrides, '
+        'ensure assets/secrets/api_config.json is bundled, save filesystem overrides, '
         'or use --dart-define=GEMINI_API_KEY / OPENROUTER_API_KEY.',
       );
     }
