@@ -69,7 +69,7 @@ class _SegmentPageState extends State<SegmentPage> {
   Future<Map<String, dynamic>>? _backgroundDetectionFuture;
 
   // State variables for segmentation and analysis
-  final bool _isAnalysisTriggered = false;
+  bool _isAnalysisTriggered = false;
 
   static const double decisionThreshold = 0.7; // Leaf decision threshold
 
@@ -154,6 +154,7 @@ class _SegmentPageState extends State<SegmentPage> {
     _backgroundDetectionFuture = null;
     _backgroundDetectionResult = null;
     _isBackgroundDetectionComplete = false;
+    _isAnalysisTriggered = false;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -1745,26 +1746,55 @@ class _SegmentPageState extends State<SegmentPage> {
                                 ],
                                 ...[
                                   // continue with the rest content
-                                  // Show subsequent content only if leaves are detected
-                                  // Auto-trigger analysis if not already triggered and plant is not processing/completed
+                                  // Auto-trigger or show manual button depending on mode
                                   if (!_isAnalysisTriggered &&
                                       status != 'processing' &&
                                       status != 'analyzing' &&
                                       status != 'completed')
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 15.0),
-                                      child: ElevatedButton.icon(
-                                        onPressed:
-                                            _isBusy
-                                                ? null
-                                                : () async {
-                                                  await _segmentAndClassifyOnly();
-                                                },
-                                        icon: const Icon(Icons.auto_fix_high),
-                                        label: const Text(
-                                          'Run segmentation (preview)',
-                                        ),
-                                      ),
+                                    Builder(
+                                      builder: (context) {
+                                        final alreadyHasSegmentation =
+                                            _segPreviewUrl != null ||
+                                            analysisResults?['segmentationUrl'] !=
+                                                null;
+                                        if (_isLocalGuestMode &&
+                                            !_isBusy &&
+                                            !alreadyHasSegmentation) {
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                            if (!mounted ||
+                                                _isAnalysisTriggered ||
+                                                _isBusy) return;
+                                            setState(
+                                              () => _isAnalysisTriggered = true,
+                                            );
+                                            _segmentAndClassifyOnly();
+                                          });
+                                          return const SizedBox.shrink();
+                                        }
+                                        if (_isLocalGuestMode) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 15.0,
+                                          ),
+                                          child: ElevatedButton.icon(
+                                            onPressed:
+                                                _isBusy
+                                                    ? null
+                                                    : () async {
+                                                      await _segmentAndClassifyOnly();
+                                                    },
+                                            icon: const Icon(
+                                              Icons.auto_fix_high,
+                                            ),
+                                            label: const Text(
+                                              'Run segmentation (preview)',
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
 
                                   // Same as Windows: only show when background says leaves (or manual override).
@@ -1923,9 +1953,10 @@ class _SegmentPageState extends State<SegmentPage> {
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
-                                                  Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.end,
+                                                  Wrap(
+                                                    alignment:
+                                                        WrapAlignment.end,
+                                                    spacing: 8.0,
                                                     children: [
                                                       TextButton(
                                                         onPressed:
@@ -1967,7 +1998,6 @@ class _SegmentPageState extends State<SegmentPage> {
                                                           'Yes, continue',
                                                         ),
                                                       ),
-                                                      const SizedBox(width: 8),
                                                       OutlinedButton(
                                                         onPressed: () {
                                                           setState(() {
