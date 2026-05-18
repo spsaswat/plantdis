@@ -1,0 +1,46 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="frameClip">
+      <rect x="150" y="65" width="302" height="302" rx="36" ry="36"/>
+    </clipPath>
+  </defs>
+
+  <g transform="translate(-50, -35)">
+    <rect fill="#c8d8d8" x="110" y="180" width="302" height="302" rx="36" ry="36"/>
+
+    <rect fill="#f8fcfc" stroke="#000000" stroke-width="14" stroke-linejoin="round"
+          x="200" y="100" width="302" height="302" rx="36" ry="36"/>
+
+    <g clip-path="url(#frameClip)">
+      <circle fill="#fcc21c" stroke="#000000" stroke-width="6" cx="300" cy="200" r="48"/>
+      <polygon fill="#48a848" stroke="#000000" stroke-width="10" stroke-linejoin="round"
+               points="200,402 320,230 440,402"/>
+      <polygon fill="#68cc68" stroke="#000000" stroke-width="10" stroke-linejoin="round"
+               points="300,402 400,270 502,402"/>
+    </g>
+
+    <g transform="translate(300, 315)">
+      <circle cx="90" cy="75" r="95" fill="#ffffff" opacity="0.95"/>
+
+      <line x1="0" y1="40" x2="38" y2="40" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+      <line x1="142" y1="40" x2="180" y2="40" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+
+      <rect fill="#c8d8d8" stroke="#587890" stroke-width="8" stroke-linejoin="round"
+            x="0" y="26" width="38" height="28" rx="14" ry="14"/>
+      <rect fill="#c8d8d8" stroke="#587890" stroke-width="8" stroke-linejoin="round"
+            x="142" y="26" width="38" height="28" rx="14" ry="14"/>
+      <rect fill="#c8d8d8" stroke="#587890" stroke-width="8" stroke-linejoin="round"
+            x="38" y="26" width="104" height="46" rx="12" ry="12"/>
+
+      <line x1="55" y1="72" x2="35" y2="118" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+      <line x1="35" y1="118" x2="70" y2="118" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+      <line x1="125" y1="72" x2="145" y2="118" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+      <line x1="145" y1="118" x2="110" y2="118" fill="none" stroke="#587890" stroke-width="8" stroke-linecap="round"/>
+
+      <rect fill="#4488aa" stroke="#587890" stroke-width="6"
+            x="65" y="72" width="50" height="34" rx="8" ry="8"/>
+      <circle fill="#ffffff" stroke="#587890" stroke-width="4" cx="90" cy="89" r="11"/>
+      <circle fill="#4488aa" cx="90" cy="89" r="5"/>
+    </g>
+  </g>
+</svg>

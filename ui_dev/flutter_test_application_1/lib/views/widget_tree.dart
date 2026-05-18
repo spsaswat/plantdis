@@ -1,11 +1,14 @@
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
+import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
+    if (dart.library.io) 'package:flutter_test_application_1/utils/drone_image_detector.dart';
 
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
-// import 'package:flutter_test_application_1/utils/web_utils.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'pages/take_picture_page.dart';
@@ -19,6 +22,12 @@ import 'pages/profile_page.dart';
 
 List<Widget> pages = [const HomePage(), const ChatPage(), const ProfilePage()];
 
+bool get _isDesktopHost =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux);
+
 class WidgetTree extends StatefulWidget {
   const WidgetTree({super.key});
 
@@ -29,7 +38,6 @@ class WidgetTree extends StatefulWidget {
 class _WidgetTreeState extends State<WidgetTree> {
   XFile? xfile;
   final PlantService _plantService = PlantService();
-
 
   @override
   Widget build(BuildContext context) {
@@ -62,9 +70,29 @@ class _WidgetTreeState extends State<WidgetTree> {
                     const SizedBox(height: 10),
                     FloatingActionButton(
                       heroTag: 'take_picture',
-                      tooltip: 'Take Picture',
-                      onPressed: () => _showCamera(),
-                      child: const Icon(Icons.add_a_photo),
+                      tooltip:
+                          _isDesktopHost
+                              ? 'Select drone image'
+                              : 'Take Picture',
+                      // Multi-color SVG: avoid FAB foreground tinting the whole icon black.
+                      foregroundColor: Colors.transparent,
+                      onPressed:
+                          () =>
+                              _isDesktopHost
+                                  ? _pickDroneImageFromGallery()
+                                  : _showCamera(),
+                      child:
+                          _isDesktopHost
+                              ? SvgPicture.asset(
+                                'assets/images/drones_img.svg',
+                                width: 32,
+                                height: 32,
+                                fit: BoxFit.contain,
+                              )
+                              : Icon(
+                                Icons.add_a_photo,
+                                color: Theme.of(context).colorScheme.onPrimary,
+                              ),
                     ),
                   ],
                 )
@@ -91,51 +119,10 @@ class _WidgetTreeState extends State<WidgetTree> {
       if (pickedFile == null) return;
       if (!mounted) return;
 
-      setState(() {
-        xfile = pickedFile;
-      });
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
+      await _processPickedImage(
+        pickedFile,
+        notes: 'Uploaded from gallery',
       );
-
-      try {
-        final result = await _plantService.uploadAndAnalyzeImage(
-          image: pickedFile,
-          notes: 'Uploaded from gallery',
-        );
-
-        if (!mounted) return;
-        Navigator.of(context).pop();
-
-        if (result.containsKey('plantId')) {
-          final localBytes = await pickedFile.readAsBytes();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => SegmentPage(
-                    imgSrc: result['downloadUrl'],
-                    id: result['imageId'],
-                    plantId: result['plantId'],
-                    localImageBytes: localBytes,
-                  ),
-            ),
-          );
-        } else {
-          _showErrorDialog(
-            'Upload and analysis completed but result was unexpected.',
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        _showErrorDialog(
-          'Error during upload/analysis: ${e.toString()}\n\nPlease try again.',
-        );
-      }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
@@ -144,11 +131,92 @@ class _WidgetTreeState extends State<WidgetTree> {
     }
   }
 
-  Future<void> _showCamera() async {
-    // Camera plugin not support macOS
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return _pickImageFromGallery();
+  Future<void> _pickDroneImageFromGallery() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+      if (!mounted) return;
+
+      final isDrone = await isDroneImageForPath(pickedFile.path);
+      if (!mounted) return;
+
+      if (!isDrone) {
+        _showDroneRequiredDialog();
+        return;
+      }
+
+      await _processPickedImage(
+        pickedFile,
+        notes: 'Uploaded drone image from gallery',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorDialog(
+        'Error picking image: ${e.toString()}\n\nPlease check permissions.',
+      );
     }
+  }
+
+  Future<void> _processPickedImage(
+    XFile pickedFile, {
+    required String notes,
+  }) async {
+    setState(() {
+      xfile = pickedFile;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await _plantService.uploadAndAnalyzeImage(
+        image: pickedFile,
+        notes: notes,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      if (result.containsKey('plantId')) {
+        final localBytes = await pickedFile.readAsBytes();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) => SegmentPage(
+                  imgSrc: result['downloadUrl'],
+                  id: result['imageId'],
+                  plantId: result['plantId'],
+                  localImageBytes: localBytes,
+                ),
+          ),
+        );
+      } else {
+        _showErrorDialog(
+          'Upload and analysis completed but result was unexpected.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      _showErrorDialog(
+        'Error during upload/analysis: ${e.toString()}\n\nPlease try again.',
+      );
+    }
+  }
+
+  Future<void> _showCamera() async {
     try {
       final cameras = await availableCameras();
 
@@ -174,57 +242,35 @@ class _WidgetTreeState extends State<WidgetTree> {
       if (capturedImageFile == null) return;
       if (!mounted) return;
 
-      setState(() {
-        xfile = capturedImageFile;
-      });
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
+      await _processPickedImage(
+        capturedImageFile,
+        notes: 'Captured from camera',
       );
-
-      try {
-        final result = await _plantService.uploadAndAnalyzeImage(
-          image: capturedImageFile,
-          notes: 'Captured from camera',
-        );
-
-        if (!mounted) return;
-        Navigator.of(context).pop();
-
-        if (result.containsKey('plantId')) {
-          final localBytes = await capturedImageFile.readAsBytes();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => SegmentPage(
-                    imgSrc: result['downloadUrl'],
-                    id: result['imageId'],
-                    plantId: result['plantId'],
-                    localImageBytes: localBytes,
-                  ),
-            ),
-          );
-        } else {
-          _showErrorDialog(
-            'Capture and analysis completed but result was unexpected.',
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        _showErrorDialog(
-          'Error during capture/analysis: ${e.toString()}\n\nPlease try again.',
-        );
-      }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
         'Error accessing camera: ${e.toString()}\n\nPlease ensure permissions are granted and using HTTPS if on web.',
       );
     }
+  }
+
+  void _showDroneRequiredDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Notice'),
+            content: const Text(
+              'Please select an image captured by a drone camera.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   void _showErrorDialog(String message) {
