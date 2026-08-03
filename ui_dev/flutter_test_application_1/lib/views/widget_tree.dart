@@ -1,14 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
+import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
 import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
     if (dart.library.io) 'package:flutter_test_application_1/utils/drone_image_detector.dart';
 
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
+import 'package:flutter_test_application_1/views/pages/manual_segmentation_page.dart';
+import 'package:flutter_test_application_1/views/pages/segmentation_mode_page.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'pages/take_picture_page.dart';
@@ -119,10 +124,7 @@ class _WidgetTreeState extends State<WidgetTree> {
       if (pickedFile == null) return;
       if (!mounted) return;
 
-      await _processPickedImage(
-        pickedFile,
-        notes: 'Uploaded from gallery',
-      );
+      await _processPickedImage(pickedFile, notes: 'Uploaded from gallery');
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
@@ -153,16 +155,92 @@ class _WidgetTreeState extends State<WidgetTree> {
         return;
       }
 
-      await _processPickedImage(
-        pickedFile,
-        notes: 'Uploaded drone image from gallery',
+      final localBytes = await pickedFile.readAsBytes();
+      if (!mounted) return;
+
+      final mode = await Navigator.of(context).push<SegmentationMode>(
+        MaterialPageRoute(
+          builder: (context) => SegmentationModePage(imageBytes: localBytes),
+        ),
       );
+      if (!mounted || mode != SegmentationMode.manual) return;
+
+      await _openManualSegmentation(pickedFile, localBytes);
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
         'Error picking image: ${e.toString()}\n\nPlease check permissions.',
       );
     }
+  }
+
+  Future<void> _openManualSegmentation(
+    XFile pickedFile,
+    Uint8List localBytes,
+  ) async {
+    var uploadDialogVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await _plantService.uploadImageForManualLabelling(
+        image: pickedFile,
+        notes: 'Uploaded drone image for manual segmentation',
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      uploadDialogVisible = false;
+
+      final request = await Navigator.of(
+        context,
+      ).push<BatchSegmentationRequest>(
+        MaterialPageRoute(
+          builder:
+              (context) => ManualSegmentationPage(
+                imageId: result['imageId'] as String,
+                plantId: result['plantId'] as String,
+                imageUrl: result['downloadUrl'] as String,
+                imageBytes: localBytes,
+              ),
+        ),
+      );
+      if (!mounted || request == null) return;
+      await _handleBatchProcessingRequest(request);
+    } catch (e) {
+      if (!mounted) return;
+      if (uploadDialogVisible) {
+        Navigator.of(context).pop();
+      }
+      _showErrorDialog(
+        'Error preparing image for labelling: ${e.toString()}\n\nPlease try again.',
+      );
+    }
+  }
+
+  /// Integration seam for #152. The request already contains the persisted
+  /// main-image ID and normalized label positions expected by that flow.
+  Future<void> _handleBatchProcessingRequest(
+    BatchSegmentationRequest request,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Labels ready'),
+            content: Text(
+              '${request.labels.length} labels are ready for batch processing.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<void> _processPickedImage(
@@ -190,6 +268,7 @@ class _WidgetTreeState extends State<WidgetTree> {
 
       if (result.containsKey('plantId')) {
         final localBytes = await pickedFile.readAsBytes();
+        if (!mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(

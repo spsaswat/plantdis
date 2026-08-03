@@ -27,7 +27,8 @@ class PlantService {
 
   FirebaseAuth get _auth => _authInstance ??= FirebaseAuth.instance;
   FirebaseStorage get _storage => _storageInstance ??= FirebaseStorage.instance;
-  FirebaseFirestore get _firestore => _firestoreInstance ??= FirebaseFirestore.instance;
+  FirebaseFirestore get _firestore =>
+      _firestoreInstance ??= FirebaseFirestore.instance;
   final InferenceService _inferenceService = InferenceService();
   final SegmentationService _segmentationService = SegmentationService();
   final LocalGuestService _localGuestService = LocalGuestService();
@@ -38,6 +39,17 @@ class PlantService {
       _firestore.collection('images');
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
+
+  Future<Map<String, dynamic>> uploadImageForManualLabelling({
+    required XFile image,
+    String? notes,
+  }) {
+    return uploadAndAnalyzeImage(
+      image: image,
+      notes: notes,
+      runAnalysis: false,
+    );
+  }
 
   /// Save per-image latest analysis under users/{uid}/plants/{plantId}/images/{imageId}/analysis/latest
   Future<void> saveImageAnalysisResult({
@@ -103,10 +115,14 @@ class PlantService {
     required XFile image,
     String? notes,
     String? existingPlantId,
+    bool runAnalysis = true,
   }) async {
     if (_localGuestService.isLocalGuestMode()) {
       final Uint8List imageBytes = await image.readAsBytes();
-      return _localGuestService.createLocalPlantFromImage(imageBytes: imageBytes);
+      final result = await _localGuestService.createLocalPlantFromImage(
+        imageBytes: imageBytes,
+      );
+      return result;
     }
 
     final user = _auth.currentUser;
@@ -190,7 +206,7 @@ class PlantService {
         plantId: plantId,
         userId: user.uid,
         createdAt: DateTime.now(),
-        status: 'processing',
+        status: runAnalysis ? 'processing' : 'pending',
         images: [imageId],
       );
       await _plants.doc(plantId).set(plantModel.toMap());
@@ -211,7 +227,7 @@ class PlantService {
     } else {
       await _plants.doc(plantId).update({
         'images': FieldValue.arrayUnion([imageId]),
-        'status': 'processing',
+        'status': runAnalysis ? 'processing' : 'pending',
         'updatedAt': FieldValue.serverTimestamp(),
         'analysisError': FieldValue.delete(),
         'analysisResults': FieldValue.delete(),
@@ -219,6 +235,14 @@ class PlantService {
       if (kDebugMode) {
         logger.i('[PlantService] Existing PlantModel updated for $plantId');
       }
+    }
+
+    if (!runAnalysis) {
+      return {
+        'plantId': plantId,
+        'imageId': imageId,
+        'downloadUrl': downloadUrl,
+      };
     }
 
     if (kDebugMode) {
