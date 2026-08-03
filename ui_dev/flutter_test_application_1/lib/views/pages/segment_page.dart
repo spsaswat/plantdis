@@ -23,15 +23,14 @@ import 'dart:io' show Directory, File, Platform;
 // import 'dart:typed_data'; // All needed types are provided by foundation.dart
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:flutter/services.dart' show rootBundle;
-import 'package:image/image.dart' as img;
-import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
 import 'package:flutter_test_application_1/services/segmentation_service.dart'
     as seg_tfl;
 import 'package:flutter_test_application_1/services/segmentation_service_onnx.dart'
     as seg_onnx;
-import 'package:flutter_test_application_1/services/inference_service.dart';
+import 'package:flutter_test_application_1/services/leaf_analysis_pipeline.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
+import 'package:flutter_test_application_1/data/disease_labels.dart';
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -97,34 +96,11 @@ class _SegmentPageState extends State<SegmentPage> {
   /// per-image prefs cache is empty — still show Analysis Results.
   bool _didHydrateUiFromPlantDoc = false;
 
-  // Cache species classifier labels and last probabilities for UI confidence display
-  static const List<String> _speciesLabels = [
-    'apple',
-    'blueberry',
-    'cherry',
-    'corn',
-    'grape',
-    'orange',
-    'peach',
-    'pepper',
-    'potato',
-    'raspberry',
-    'soybean',
-    'squash',
-    'strawberry',
-    'tomato',
-  ];
+  // Species classifier labels and last probabilities, for UI confidence display.
+  static const List<String> _speciesLabels = kSpeciesLabels;
   List<double>? _lastSpeciesProbs;
 
-  bool _isSupportedPlant(String? species) {
-    final s = species?.toLowerCase().trim();
-    return s == 'corn' ||
-        s == 'pepper' ||
-        s == 'grape' ||
-        s == 'apple' ||
-        s == 'potato' ||
-        s == 'tomato';
-  }
+  bool _isSupportedPlant(String? species) => isSupportedSpecies(species);
 
   @override
   void initState() {
@@ -191,7 +167,10 @@ class _SegmentPageState extends State<SegmentPage> {
         if (_plantClassConf == null && ar['plantSpeciesConfidence'] != null) {
           _plantClassConf = (ar['plantSpeciesConfidence'] as num).toDouble();
         }
-        if (_cachedSuggestion == null && ar['recommendation'] != null) {
+        // Skip batch placeholder advice so the real AI answer is fetched.
+        if (_cachedSuggestion == null &&
+            ar['recommendation'] != null &&
+            ar['recommendationSource'] != 'fallback') {
           final r = ar['recommendation'];
           if (r is String && r.isNotEmpty) {
             _cachedSuggestion = r;
@@ -283,13 +262,18 @@ class _SegmentPageState extends State<SegmentPage> {
         final String? cachedDisease = cached['detectedDisease'] as String?;
         final double? cachedConf = (cached['confidence'] as num?)?.toDouble();
         final String? cachedRec = cached['recommendation'] as String?;
+        // Batch processing pre-fills offline advice so leaves count as complete
+        // in the home list without one LLM call each. Treat that as a
+        // placeholder so opening the leaf still fetches the real answer.
+        final bool recIsPlaceholder =
+            cached['recommendationSource'] == 'fallback';
         setState(() {
           _segPreviewUrl = cachedSegUrl;
           _plantClass = cached['plantSpecies'] as String?;
           _plantClassConf =
               (cached['plantSpeciesConfidence'] as num?)?.toDouble();
           _analysisConfirmed = cachedDisease != null && cachedConf != null;
-          _cachedSuggestion = cachedRec;
+          _cachedSuggestion = recIsPlaceholder ? null : cachedRec;
         });
         if (!_analysisConfirmed && cachedSegUrl != null) {
           // ignore: unawaited_futures
@@ -306,11 +290,15 @@ class _SegmentPageState extends State<SegmentPage> {
       if (_isLocalGuestMode) {
         await _localGuestService.mergeAnalysisResultsIntoPlant(
           plantId: widget.plantId,
-          patch: {'recommendation': suggestion},
+          patch: {
+            'recommendation': suggestion,
+            'recommendationSource': 'ai',
+          },
         );
       } else {
         await _firestore.collection('plants').doc(widget.plantId).update({
           'analysisResults.recommendation': suggestion,
+          'analysisResults.recommendationSource': 'ai',
         });
       }
       await _plantService.saveImageAnalysisResult(
@@ -318,6 +306,8 @@ class _SegmentPageState extends State<SegmentPage> {
         imageId: widget.id,
         analysis: {
           'recommendation': suggestion,
+          // Marks the placeholder written by batch processing as upgraded.
+          'recommendationSource': 'ai',
           'detectionTimestamp': DateTime.now().toIso8601String(),
         },
       );
@@ -432,179 +422,21 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   Future<void> _runPlantSpeciesClassifier(Uint8List segBytes) async {
-    // Load image and resize to classifier input (assume 224x224 float)
-    final img.Image? decoded = img.decodeImage(segBytes);
-    if (decoded == null) throw Exception('Failed to decode segmented image');
-    final img.Image resized = img.copyResize(decoded, width: 224, height: 224);
-
-    final input = [
-      List.generate(
-        224,
-        (y) => List.generate(224, (x) {
-          final p = resized.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        }),
-      ),
-    ];
-
-    final interpreter = TfliteInterpreter();
-    await interpreter.loadModel('assets/models/plants_detector.tflite');
-    // Output shape [1, N]
-    final output = [List.filled(14, 0.0)];
-    interpreter.run(input, output);
-    interpreter.close();
-
-    final probs = (output[0] as List).cast<double>();
-    int maxIdx = 0;
-    double maxVal = -1;
-    for (int i = 0; i < probs.length; i++) {
-      if (probs[i] > maxVal) {
-        maxVal = probs[i];
-        maxIdx = i;
-      }
-    }
-    const labels = _speciesLabels;
-    if (mounted) {
-      final species = labels[maxIdx].toLowerCase().trim();
-      setState(() {
-        _plantClass = species;
-        _plantClassConf = maxVal;
-        _lastSpeciesProbs = probs;
-      });
-    }
+    final result = await LeafAnalysisPipeline.classifySpecies(segBytes);
+    if (!mounted) return;
+    setState(() {
+      _plantClass = result.species;
+      _plantClassConf = result.confidence;
+      _lastSpeciesProbs = result.probabilities;
+    });
   }
 
   Future<DetectionResult?> _runDiseaseDetection(Uint8List bytes) async {
-    // Choose model
-    String modelPath;
-    String species = (_forcedSpecies ?? _plantClass ?? '').toLowerCase().trim();
-    if (species == 'corn') {
-      modelPath = 'assets/models/corn_disease_detector.tflite';
-    } else if (species == 'pepper') {
-      modelPath = 'assets/models/pepper_disease_detector.tflite';
-    } else if (species == 'grape') {
-      modelPath = 'assets/models/grape_disease_detector.tflite';
-    } else if (species == 'apple') {
-      modelPath = 'assets/models/apple_disease_detector.tflite';
-    } else if (species == 'potato') {
-      modelPath = 'assets/models/potato_disease_detector.tflite';
-    } else if (species == 'tomato') {
-      modelPath = 'assets/models/tomato_disease_detector.tflite';
-    } else {
-      // fallback to original
-      final res = await InferenceService().analyzeImage(
-        imageBytes: bytes,
-        plantId: widget.plantId,
-        isSegmented: true,
-      );
-      // mark unknown species
-      if (species.isNotEmpty &&
-          species != 'corn' &&
-          species != 'pepper' &&
-          species != 'grape' &&
-          species != 'apple' &&
-          species != 'tomato') {}
-      return res;
-    }
-
-    // Run custom disease detector (assume [1,224,224,3] softmax)
-    final img.Image? decoded = img.decodeImage(bytes);
-    if (decoded == null) throw Exception('Failed to decode segmented image');
-    final img.Image resized = img.copyResize(decoded, width: 224, height: 224);
-    final input = [
-      List.generate(
-        224,
-        (y) => List.generate(224, (x) {
-          final p = resized.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        }),
-      ),
-    ];
-    final interpreter = TfliteInterpreter();
-    await interpreter.loadModel(modelPath);
-    // read output size dynamically
-    final outTensor = interpreter.getOutputTensor(0);
-    final outShape = outTensor.shape;
-    final outSize = outShape.length > 1 ? outShape[1] : 1;
-    final output = [List.filled(outSize, 0.0)];
-    interpreter.run(input, output);
-    interpreter.close();
-    final probs = (output[0] as List).cast<double>();
-    int maxIdx = 0;
-    double maxVal = -1;
-    for (int i = 0; i < probs.length; i++) {
-      if (probs[i] > maxVal) {
-        maxVal = probs[i];
-        maxIdx = i;
-      }
-    }
-    String diseaseName;
-    List<String>? labels;
-    switch (species) {
-      case 'corn':
-        labels = const [
-          'Corn___Cercospora_leaf_spot_Gray_leaf_spot',
-          'Corn___Common_rust',
-          'Corn___healthy',
-          'Corn___Northern_Leaf_Blight',
-        ];
-        break;
-      case 'pepper':
-        labels = const ['Pepper_bacterial_spot', 'Pepper_healthy'];
-        break;
-      case 'grape':
-        labels = const [
-          'Grape___Black_rot',
-          'Grape___Esca_(Black_Measles)',
-          'Grape___healthy',
-          'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
-        ];
-        break;
-      case 'apple':
-        labels = const [
-          'Apple___Apple_scab',
-          'Apple___Black_rot',
-          'Apple___Cedar_apple_rust',
-          'Apple___healthy',
-        ];
-        break;
-      case 'potato':
-        labels = const [
-          'Potato___Early_blight',
-          'Potato___healthy',
-          'Potato___Late_blight',
-        ];
-        break;
-      case 'tomato':
-        labels = const [
-          'Tomato___Bacterial_spot',
-          'Tomato___Early_blight',
-          'Tomato___Late_blight',
-          'Tomato___Leaf_Mold',
-          'Tomato___Septoria_leaf_spot',
-          'Tomato___Spider_mites_Two_spotted_spider_mite',
-          'Tomato___Target_Spot',
-          'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
-          'Tomato___Tomato_mosaic_virus',
-          'Tomato___healthy',
-        ];
-        break;
-      default:
-        labels = null;
-        break;
-    }
-
-    if (labels != null && maxIdx >= 0 && maxIdx < labels.length) {
-      diseaseName = labels[maxIdx];
-    } else {
-      final String fallbackName =
-          _plantClass ?? (species.isNotEmpty ? species : 'Unknown plant');
-      diseaseName = fallbackName;
-    }
-    return DetectionResult(
-      diseaseName: diseaseName,
-      confidence: maxVal,
-      boundingBox: null,
+    final species = (_forcedSpecies ?? _plantClass ?? '').toLowerCase().trim();
+    return LeafAnalysisPipeline.detectDisease(
+      bytes,
+      species: species,
+      plantId: widget.plantId,
     );
   }
 

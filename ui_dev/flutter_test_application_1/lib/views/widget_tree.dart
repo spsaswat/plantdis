@@ -10,6 +10,7 @@ import 'package:flutter_test_application_1/models/batch_segmentation_request.dar
 import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
     if (dart.library.io) 'package:flutter_test_application_1/utils/drone_image_detector.dart';
 
+import 'package:flutter_test_application_1/views/pages/batch_processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/pages/manual_segmentation_page.dart';
@@ -220,26 +221,16 @@ class _WidgetTreeState extends State<WidgetTree> {
     }
   }
 
-  /// Integration seam for #152. The request already contains the persisted
-  /// main-image ID and normalized label positions expected by that flow.
+  /// Hands the labelled regions to the batch pipeline (#152). The request
+  /// already contains the persisted main-image ID and normalized label
+  /// positions, so the batch module owns everything from here.
   Future<void> _handleBatchProcessingRequest(
     BatchSegmentationRequest request,
   ) async {
-    await showDialog<void>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Labels ready'),
-            content: Text(
-              '${request.labels.length} labels are ready for batch processing.',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BatchProcessingPage(request: request),
+      ),
     );
   }
 

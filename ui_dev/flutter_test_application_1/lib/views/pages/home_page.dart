@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/models/drone_batch_model.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
+import 'package:flutter_test_application_1/services/drone_batch_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/pages/processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/results_page.dart';
+import 'package:flutter_test_application_1/views/widgets/batch_card_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import '../widgets/hero_widget.dart';
@@ -18,16 +21,19 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with RouteAware {
   final PlantService _plantService = PlantService();
   final LocalGuestService _localGuestService = LocalGuestService();
+  final DroneBatchService _batchService = DroneBatchService();
 
   /// One subscription for the whole HomePage lifetime. Creating a new
   /// `userPlantsStream()` on every build drops the old listener and can miss
   /// local-guest broadcast updates (delete / analysis) so the list never refreshes.
   late final Stream<List<PlantModel>> _userPlantsStream;
+  late final Stream<List<DroneBatchModel>> _userBatchesStream;
 
   @override
   void initState() {
     super.initState();
     _userPlantsStream = _plantService.userPlantsStream();
+    _userBatchesStream = _batchService.userBatchesStream();
   }
 
   void _refreshAfterCardAction() {
@@ -80,6 +86,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     List<PlantModel> pending = [];
 
     for (var plant in plants) {
+      // Drone images that own a batch are surfaced by BatchCardWidget instead.
+      if (isBatchParentPlant(plant)) continue;
+
       final hasFullResult = _plantHasFullResult(plant);
 
       // Only items with complete results (disease + confidence + recommendation)
@@ -185,8 +194,33 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }).toList();
   }
 
+  /// Batch cards for the Results ([finished]) or Processing section.
+  List<Widget> _buildBatchCards(List<DroneBatchModel> batches, bool finished) {
+    return batches
+        .where((b) => b.isFinished == finished)
+        .map(
+          (b) => BatchCardWidget(
+            batch: b,
+            onDelete: _refreshAfterCardAction,
+          ),
+        )
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Batches live in their own collection, so they need a second stream that
+    // is merged into the same two sections as the plants.
+    return StreamBuilder<List<DroneBatchModel>>(
+      stream: _userBatchesStream,
+      builder: (context, batchSnapshot) {
+        final batches = batchSnapshot.data ?? const <DroneBatchModel>[];
+        return _buildPlantSections(batches);
+      },
+    );
+  }
+
+  Widget _buildPlantSections(List<DroneBatchModel> batches) {
     return StreamBuilder<List<PlantModel>>(
       stream: _userPlantsStream,
       builder: (context, snapshot) {
@@ -218,8 +252,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
               (a, b) => _compareByNewest(a, b, preferDetectionTs: false),
             );
 
-        final completedCards = _buildCardsFromPlants(completedPlants);
-        final pendingCards = _buildCardsFromPlants(pendingPlants);
+        final completedCards = <Widget>[
+          ..._buildBatchCards(batches, true),
+          ..._buildCardsFromPlants(completedPlants),
+        ];
+        final pendingCards = <Widget>[
+          ..._buildBatchCards(batches, false),
+          ..._buildCardsFromPlants(pendingPlants),
+        ];
 
         return Center(
           heightFactor: 1,

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/models/drone_batch_model.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
+import 'package:flutter_test_application_1/services/drone_batch_service.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
+import 'package:flutter_test_application_1/views/widgets/batch_card_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/hero_widget.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
@@ -10,7 +13,9 @@ import 'package:flutter_test_application_1/utils/ui_utils.dart';
 class ResultsPage extends StatefulWidget {
   const ResultsPage({super.key, required this.cardList});
 
-  final List<CardWidget> cardList;
+  /// Mixed list of [CardWidget] (single results) and [BatchCardWidget]
+  /// (drone batches), in the order HomePage displayed them.
+  final List<Widget> cardList;
 
   @override
   State<ResultsPage> createState() => _ResultsPageState();
@@ -19,7 +24,8 @@ class ResultsPage extends StatefulWidget {
 class _ResultsPageState extends State<ResultsPage> {
   final PlantService _plantService = PlantService();
   final LocalGuestService _localGuestService = LocalGuestService();
-  late List<CardWidget> _displayedCards;
+  final DroneBatchService _batchService = DroneBatchService();
+  late List<Widget> _displayedCards;
 
   @override
   void initState() {
@@ -43,12 +49,24 @@ class _ResultsPageState extends State<ResultsPage> {
         plants
             .where(
               (p) =>
+                  // Batch parents are rendered as BatchCardWidget below.
+                  !isBatchParentPlant(p) &&
                   p.status == 'completed' &&
                   (_localGuestService.isLocalGuestMode()
                       ? _hasFullResult(p)
                       : true),
             )
             .toList();
+
+    List<DroneBatchModel> finishedBatches;
+    try {
+      finishedBatches =
+          (await _batchService.userBatchesStream().first)
+              .where((b) => b.isFinished)
+              .toList();
+    } catch (_) {
+      finishedBatches = const <DroneBatchModel>[];
+    }
 
     final updatedCards =
         completedPlants.map((plant) {
@@ -91,7 +109,12 @@ class _ResultsPageState extends State<ResultsPage> {
 
     if (mounted) {
       setState(() {
-        _displayedCards = updatedCards;
+        _displayedCards = <Widget>[
+          ...finishedBatches.map(
+            (b) => BatchCardWidget(batch: b, onDelete: _refreshCards),
+          ),
+          ...updatedCards,
+        ];
       });
     }
   }
@@ -121,15 +144,19 @@ class _ResultsPageState extends State<ResultsPage> {
                         )
                       else
                         ..._displayedCards.map((card) {
-                          // Return a new CardWidget with the onDelete callback
-                          return CardWidget(
-                            title: card.title,
-                            description: card.description,
-                            completed: card.completed,
-                            imageId: card.imageId,
-                            plantId: card.plantId,
-                            onDelete: _refreshCards,
-                          );
+                          // Rebind single-result cards so deleting one refreshes
+                          // this page; batch cards already carry their callback.
+                          if (card is CardWidget) {
+                            return CardWidget(
+                              title: card.title,
+                              description: card.description,
+                              completed: card.completed,
+                              imageId: card.imageId,
+                              plantId: card.plantId,
+                              onDelete: _refreshCards,
+                            );
+                          }
+                          return card;
                         }),
                     ],
                   ),

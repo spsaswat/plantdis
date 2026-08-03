@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_test_application_1/models/drone_batch_model.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
 import 'package:flutter_test_application_1/utils/local_path_utils.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
@@ -19,12 +20,18 @@ class LocalGuestService {
 
   static const String _plantsKey = 'macos_local_guest_plants_v1';
   static const String _analysisKey = 'macos_local_guest_analysis_v1';
+  static const String _batchesKey = 'local_guest_batches_v1';
   static bool localGuestMode = false;
 
   final ValueNotifier<List<PlantModel>> _plantsNotifier =
       ValueNotifier<List<PlantModel>>(<PlantModel>[]);
   final StreamController<List<PlantModel>> _plantsController =
       StreamController<List<PlantModel>>.broadcast();
+
+  final ValueNotifier<List<DroneBatchModel>> _batchesNotifier =
+      ValueNotifier<List<DroneBatchModel>>(<DroneBatchModel>[]);
+  final StreamController<List<DroneBatchModel>> _batchesController =
+      StreamController<List<DroneBatchModel>>.broadcast();
 
   static bool get isMacOS => !kIsWeb && io.Platform.isMacOS;
   static bool get isLinux => !kIsWeb && io.Platform.isLinux;
@@ -301,8 +308,107 @@ class LocalGuestService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_plantsKey);
     await prefs.remove(_analysisKey);
+    await prefs.remove(_batchesKey);
     _plantsNotifier.value = <PlantModel>[];
     _plantsController.add(const <PlantModel>[]);
+    _batchesNotifier.value = <DroneBatchModel>[];
+    _batchesController.add(const <DroneBatchModel>[]);
+  }
+
+  // --- Drone batches -------------------------------------------------------
+  // Same shape as the plants store above: a JSON array in SharedPreferences
+  // fronted by a broadcast stream so every screen sees the same updates.
+
+  Stream<List<DroneBatchModel>> batchesStream() async* {
+    await _reloadBatches();
+    yield _batchesNotifier.value;
+    yield* _batchesController.stream;
+  }
+
+  /// One batch, or `null` if missing — mirrors a single Firestore doc stream.
+  Stream<DroneBatchModel?> batchStreamForBatchId(String batchId) {
+    return batchesStream().map((batches) {
+      for (final b in batches) {
+        if (b.batchId == batchId) return b;
+      }
+      return null;
+    });
+  }
+
+  Future<List<DroneBatchModel>> getBatches() async {
+    await _reloadBatches();
+    return _batchesNotifier.value;
+  }
+
+  Future<DroneBatchModel?> getBatchById(String batchId) async {
+    await _reloadBatches();
+    for (final b in _batchesNotifier.value) {
+      if (b.batchId == batchId) return b;
+    }
+    return null;
+  }
+
+  /// Inserts [batch], or replaces the existing record with the same id.
+  Future<void> saveBatch(DroneBatchModel batch) async {
+    await _reloadBatches();
+    final current = _batchesNotifier.value;
+    final at = current.indexWhere((b) => b.batchId == batch.batchId);
+    final next = List<DroneBatchModel>.of(current);
+    if (at == -1) {
+      next.insert(0, batch);
+    } else {
+      next[at] = batch;
+    }
+    _batchesNotifier.value = next;
+    _batchesController.add(next);
+    await _persistBatches(next);
+  }
+
+  Future<void> deleteBatch(String batchId) async {
+    await _reloadBatches();
+    final next =
+        _batchesNotifier.value
+            .where((b) => b.batchId != batchId)
+            .toList(growable: false);
+    _batchesNotifier.value = next;
+    _batchesController.add(next);
+    await _persistBatches(next);
+  }
+
+  Future<void> _reloadBatches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_batchesKey);
+    if (raw == null || raw.isEmpty) {
+      _batchesNotifier.value = <DroneBatchModel>[];
+      _batchesController.add(const <DroneBatchModel>[]);
+      return;
+    }
+    try {
+      final arr = jsonDecode(raw) as List<dynamic>;
+      final batches =
+          arr
+              .map(
+                (e) => DroneBatchModel.fromMap(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
+              .toList(growable: false);
+      _batchesNotifier.value = batches;
+      _batchesController.add(batches);
+    } catch (e, st) {
+      // A corrupt store must not brick the home screen.
+      logger.w('[LocalGuestService] Could not read local batches: $e\n$st');
+      _batchesNotifier.value = <DroneBatchModel>[];
+      _batchesController.add(const <DroneBatchModel>[]);
+    }
+  }
+
+  Future<void> _persistBatches(List<DroneBatchModel> batches) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _batchesKey,
+      jsonEncode(batches.map((b) => b.toMap()).toList(growable: false)),
+    );
   }
 
   Future<void> _savePlant(PlantModel plant) async {

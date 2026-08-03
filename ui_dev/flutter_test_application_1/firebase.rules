@@ -79,6 +79,17 @@ service cloud.firestore {
       // Only authenticated users can delete their own images
       allow delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
+
+    // Rules for drone batch results (one per drone image processed in batch)
+    match /droneBatches/{batchId} {
+      // Batches are private to their owner - unlike plants, they are never
+      // shared, so there is no 'completed' read exception here.
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() &&
+        isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
   }
 }
 

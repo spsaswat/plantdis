@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test_application_1/models/drone_batch_model.dart';
 import 'package:flutter_test_application_1/models/plant_model.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
@@ -42,10 +43,12 @@ class _ProcessingPageState extends State<ProcessingPage> {
       final plants = _localGuestService.isLocalGuestMode() ?
                       await _localGuestService.getPlants() :
                       await _plantService.getUserPlants();
+      // Drone batch parents belong to the batch card, not this list.
+      final candidates = plants.where((p) => !isBatchParentPlant(p));
       final List<PlantModel> pendingPlants;
       if (_localGuestService.isLocalGuestMode()) {
         pendingPlants =
-            plants
+            candidates
                 .where(
                   (p) =>
                       p.status == 'pending' ||
@@ -56,7 +59,7 @@ class _ProcessingPageState extends State<ProcessingPage> {
                 .toList();
       } else {
         pendingPlants =
-            plants
+            candidates
                 .where(
                   (p) =>
                       p.status == 'pending' ||
