@@ -275,40 +275,51 @@ class LeafAnalysisPipeline {
   /// Never throws: any failure is returned in [LeafAnalysisOutcome.error]
   /// alongside whatever partial results were obtained, so a batch can record
   /// the failure for one leaf and carry on.
+  ///
+  /// Pass [skipSegmentation] when [imageBytes] is already a segmented leaf —
+  /// for example a SAM-masked crop. The masking step is then bypassed entirely
+  /// and the bytes go straight to the classifiers; [LeafAnalysisOutcome
+  /// .segmentationUrl] stays null because the caller owns that image.
   static Future<LeafAnalysisOutcome> runFull({
     required Uint8List imageBytes,
     required String plantId,
     required String imageId,
     required String segModel,
     String? forcedSpecies,
+    bool skipSegmentation = false,
   }) async {
     String? segmentationUrl;
     SpeciesResult? species;
 
     try {
-      final temp = await writeTempImage(imageBytes, prefix: 'leaf_seg_input');
       File? segmentedFile;
-      try {
-        final maskTarget = await _localGuestService
-            .segmentationOutputFileForWrite(plantId: plantId, imageId: imageId);
-        segmentedFile = await segment(
-          temp,
-          segModel: segModel,
-          outputFile: maskTarget,
-        );
-      } catch (e, st) {
-        // Fall through with the unsegmented crop rather than failing the leaf.
-        logger.w('[LeafAnalysisPipeline] Segmentation failed: $e\n$st');
-      } finally {
-        unawaited(_deleteQuietly(temp));
-      }
+      if (!skipSegmentation) {
+        final temp = await writeTempImage(imageBytes, prefix: 'leaf_seg_input');
+        try {
+          final maskTarget = await _localGuestService
+              .segmentationOutputFileForWrite(
+                plantId: plantId,
+                imageId: imageId,
+              );
+          segmentedFile = await segment(
+            temp,
+            segModel: segModel,
+            outputFile: maskTarget,
+          );
+        } catch (e, st) {
+          // Fall through with the unsegmented crop rather than failing the leaf.
+          logger.w('[LeafAnalysisPipeline] Segmentation failed: $e\n$st');
+        } finally {
+          unawaited(_deleteQuietly(temp));
+        }
 
-      if (segmentedFile != null) {
-        segmentationUrl = await persistSegmentation(
-          segmentedFile,
-          plantId: plantId,
-          imageId: imageId,
-        );
+        if (segmentedFile != null) {
+          segmentationUrl = await persistSegmentation(
+            segmentedFile,
+            plantId: plantId,
+            imageId: imageId,
+          );
+        }
       }
 
       final analysisBytes =

@@ -1,9 +1,11 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
+import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/utils/analysis_utils.dart';
 
 void main() {
@@ -135,6 +137,94 @@ void main() {
 
       expect(source.width, 200);
       expect(source.height, 100);
+    });
+  });
+
+  group('clampRectToImage', () {
+    test('trims a rect that overhangs the image', () {
+      final clamped = clampRectToImage(
+        const math.Rectangle<int>(-10, -5, 50, 40),
+        30,
+        20,
+      );
+
+      expect(clamped.left, 0);
+      expect(clamped.top, 0);
+      expect(clamped.width, 30);
+      expect(clamped.height, 20);
+    });
+
+    test('leaves an inside rect alone', () {
+      final clamped = clampRectToImage(
+        const math.Rectangle<int>(5, 5, 10, 10),
+        100,
+        100,
+      );
+
+      expect(clamped, const math.Rectangle<int>(5, 5, 10, 10));
+    });
+  });
+
+  group('maskedLeafJpeg', () {
+    /// A solid green image with a mask covering the left half of a 8x8 bbox
+    /// at (2, 2).
+    (img.Image, LeafMask) fixture() {
+      final source = img.Image(width: 16, height: 16);
+      img.fill(source, color: img.ColorRgb8(0, 255, 0));
+      final bytes = Uint8List(8 * 8);
+      for (var y = 0; y < 8; y++) {
+        for (var x = 0; x < 4; x++) {
+          bytes[y * 8 + x] = 1;
+        }
+      }
+      return (
+        source,
+        LeafMask(left: 2, top: 2, width: 8, height: 8, bytes: bytes),
+      );
+    }
+
+    test('crops to the bbox and blacks out non-mask pixels', () {
+      final (source, mask) = fixture();
+
+      final decoded = img.decodeJpg(maskedLeafJpeg(source, mask))!;
+
+      expect(decoded.width, 8);
+      expect(decoded.height, 8);
+      // Inside the mask the leaf colour survives (JPEG is lossy, so allow
+      // some slack).
+      final kept = decoded.getPixel(1, 4);
+      expect(kept.g, greaterThan(200));
+      // Outside it the background is black.
+      final blacked = decoded.getPixel(6, 4);
+      expect(blacked.r, lessThan(40));
+      expect(blacked.g, lessThan(40));
+      expect(blacked.b, lessThan(40));
+    });
+
+    test('leaves the source image untouched so it can be reused', () {
+      final (source, mask) = fixture();
+
+      maskedLeafJpeg(source, mask);
+
+      expect(source.width, 16);
+      expect(source.getPixel(6, 4).g, 255);
+    });
+
+    test('clamps a mask that overhangs the image', () {
+      final source = img.Image(width: 16, height: 16);
+      img.fill(source, color: img.ColorRgb8(0, 255, 0));
+      final mask = LeafMask(
+        left: 12,
+        top: 12,
+        width: 8,
+        height: 8,
+        bytes: Uint8List(64)..fillRange(0, 64, 1),
+      );
+
+      final decoded = img.decodeJpg(maskedLeafJpeg(source, mask))!;
+
+      expect(decoded.width, 4);
+      expect(decoded.height, 4);
     });
   });
 }

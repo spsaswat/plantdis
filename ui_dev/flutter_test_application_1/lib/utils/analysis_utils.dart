@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
+import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// Smallest usable crop edge, in source pixels. Regions below this are recorded
@@ -112,5 +113,47 @@ Uint8List cropLeafJpeg(
     width: rect.width,
     height: rect.height,
   );
+  return img.encodeJpg(cropped, quality: quality);
+}
+
+/// Clamps [rect] so it lies inside a [width]×[height] image.
+math.Rectangle<int> clampRectToImage(
+  math.Rectangle<int> rect,
+  int width,
+  int height,
+) {
+  final left = rect.left.clamp(0, width);
+  final top = rect.top.clamp(0, height);
+  final right = (rect.left + rect.width).clamp(0, width);
+  final bottom = (rect.top + rect.height).clamp(0, height);
+  return math.Rectangle<int>(left, top, right - left, bottom - top);
+}
+
+/// Crops [mask]'s bbox out of [source], blacks out every non-mask pixel, and
+/// encodes the result as JPEG.
+///
+/// Black background matches the convention of the app's own segmentation
+/// models: the classifiers normalize pixels by /255, so black contributes
+/// zeros exactly like their masked output does.
+Uint8List maskedLeafJpeg(
+  img.Image source,
+  LeafMask mask, {
+  int quality = 90,
+}) {
+  final rect = clampRectToImage(mask.bbox, source.width, source.height);
+  final cropped = img.copyCrop(
+    source,
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
+  );
+  for (var y = 0; y < rect.height; y++) {
+    for (var x = 0; x < rect.width; x++) {
+      if (!mask.containsImagePixel(rect.left + x, rect.top + y)) {
+        cropped.setPixelRgb(x, y, 0, 0, 0);
+      }
+    }
+  }
   return img.encodeJpg(cropped, quality: quality);
 }

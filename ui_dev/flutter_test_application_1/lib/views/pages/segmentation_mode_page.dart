@@ -42,7 +42,7 @@ class SegmentationModePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Draw the regions yourself now. Automatic segmentation will be available in a later update.',
+                    'Draw the regions yourself, or load a SAM mask file (.npy) generated for this image.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -61,16 +61,16 @@ class SegmentationModePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Tooltip(
-                    message: 'Automatic segmentation is not available yet',
-                    child: OutlinedButton.icon(
-                      key: const Key('automatic-segmentation-button'),
-                      onPressed: null,
-                      icon: const Icon(Icons.auto_awesome),
-                      label: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Automatic segmentation · Coming soon'),
-                      ),
+                  OutlinedButton.icon(
+                    key: const Key('automatic-segmentation-button'),
+                    onPressed:
+                        () => Navigator.of(
+                          context,
+                        ).pop(SegmentationMode.automatic),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Automatic segmentation (from SAM masks)'),
                     ),
                   ),
                 ],

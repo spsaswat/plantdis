@@ -10,9 +10,7 @@ import 'package:flutter_test_application_1/views/pages/segmentation_mode_page.da
 Uint8List _testPng() => File('assets/images/appn_banner.png').readAsBytesSync();
 
 void main() {
-  testWidgets('mode page enables manual and disables automatic', (
-    tester,
-  ) async {
+  testWidgets('mode page offers both manual and automatic', (tester) async {
     await tester.pumpWidget(
       MaterialApp(home: SegmentationModePage(imageBytes: _testPng())),
     );
@@ -24,8 +22,46 @@ void main() {
       find.byKey(const Key('automatic-segmentation-button')),
     );
     expect(manual.onPressed, isNotNull);
-    expect(automatic.onPressed, isNull);
-    expect(find.textContaining('Coming soon'), findsOneWidget);
+    expect(automatic.onPressed, isNotNull);
+    expect(find.textContaining('Coming soon'), findsNothing);
+  });
+
+  testWidgets('picking automatic returns the automatic mode', (tester) async {
+    SegmentationMode? mode;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder:
+              (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () async {
+                      mode = await Navigator.of(
+                        context,
+                      ).push<SegmentationMode>(
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  SegmentationModePage(imageBytes: _testPng()),
+                        ),
+                      );
+                    },
+                    child: const Text('Choose mode'),
+                  ),
+                ),
+              ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Choose mode'));
+    await tester.pumpAndSettle();
+    final automatic = find.byKey(const Key('automatic-segmentation-button'));
+    await tester.ensureVisible(automatic);
+    await tester.tap(automatic);
+    await tester.pumpAndSettle();
+
+    expect(mode, SegmentationMode.automatic);
   });
 
   testWidgets('manual flow draws, undoes, reviews, and returns request', (

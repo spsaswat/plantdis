@@ -330,7 +330,14 @@ class DroneBatchModel {
     this.updatedAt,
     this.summary,
     this.errorMessage,
+    this.segmentationSource = segmentationSourceManual,
   });
+
+  /// Regions drawn by hand as rectangles.
+  static const String segmentationSourceManual = 'manual';
+
+  /// Regions derived from an uploaded SAM mask file.
+  static const String segmentationSourceSam = 'sam';
 
   final String batchId;
   final String userId;
@@ -349,6 +356,10 @@ class DroneBatchModel {
   final List<BatchLeafEntry> leaves;
   final BatchSummary? summary;
   final String? errorMessage;
+
+  /// Which flow produced the regions: [segmentationSourceManual] or
+  /// [segmentationSourceSam].
+  final String segmentationSource;
 
   int get totalCount => leaves.length;
   int get completedCount => leaves.where((l) => l.isCompleted).length;
@@ -380,6 +391,8 @@ class DroneBatchModel {
       imageHeight: request.imageHeight,
       createdAt: now,
       status: BatchStatus.processing,
+      segmentationSource:
+          request.hasMasks ? segmentationSourceSam : segmentationSourceManual,
       leaves: [
         for (var i = 0; i < request.labels.length; i++)
           BatchLeafEntry(
@@ -412,6 +425,7 @@ class DroneBatchModel {
       leaves: leaves ?? this.leaves,
       summary: summary ?? this.summary,
       errorMessage: errorMessage ?? this.errorMessage,
+      segmentationSource: segmentationSource,
     );
   }
 
@@ -444,6 +458,7 @@ class DroneBatchModel {
       'leaves': leaves.map((l) => l.toMap()).toList(),
       'summary': summary?.toMap(),
       'errorMessage': errorMessage,
+      'segmentationSource': segmentationSource,
     };
   }
 
@@ -473,6 +488,9 @@ class DroneBatchModel {
                 Map<String, dynamic>.from(map['summary'] as Map),
               ),
       errorMessage: map['errorMessage'] as String?,
+      // Records written before the SAM flow existed are all manual.
+      segmentationSource:
+          map['segmentationSource'] as String? ?? segmentationSourceManual,
     );
   }
 }
