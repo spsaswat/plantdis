@@ -57,6 +57,7 @@ dependencies:
   cross_file_image: ^1.1.0
   uuid: ^4.3.3
   image_picker: ^1.0.7
+  file_selector: ^1.0.3
   exif: ^3.3.0
   web: ^1.1.1
   

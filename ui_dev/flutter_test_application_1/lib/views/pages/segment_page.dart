@@ -74,6 +74,10 @@ class _SegmentPageState extends State<SegmentPage> {
 
   // Segmentation model selector
   String _selectedSegModel = 'onnx'; // 'tflite' | 'onnx'
+
+  /// This leaf was masked outside the app (a SAM mask from the automatic drone
+  /// flow), so the local segmentation models do not apply to it.
+  bool _isSamSegmented = false;
   bool _isBusy = false;
   String? _plantClass;
   double? _plantClassConf;
@@ -274,6 +278,9 @@ class _SegmentPageState extends State<SegmentPage> {
               (cached['plantSpeciesConfidence'] as num?)?.toDouble();
           _analysisConfirmed = cachedDisease != null && cachedConf != null;
           _cachedSuggestion = recIsPlaceholder ? null : cachedRec;
+          // Masked externally (SAM): the local segmentation models must not be
+          // offered, they would re-segment an already-segmented leaf.
+          _isSamSegmented = cached['model'] == 'sam';
         });
         if (!_analysisConfirmed && cachedSegUrl != null) {
           // ignore: unawaited_futures
@@ -347,7 +354,9 @@ class _SegmentPageState extends State<SegmentPage> {
           if (_plantClass != null) 'plantSpecies': _plantClass,
           if (_plantClassConf != null)
             'plantSpeciesConfidence': _plantClassConf,
-          'model': _selectedSegModel,
+          // Reclassifying a cached mask does not re-segment, so a SAM leaf
+          // stays a SAM leaf.
+          'model': _isSamSegmented ? 'sam' : _selectedSegModel,
           'manuallyOverridden':
               _speciesOverrideActive || (_forcedSpecies != null),
           'source':
@@ -1675,34 +1684,39 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 ),
                                               ),
                                               const SizedBox(height: 6),
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.end,
-                                                children: [
-                                                  DropdownButton<String>(
-                                                    value: _selectedSegModel,
-                                                    items: const [
-                                                      DropdownMenuItem(
-                                                        value: 'tflite',
-                                                        child: Text('TFLite'),
-                                                      ),
-                                                      DropdownMenuItem(
-                                                        value: 'onnx',
-                                                        child: Text('ONNX'),
-                                                      ),
-                                                    ],
-                                                    onChanged: (v) async {
-                                                      if (v == null) return;
-                                                      setState(
-                                                        () =>
-                                                            _selectedSegModel =
-                                                                v,
-                                                      );
-                                                      await _runLocalSegmentationAndRetrigger();
-                                                    },
-                                                  ),
-                                                ],
-                                              ),
+                                              // Hidden for SAM-masked leaves:
+                                              // re-running a local model over
+                                              // an already-masked leaf would
+                                              // discard the user's own mask.
+                                              if (!_isSamSegmented)
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.end,
+                                                  children: [
+                                                    DropdownButton<String>(
+                                                      value: _selectedSegModel,
+                                                      items: const [
+                                                        DropdownMenuItem(
+                                                          value: 'tflite',
+                                                          child: Text('TFLite'),
+                                                        ),
+                                                        DropdownMenuItem(
+                                                          value: 'onnx',
+                                                          child: Text('ONNX'),
+                                                        ),
+                                                      ],
+                                                      onChanged: (v) async {
+                                                        if (v == null) return;
+                                                        setState(
+                                                          () =>
+                                                              _selectedSegModel =
+                                                                  v,
+                                                        );
+                                                        await _runLocalSegmentationAndRetrigger();
+                                                      },
+                                                    ),
+                                                  ],
+                                                ),
                                               const SizedBox(height: 15),
                                               ClipRRect(
                                                 borderRadius:

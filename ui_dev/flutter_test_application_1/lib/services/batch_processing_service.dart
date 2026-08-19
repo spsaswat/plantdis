@@ -10,6 +10,7 @@ import 'package:flutter_test_application_1/data/disease_labels.dart';
 import 'package:flutter_test_application_1/data/disease_suggestion_fallbacks.dart';
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
 import 'package:flutter_test_application_1/models/drone_batch_model.dart';
+import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/services/drone_batch_service.dart';
 import 'package:flutter_test_application_1/services/leaf_analysis_pipeline.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';
@@ -150,6 +151,34 @@ class BatchProcessingRunner {
       return failedBatch;
     }
 
+    // Pixel masks are indexed against exact image dimensions, so a mismatch
+    // would silently mask the wrong pixels. Rectangles tolerate it (they are
+    // resolved against whatever was decoded); masks must not.
+    if (request.hasMasks && !oriented.dimensionsMatched) {
+      final message =
+          'The masks were made for a ${request.imageWidth}x'
+          '${request.imageHeight} image, but the drone image decoded to '
+          '${oriented.width}x${oriented.height}.';
+      logger.e('[BatchProcessingRunner] $message');
+      final failedBatch = await _batchService.finalizeBatch(
+        batch,
+        status: BatchStatus.error,
+        errorMessage: message,
+      );
+      _emit(
+        BatchProgress(
+          batchId: batch.batchId,
+          total: batch.totalCount,
+          completed: 0,
+          failed: 0,
+          done: true,
+          batch: failedBatch,
+          error: message,
+        ),
+      );
+      return failedBatch;
+    }
+
     final segModel = await LeafAnalysisPipeline.defaultSegModel();
 
     for (final entry in List<BatchLeafEntry>.of(batch.leaves)) {
@@ -173,6 +202,7 @@ class BatchProcessingRunner {
           entry: entry,
           oriented: oriented,
           segModel: segModel,
+          mask: request.masks?[entry.index],
         );
       } catch (e, st) {
         // One bad leaf must never sink the batch.
@@ -259,12 +289,19 @@ class BatchProcessingRunner {
     return resp.bodyBytes;
   }
 
+  /// When [mask] is supplied the leaf image is the masked bbox crop and the
+  /// app's own segmentation model is skipped — a SAM mask is already
+  /// segmentation output.
   Future<BatchLeafEntry> _processLeaf({
     required BatchLeafEntry entry,
     required OrientedImage oriented,
     required String segModel,
+    LeafMask? mask,
   }) async {
-    final rect = denormalizeRect(entry.region, oriented.width, oriented.height);
+    final rect =
+        mask != null
+            ? clampRectToImage(mask.bbox, oriented.width, oriented.height)
+            : denormalizeRect(entry.region, oriented.width, oriented.height);
     if (!isUsableCrop(rect)) {
       return entry.copyWith(
         status: LeafStatus.error,
@@ -274,7 +311,10 @@ class BatchProcessingRunner {
       );
     }
 
-    final cropBytes = cropLeafJpeg(oriented.image, rect);
+    final cropBytes =
+        mask != null
+            ? maskedLeafJpeg(oriented.image, mask)
+            : cropLeafJpeg(oriented.image, rect);
 
     // `.jpg` matters: StorageUtils.isValidImageExtension only accepts jpg/jpeg/png.
     final cropFile = await LeafAnalysisPipeline.writeTempImage(
@@ -305,7 +345,15 @@ class BatchProcessingRunner {
       plantId: leafPlantId,
       imageId: leafImageId,
       segModel: segModel,
+      skipSegmentation: mask != null,
     );
+
+    // The masked crop *is* the segmentation output, so it doubles as the
+    // segmentation image rather than being uploaded a second time. Note this
+    // deliberately does not touch `images/{imageId}.processedUrls`: the delete
+    // path walks that map and would remove the leaf's only stored image.
+    final segmentationUrl =
+        mask != null ? croppedImageUrl : outcome.segmentationUrl;
 
     final detection = outcome.detection;
     if (detection == null) {
@@ -322,7 +370,7 @@ class BatchProcessingRunner {
         leafPlantId: leafPlantId,
         leafImageId: leafImageId,
         croppedImageUrl: croppedImageUrl,
-        segmentationUrl: outcome.segmentationUrl,
+        segmentationUrl: segmentationUrl,
         plantSpecies: outcome.species?.species,
         status: LeafStatus.error,
         errorMessage:
@@ -334,12 +382,14 @@ class BatchProcessingRunner {
       'detectedDisease': detection.diseaseName,
       'confidence': detection.confidence,
       'detectionTimestamp': DateTime.now().toIso8601String(),
-      if (outcome.segmentationUrl != null)
-        'segmentationUrl': outcome.segmentationUrl,
+      if (segmentationUrl != null) 'segmentationUrl': segmentationUrl,
       if (outcome.species != null) 'plantSpecies': outcome.species!.species,
       if (outcome.species?.confidence != null)
         'plantSpeciesConfidence': outcome.species!.confidence,
-      'model': segModel,
+      // 'sam' tells SegmentPage this leaf was masked externally, so it must not
+      // offer to re-run the local segmentation models over it.
+      'model': mask != null ? 'sam' : segModel,
+      if (mask != null) 'segmentationSource': 'sam',
       'manuallyOverridden': false,
       'source': 'batch',
       'analysisStage': 3,
@@ -372,7 +422,7 @@ class BatchProcessingRunner {
       confidence: detection.confidence,
       plantSpecies: outcome.species?.species,
       plantSpeciesConfidence: outcome.species?.confidence,
-      segmentationUrl: outcome.segmentationUrl,
+      segmentationUrl: segmentationUrl,
     );
   }
 

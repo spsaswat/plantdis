@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter_test_application_1/models/leaf_mask.dart';
+
 /// A rectangle whose coordinates are relative to the original image.
 ///
 /// All values are in the inclusive range 0–1 so labels remain stable when the
@@ -82,7 +84,13 @@ class BatchSegmentationRequest {
     required this.localImageBytes,
     required this.imageWidth,
     required this.imageHeight,
-  }) : labels = List.unmodifiable(labels);
+    List<LeafMask>? masks,
+  }) : assert(
+         masks == null || masks.length == labels.length,
+         'masks must be index-aligned with labels',
+       ),
+       labels = List.unmodifiable(labels),
+       masks = masks == null ? null : List.unmodifiable(masks);
 
   final String imageId;
   final String plantId;
@@ -90,6 +98,13 @@ class BatchSegmentationRequest {
   final List<NormalizedLabelRect> labels;
   final int imageWidth;
   final int imageHeight;
+
+  /// Pixel-accurate SAM masks, index-aligned with [labels] (each label is the
+  /// mask's bbox). Null for the manual rectangle flow. In-memory only — masks
+  /// are processed locally and never serialized or uploaded.
+  final List<LeafMask>? masks;
+
+  bool get hasMasks => masks != null;
 
   /// Retained for an immediate desktop preview; deliberately omitted from
   /// [toJson] because #152 should use [imageId] to resolve the persisted image.
@@ -103,6 +118,8 @@ class BatchSegmentationRequest {
     'imageUrl': imageUrl,
     'imageWidth': imageWidth,
     'imageHeight': imageHeight,
+    if (hasMasks) 'segmentationSource': 'sam',
+    if (hasMasks) 'maskCount': masks!.length,
     'labels': [
       for (var index = 0; index < labels.length; index++)
         {'id': 'label_${index + 1}', ...labels[index].toJson()},

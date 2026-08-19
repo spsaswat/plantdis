@@ -1,21 +1,26 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
+import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
+import 'package:flutter_test_application_1/utils/npy_mask_reader.dart';
 import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
     if (dart.library.io) 'package:flutter_test_application_1/utils/drone_image_detector.dart';
 
 import 'package:flutter_test_application_1/views/pages/batch_processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
+import 'package:flutter_test_application_1/views/pages/mask_review_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
 import 'package:flutter_test_application_1/views/pages/manual_segmentation_page.dart';
 import 'package:flutter_test_application_1/views/pages/segmentation_mode_page.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
+import 'package:flutter_test_application_1/views/widgets/progress_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import 'pages/take_picture_page.dart';
 import 'widgets/navbar_widget.dart';
@@ -164,9 +169,13 @@ class _WidgetTreeState extends State<WidgetTree> {
           builder: (context) => SegmentationModePage(imageBytes: localBytes),
         ),
       );
-      if (!mounted || mode != SegmentationMode.manual) return;
+      if (!mounted || mode == null) return;
 
-      await _openManualSegmentation(pickedFile, localBytes);
+      if (mode == SegmentationMode.manual) {
+        await _openManualSegmentation(pickedFile, localBytes);
+      } else {
+        await _openAutomaticSegmentation(pickedFile, localBytes);
+      }
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog(
@@ -218,6 +227,123 @@ class _WidgetTreeState extends State<WidgetTree> {
       _showErrorDialog(
         'Error preparing image for labelling: ${e.toString()}\n\nPlease try again.',
       );
+    }
+  }
+
+  /// Loads SAM masks from a `.npy` file the user picked and opens the mask
+  /// review/editing page.
+  ///
+  /// The file is parsed and validated *before* the drone image is uploaded, so
+  /// an unusable mask file leaves nothing behind in storage.
+  Future<void> _openAutomaticSegmentation(
+    XFile pickedFile,
+    Uint8List localBytes,
+  ) async {
+    final maskFile = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'NumPy mask', extensions: ['npy']),
+      ],
+    );
+    if (maskFile == null || !mounted) return;
+
+    var dialogVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const ProgressDialog(message: 'Reading SAM masks…'),
+    );
+
+    void closeDialog() {
+      if (dialogVisible) {
+        Navigator.of(context).pop();
+        dialogVisible = false;
+      }
+    }
+
+    try {
+      // instantiateImageCodec applies EXIF orientation, exactly like the cv2
+      // read that produced the masks and like decodeOriented downstream, so
+      // these are the dimensions the mask grid must match.
+      final imageSize = await _decodeImageSize(localBytes);
+      final parsed = await NpyMaskReader.readSamMasks(maskFile.path);
+      if (!mounted) return;
+
+      final imageWidth = imageSize.width.round();
+      final imageHeight = imageSize.height.round();
+      if (parsed.maskWidth != imageWidth || parsed.maskHeight != imageHeight) {
+        closeDialog();
+        final transposed =
+            parsed.maskWidth == imageHeight && parsed.maskHeight == imageWidth;
+        _showErrorDialog(
+          'The mask file is ${parsed.maskWidth} x ${parsed.maskHeight} but the '
+          'selected image is $imageWidth x $imageHeight.'
+          '${transposed ? '\n\nThe dimensions are swapped — the masks were '
+              'likely generated from a differently rotated copy of this '
+              'image.' : ''}'
+          '\n\nGenerate the masks from this exact image and try again.',
+        );
+        return;
+      }
+      if (parsed.masks.isEmpty) {
+        closeDialog();
+        _showErrorDialog(
+          'The mask file contains no non-empty masks.\n\nCheck that the file '
+          'was saved after running SAM on this image.',
+        );
+        return;
+      }
+
+      final result = await _plantService.uploadImageForManualLabelling(
+        image: pickedFile,
+        notes: 'Uploaded drone image for automatic segmentation',
+      );
+      if (!mounted) return;
+      closeDialog();
+
+      final request = await Navigator.of(
+        context,
+      ).push<BatchSegmentationRequest>(
+        MaterialPageRoute(
+          builder:
+              (context) => MaskReviewPage(
+                imageId: result['imageId'] as String,
+                plantId: result['plantId'] as String,
+                imageUrl: result['downloadUrl'] as String,
+                imageBytes: localBytes,
+                imageWidth: imageWidth,
+                imageHeight: imageHeight,
+                initialMasks: parsed.masks,
+                droppedEmptyCount: parsed.droppedEmptyCount,
+              ),
+        ),
+      );
+      if (!mounted || request == null) return;
+      await _handleBatchProcessingRequest(request);
+    } on NpyFormatException catch (e) {
+      if (!mounted) return;
+      closeDialog();
+      _showErrorDialog(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      closeDialog();
+      _showErrorDialog(
+        'Error reading the mask file: ${e.toString()}\n\nPlease try again.',
+      );
+    }
+  }
+
+  Future<Size> _decodeImageSize(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    try {
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      return size;
+    } finally {
+      codec.dispose();
     }
   }
 
