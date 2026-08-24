@@ -6,7 +6,7 @@ import 'package:image/image.dart' as img;
 
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
 import 'package:flutter_test_application_1/models/leaf_mask.dart';
-import 'package:flutter_test_application_1/views/pages/mask_review_page.dart';
+import 'package:flutter_test_application_1/views/pages/mask_editor_page.dart';
 import 'package:flutter_test_application_1/views/widgets/mask_editor_controller.dart';
 
 const int kImageWidth = 100;
@@ -274,7 +274,7 @@ void main() {
     });
   });
 
-  group('MaskReviewPage', () {
+  group('MaskEditorPage', () {
     Future<BatchSegmentationRequest?> pumpPage(
       WidgetTester tester,
       List<LeafMask> masks,
@@ -293,7 +293,7 @@ void main() {
                         ).push<BatchSegmentationRequest>(
                           MaterialPageRoute(
                             builder:
-                                (context) => MaskReviewPage(
+                                (context) => MaskEditorPage(
                                   imageId: 'image-1',
                                   plantId: 'plant-1',
                                   imageUrl: 'file:///drone.jpg',
@@ -301,6 +301,7 @@ void main() {
                                   imageWidth: kImageWidth,
                                   imageHeight: kImageHeight,
                                   initialMasks: masks,
+                                  source: SegmentationSource.sam,
                                 ),
                           ),
                         );
@@ -392,7 +393,7 @@ void main() {
                         ).push<BatchSegmentationRequest>(
                           MaterialPageRoute(
                             builder:
-                                (context) => MaskReviewPage(
+                                (context) => MaskEditorPage(
                                   imageId: 'image-1',
                                   plantId: 'plant-1',
                                   imageUrl: 'file:///drone.jpg',
@@ -403,6 +404,7 @@ void main() {
                                     block(left: 10, top: 8),
                                     block(left: 50, top: 40),
                                   ],
+                                  source: SegmentationSource.sam,
                                 ),
                           ),
                         );
@@ -421,7 +423,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNotNull);
-      expect(result!.hasMasks, isTrue);
       expect(result!.masks, hasLength(2));
       expect(result!.labels, hasLength(2));
       // Each label is its mask's bbox in normalized image space.

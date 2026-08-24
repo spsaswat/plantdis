@@ -7,13 +7,18 @@ import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/views/widgets/mask_editor_canvas.dart';
 import 'package:flutter_test_application_1/views/widgets/mask_editor_controller.dart';
 
-/// Review and edit the masks loaded from a SAM `.npy` file before processing.
+/// Paint, review and edit the leaf masks of a drone image before processing.
+///
+/// Serves both drone flows. The automatic flow opens it on the masks read from
+/// a SAM `.npy` file; the manual flow opens it with [initialMasks] empty and
+/// the user paints every leaf by hand. Only the wording and the recorded
+/// [source] differ — the editing surface is the same one.
 ///
 /// Pops a [BatchSegmentationRequest] whose labels are the mask bounding boxes,
 /// index-aligned with the masks themselves, so the rest of the batch pipeline
 /// is reused unchanged.
-class MaskReviewPage extends StatefulWidget {
-  const MaskReviewPage({
+class MaskEditorPage extends StatefulWidget {
+  const MaskEditorPage({
     required this.imageId,
     required this.plantId,
     required this.imageUrl,
@@ -21,6 +26,7 @@ class MaskReviewPage extends StatefulWidget {
     required this.imageWidth,
     required this.imageHeight,
     required this.initialMasks,
+    required this.source,
     this.droppedEmptyCount = 0,
     super.key,
   });
@@ -33,15 +39,22 @@ class MaskReviewPage extends StatefulWidget {
   final int imageHeight;
   final List<LeafMask> initialMasks;
 
+  /// Where [initialMasks] came from, recorded on the request so the batch is
+  /// filed as hand-painted or SAM-derived.
+  final SegmentationSource source;
+
   /// All-zero instances skipped while reading the file, surfaced so the count
-  /// shown here can be reconciled with the file the user picked.
+  /// shown here can be reconciled with the file the user picked. Always 0 for
+  /// the manual flow.
   final int droppedEmptyCount;
 
+  bool get _isManual => source == SegmentationSource.manual;
+
   @override
-  State<MaskReviewPage> createState() => _MaskReviewPageState();
+  State<MaskEditorPage> createState() => _MaskEditorPageState();
 }
 
-class _MaskReviewPageState extends State<MaskReviewPage> {
+class _MaskEditorPageState extends State<MaskEditorPage> {
   late final MaskEditorController _controller;
 
   @override
@@ -52,6 +65,11 @@ class _MaskReviewPageState extends State<MaskReviewPage> {
       imageHeight: widget.imageHeight,
       initialMasks: widget.initialMasks,
     );
+    if (_controller.maskCount == 0) {
+      // Nothing to review yet: open with a blank mask selected and the brush
+      // armed, so the first drag paints the first leaf.
+      _controller.addEmptyMask(recordUndo: false);
+    }
     _controller.addListener(_onChanged);
   }
 
@@ -105,6 +123,7 @@ class _MaskReviewPageState extends State<MaskReviewPage> {
             mask.toNormalizedRect(widget.imageWidth, widget.imageHeight),
         ],
         masks: masks,
+        source: widget.source,
         localImageBytes: widget.imageBytes,
         imageWidth: widget.imageWidth,
         imageHeight: widget.imageHeight,
@@ -120,7 +139,9 @@ class _MaskReviewPageState extends State<MaskReviewPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Review segmentation masks'),
+        title: Text(
+          widget._isManual ? 'Paint leaf masks' : 'Review segmentation masks',
+        ),
         actions: [
           IconButton(
             key: const Key('undo-mask-button'),
@@ -252,7 +273,9 @@ class _MaskReviewPageState extends State<MaskReviewPage> {
 
   String _statusLine(bool hasSelection) {
     if (!_controller.hasUsableMasks) {
-      return 'Add at least one mask before processing.';
+      return widget._isManual
+          ? 'Paint over a leaf to mask it, then add a mask for the next one.'
+          : 'Add at least one mask before processing.';
     }
     final dropped = widget.droppedEmptyCount;
     final droppedNote =

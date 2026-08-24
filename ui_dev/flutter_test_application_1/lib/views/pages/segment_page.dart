@@ -30,7 +30,15 @@ import 'package:flutter_test_application_1/services/segmentation_service_onnx.da
 import 'package:flutter_test_application_1/services/leaf_analysis_pipeline.dart';
 import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/models/detection_result.dart';
+import 'package:flutter_test_application_1/models/batch_segmentation_request.dart'
+    show SegmentationSource;
 import 'package:flutter_test_application_1/data/disease_labels.dart';
+
+/// `model` values the drone batch pipeline writes for a leaf that arrived
+/// already masked. Anything else names one of the local segmentation models.
+final Set<String> _preMaskedSources = {
+  for (final source in SegmentationSource.values) source.wireName,
+};
 
 class SegmentPage extends StatefulWidget {
   const SegmentPage({
@@ -75,9 +83,14 @@ class _SegmentPageState extends State<SegmentPage> {
   // Segmentation model selector
   String _selectedSegModel = 'onnx'; // 'tflite' | 'onnx'
 
-  /// This leaf was masked outside the app (a SAM mask from the automatic drone
-  /// flow), so the local segmentation models do not apply to it.
-  bool _isSamSegmented = false;
+  /// Set when this leaf arrived already masked from a drone batch — painted by
+  /// hand or read from a SAM file — to the source that produced it. The local
+  /// segmentation models do not apply to such a leaf, and re-saving must keep
+  /// the marker rather than claim a model produced the mask.
+  String? _preMaskedSource;
+
+  /// Whether this leaf was masked before it reached the segmentation models.
+  bool get _isPreMasked => _preMaskedSource != null;
   bool _isBusy = false;
   String? _plantClass;
   double? _plantClassConf;
@@ -115,11 +128,10 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   Future<void> _loadSegModelPref() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pref = prefs.getString('seg_default_model');
-    if (pref != null && mounted) {
-      setState(() => _selectedSegModel = pref);
-    }
+    // Through the pipeline rather than SharedPreferences directly, so the
+    // preference key and its fallback live in exactly one place.
+    final pref = await LeafAnalysisPipeline.defaultSegModel();
+    if (mounted) setState(() => _selectedSegModel = pref);
   }
 
   @override
@@ -278,9 +290,13 @@ class _SegmentPageState extends State<SegmentPage> {
               (cached['plantSpeciesConfidence'] as num?)?.toDouble();
           _analysisConfirmed = cachedDisease != null && cachedConf != null;
           _cachedSuggestion = recIsPlaceholder ? null : cachedRec;
-          // Masked externally (SAM): the local segmentation models must not be
-          // offered, they would re-segment an already-segmented leaf.
-          _isSamSegmented = cached['model'] == 'sam';
+          // Already masked (hand-painted or SAM): the local segmentation
+          // models must not be offered, they would re-segment an
+          // already-segmented leaf.
+          _preMaskedSource =
+              _preMaskedSources.contains(cached['model'])
+                  ? cached['model'] as String
+                  : null;
         });
         if (!_analysisConfirmed && cachedSegUrl != null) {
           // ignore: unawaited_futures
@@ -354,9 +370,10 @@ class _SegmentPageState extends State<SegmentPage> {
           if (_plantClass != null) 'plantSpecies': _plantClass,
           if (_plantClassConf != null)
             'plantSpeciesConfidence': _plantClassConf,
-          // Reclassifying a cached mask does not re-segment, so a SAM leaf
-          // stays a SAM leaf.
-          'model': _isSamSegmented ? 'sam' : _selectedSegModel,
+          // Reclassifying a cached mask does not re-segment, so a pre-masked
+          // leaf keeps the source that masked it.
+          'model': _preMaskedSource ?? _selectedSegModel,
+          if (_preMaskedSource != null) 'segmentationSource': _preMaskedSource,
           'manuallyOverridden':
               _speciesOverrideActive || (_forcedSpecies != null),
           'source':
@@ -1684,11 +1701,11 @@ class _SegmentPageState extends State<SegmentPage> {
                                                 ),
                                               ),
                                               const SizedBox(height: 6),
-                                              // Hidden for SAM-masked leaves:
+                                              // Hidden for pre-masked leaves:
                                               // re-running a local model over
                                               // an already-masked leaf would
                                               // discard the user's own mask.
-                                              if (!_isSamSegmented)
+                                              if (!_isPreMasked)
                                                 Row(
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.end,

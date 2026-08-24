@@ -3,16 +3,26 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
-import 'package:flutter_test_application_1/views/pages/manual_segmentation_page.dart';
+import 'package:flutter_test_application_1/views/pages/mask_editor_page.dart';
 import 'package:flutter_test_application_1/views/pages/segmentation_mode_page.dart';
 
-Uint8List _testPng() => File('assets/images/appn_banner.png').readAsBytesSync();
+const int _imageWidth = 100;
+const int _imageHeight = 80;
+
+Uint8List _bannerPng() =>
+    File('assets/images/appn_banner.png').readAsBytesSync();
+
+Uint8List _blankPng() => Uint8List.fromList(
+  img.encodePng(img.Image(width: _imageWidth, height: _imageHeight)),
+);
 
 void main() {
   testWidgets('mode page offers both manual and automatic', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: SegmentationModePage(imageBytes: _testPng())),
+      MaterialApp(home: SegmentationModePage(imageBytes: _bannerPng())),
     );
 
     final manual = tester.widget<FilledButton>(
@@ -41,8 +51,9 @@ void main() {
                       ).push<SegmentationMode>(
                         MaterialPageRoute(
                           builder:
-                              (context) =>
-                                  SegmentationModePage(imageBytes: _testPng()),
+                              (context) => SegmentationModePage(
+                                imageBytes: _bannerPng(),
+                              ),
                         ),
                       );
                     },
@@ -64,85 +75,142 @@ void main() {
     expect(mode, SegmentationMode.automatic);
   });
 
-  testWidgets('manual flow draws, undoes, reviews, and returns request', (
-    tester,
-  ) async {
-    BatchSegmentationRequest? result;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder:
-              (context) => Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () async {
-                      result = await Navigator.of(
-                        context,
-                      ).push<BatchSegmentationRequest>(
-                        MaterialPageRoute(
-                          builder:
-                              (context) => ManualSegmentationPage(
-                                imageId: 'image-1',
-                                plantId: 'plant-1',
-                                imageUrl: 'file:///image.jpg',
-                                imageBytes: _testPng(),
-                                imageSize: const Size(363, 79),
-                              ),
-                        ),
-                      );
-                    },
-                    child: const Text('Open editor'),
+  group('manual mask flow', () {
+    // Holds whatever the editor pops, so a test can assert on the request the
+    // manual flow hands to batch processing.
+    late BatchSegmentationRequest? popped;
+
+    Future<void> pumpEditor(WidgetTester tester) async {
+      popped = null;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder:
+                (context) => Scaffold(
+                  body: Center(
+                    child: FilledButton(
+                      onPressed: () async {
+                        popped = await Navigator.of(
+                          context,
+                        ).push<BatchSegmentationRequest>(
+                          MaterialPageRoute(
+                            builder:
+                                (context) => MaskEditorPage(
+                                  imageId: 'image-1',
+                                  plantId: 'plant-1',
+                                  imageUrl: 'file:///drone.jpg',
+                                  imageBytes: _blankPng(),
+                                  imageWidth: _imageWidth,
+                                  imageHeight: _imageHeight,
+                                  initialMasks: const [],
+                                  source: SegmentationSource.manual,
+                                ),
+                          ),
+                        );
+                      },
+                      child: const Text('Open editor'),
+                    ),
                   ),
                 ),
-              ),
+          ),
         ),
-      ),
-    );
+      );
+      await tester.tap(find.text('Open editor'));
+      await tester.pumpAndSettle();
+    }
 
-    await tester.tap(find.text('Open editor'));
-    await tester.pumpAndSettle();
+    testWidgets('opens with a blank mask, brush armed and nothing to undo', (
+      tester,
+    ) async {
+      await pumpEditor(tester);
 
-    final gestureArea = find.byKey(const Key('rectangle-label-gesture-area'));
-    final rect = tester.getRect(gestureArea);
-    await tester.dragFrom(
-      rect.topLeft + Offset(rect.width * 0.1, rect.height * 0.2),
-      Offset(rect.width * 0.4, rect.height * 0.3),
-    );
-    await tester.pump();
-    expect(find.text('1 label'), findsOneWidget);
+      expect(find.text('Paint leaf masks'), findsOneWidget);
+      expect(find.byKey(const Key('brush-size-slider')), findsOneWidget);
+      // The starting mask is not an edit, so there is nothing to step back to.
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('undo-mask-button')))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const Key('process-masks-button')),
+            )
+            .onPressed,
+        isNull,
+        reason: 'nothing painted yet',
+      );
+    });
 
-    await tester.tap(find.byKey(const Key('undo-label-button')));
-    await tester.pump();
-    expect(find.text('0 labels'), findsOneWidget);
+    testWidgets('a tap dabs paint, so the brush works without a drag', (
+      tester,
+    ) async {
+      await pumpEditor(tester);
 
-    await tester.dragFrom(
-      rect.topLeft + Offset(rect.width * 0.2, rect.height * 0.2),
-      Offset(rect.width * 0.5, rect.height * 0.5),
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('save-labels-button')));
-    await tester.pumpAndSettle();
-    expect(find.text('1 label ready'), findsOneWidget);
+      // Nothing is under the cursor on a blank canvas, so the tap must reach
+      // the brush rather than being read as a deselect.
+      await tester.tapAt(
+        tester
+            .getRect(find.byKey(const Key('mask-editor-gesture-area')))
+            .center,
+      );
+      await tester.pumpAndSettle();
 
-    final editButton = find.byKey(const Key('edit-labels-button'));
-    await tester.ensureVisible(editButton);
-    await tester.tap(editButton);
-    await tester.pumpAndSettle();
-    final undo = tester.widget<OutlinedButton>(
-      find.byKey(const Key('undo-label-button')),
-    );
-    expect(undo.onPressed, isNull);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const Key('process-masks-button')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: 'the dab is a usable mask',
+      );
+    });
 
-    await tester.tap(find.byKey(const Key('save-labels-button')));
-    await tester.pumpAndSettle();
-    final processButton = find.byKey(const Key('process-labels-button'));
-    await tester.ensureVisible(processButton);
-    await tester.tap(processButton);
-    await tester.pumpAndSettle();
+    testWidgets('painting a leaf produces a hand-painted mask request', (
+      tester,
+    ) async {
+      await pumpEditor(tester);
 
-    expect(result, isNotNull);
-    expect(result!.imageId, 'image-1');
-    expect(result!.labels, hasLength(1));
-    expect(result!.toJson()['coordinateSpace'], 'normalized_original_image');
+      // A real drag, not dragFrom: the stroke has to clear the drag slop
+      // before the canvas starts painting.
+      final rect = tester.getRect(
+        find.byKey(const Key('mask-editor-gesture-area')),
+      );
+      final stroke = await tester.startGesture(rect.center);
+      await tester.pump();
+      await stroke.moveBy(const Offset(40, 0));
+      await tester.pump();
+      await stroke.moveBy(const Offset(0, 30));
+      await tester.pump();
+      await stroke.up();
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('undo-mask-button')))
+            .onPressed,
+        isNotNull,
+        reason: 'the stroke is undoable',
+      );
+
+      final process = find.byKey(const Key('process-masks-button'));
+      expect(tester.widget<FilledButton>(process).onPressed, isNotNull);
+      await tester.tap(process);
+      await tester.pumpAndSettle();
+
+      expect(popped, isNotNull);
+      expect(popped!.masks, hasLength(1));
+      // One bbox label per mask, so the batch pipeline is reused unchanged.
+      expect(popped!.labels, hasLength(1));
+      expect(popped!.imageId, 'image-1');
+
+      final json = popped!.toJson();
+      expect(json['segmentationSource'], 'manual');
+      expect(json['maskCount'], 1);
+      expect(json['coordinateSpace'], 'normalized_original_image');
+    });
   });
 }

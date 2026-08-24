@@ -74,6 +74,21 @@ class NormalizedLabelRect {
   };
 }
 
+/// How the regions in a [BatchSegmentationRequest] were produced.
+enum SegmentationSource {
+  /// Masks painted by hand in the mask editor.
+  manual('manual'),
+
+  /// Masks read from a SAM `.npy` file generated outside the app.
+  sam('sam');
+
+  const SegmentationSource(this.wireName);
+
+  /// The value persisted in batch and analysis records. Stable: records
+  /// written by earlier versions already use these strings.
+  final String wireName;
+}
+
 /// Stable hand-off contract for the batch-processing flow implemented in #152.
 class BatchSegmentationRequest {
   BatchSegmentationRequest({
@@ -81,16 +96,17 @@ class BatchSegmentationRequest {
     required this.plantId,
     required this.imageUrl,
     required List<NormalizedLabelRect> labels,
+    required List<LeafMask> masks,
+    required this.source,
     required this.localImageBytes,
     required this.imageWidth,
     required this.imageHeight,
-    List<LeafMask>? masks,
   }) : assert(
-         masks == null || masks.length == labels.length,
+         masks.length == labels.length,
          'masks must be index-aligned with labels',
        ),
        labels = List.unmodifiable(labels),
-       masks = masks == null ? null : List.unmodifiable(masks);
+       masks = List.unmodifiable(masks);
 
   final String imageId;
   final String plantId;
@@ -99,12 +115,15 @@ class BatchSegmentationRequest {
   final int imageWidth;
   final int imageHeight;
 
-  /// Pixel-accurate SAM masks, index-aligned with [labels] (each label is the
-  /// mask's bbox). Null for the manual rectangle flow. In-memory only — masks
-  /// are processed locally and never serialized or uploaded.
-  final List<LeafMask>? masks;
+  /// Which flow produced the regions — painted by hand or read from a SAM
+  /// file. Both produce [masks]; only the bookkeeping differs.
+  final SegmentationSource source;
 
-  bool get hasMasks => masks != null;
+  /// Pixel-accurate masks, one per leaf and index-aligned with [labels] (each
+  /// label is the mask's bbox). Every region reaching the pipeline is a mask,
+  /// whichever flow drew it. In-memory only — masks are processed locally and
+  /// never serialized or uploaded.
+  final List<LeafMask> masks;
 
   /// Retained for an immediate desktop preview; deliberately omitted from
   /// [toJson] because #152 should use [imageId] to resolve the persisted image.
@@ -118,8 +137,8 @@ class BatchSegmentationRequest {
     'imageUrl': imageUrl,
     'imageWidth': imageWidth,
     'imageHeight': imageHeight,
-    if (hasMasks) 'segmentationSource': 'sam',
-    if (hasMasks) 'maskCount': masks!.length,
+    'segmentationSource': source.wireName,
+    'maskCount': masks.length,
     'labels': [
       for (var index = 0; index < labels.length; index++)
         {'id': 'label_${index + 1}', ...labels[index].toJson()},

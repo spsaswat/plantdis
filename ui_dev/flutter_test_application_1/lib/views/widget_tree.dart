@@ -15,9 +15,8 @@ import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
 
 import 'package:flutter_test_application_1/views/pages/batch_processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
-import 'package:flutter_test_application_1/views/pages/mask_review_page.dart';
+import 'package:flutter_test_application_1/views/pages/mask_editor_page.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
-import 'package:flutter_test_application_1/views/pages/manual_segmentation_page.dart';
 import 'package:flutter_test_application_1/views/pages/segmentation_mode_page.dart';
 import 'package:flutter_test_application_1/views/widgets/appbar_widget.dart';
 import 'package:flutter_test_application_1/views/widgets/progress_dialog.dart';
@@ -184,6 +183,11 @@ class _WidgetTreeState extends State<WidgetTree> {
     }
   }
 
+  /// Opens the mask editor on an empty mask so the user can paint each leaf by
+  /// hand.
+  ///
+  /// Same editor, and same pixel-mask hand-off, as the automatic flow — only
+  /// the masks' origin differs.
   Future<void> _openManualSegmentation(
     XFile pickedFile,
     Uint8List localBytes,
@@ -196,6 +200,9 @@ class _WidgetTreeState extends State<WidgetTree> {
     );
 
     try {
+      // Masks are indexed against these exact dimensions, so they must come
+      // from the same EXIF-aware decode the batch pipeline uses downstream.
+      final imageSize = await _decodeImageSize(localBytes);
       final result = await _plantService.uploadImageForManualLabelling(
         image: pickedFile,
         notes: 'Uploaded drone image for manual segmentation',
@@ -209,11 +216,15 @@ class _WidgetTreeState extends State<WidgetTree> {
       ).push<BatchSegmentationRequest>(
         MaterialPageRoute(
           builder:
-              (context) => ManualSegmentationPage(
+              (context) => MaskEditorPage(
                 imageId: result['imageId'] as String,
                 plantId: result['plantId'] as String,
                 imageUrl: result['downloadUrl'] as String,
                 imageBytes: localBytes,
+                imageWidth: imageSize.width.round(),
+                imageHeight: imageSize.height.round(),
+                initialMasks: const [],
+                source: SegmentationSource.manual,
               ),
         ),
       );
@@ -231,7 +242,7 @@ class _WidgetTreeState extends State<WidgetTree> {
   }
 
   /// Loads SAM masks from a `.npy` file the user picked and opens the mask
-  /// review/editing page.
+  /// editor on them.
   ///
   /// The file is parsed and validated *before* the drone image is uploaded, so
   /// an unusable mask file leaves nothing behind in storage.
@@ -305,7 +316,7 @@ class _WidgetTreeState extends State<WidgetTree> {
       ).push<BatchSegmentationRequest>(
         MaterialPageRoute(
           builder:
-              (context) => MaskReviewPage(
+              (context) => MaskEditorPage(
                 imageId: result['imageId'] as String,
                 plantId: result['plantId'] as String,
                 imageUrl: result['downloadUrl'] as String,
@@ -313,6 +324,7 @@ class _WidgetTreeState extends State<WidgetTree> {
                 imageWidth: imageWidth,
                 imageHeight: imageHeight,
                 initialMasks: parsed.masks,
+                source: SegmentationSource.sam,
                 droppedEmptyCount: parsed.droppedEmptyCount,
               ),
         ),

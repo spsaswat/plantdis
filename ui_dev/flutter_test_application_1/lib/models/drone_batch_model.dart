@@ -70,6 +70,10 @@ class BatchLeafEntry {
   /// Matches the `label_N` ids in [BatchSegmentationRequest.toJson].
   final String labelId;
   final int index;
+
+  /// The leaf's mask bounding box, normalized. The mask pixels stay in memory,
+  /// so this is what a stored batch can draw: it positions the numbered box on
+  /// the drone result overlay.
   final NormalizedLabelRect region;
 
   /// The child `PlantModel` this leaf became — what `SegmentPage` opens.
@@ -333,10 +337,12 @@ class DroneBatchModel {
     this.segmentationSource = segmentationSourceManual,
   });
 
-  /// Regions drawn by hand as rectangles.
+  /// Regions painted by hand in the mask editor.
+  /// Mirrors `SegmentationSource.manual.wireName`.
   static const String segmentationSourceManual = 'manual';
 
   /// Regions derived from an uploaded SAM mask file.
+  /// Mirrors `SegmentationSource.sam.wireName`.
   static const String segmentationSourceSam = 'sam';
 
   final String batchId;
@@ -391,8 +397,7 @@ class DroneBatchModel {
       imageHeight: request.imageHeight,
       createdAt: now,
       status: BatchStatus.processing,
-      segmentationSource:
-          request.hasMasks ? segmentationSourceSam : segmentationSourceManual,
+      segmentationSource: request.source.wireName,
       leaves: [
         for (var i = 0; i < request.labels.length; i++)
           BatchLeafEntry(

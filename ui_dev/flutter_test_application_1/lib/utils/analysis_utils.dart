@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
-import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
 import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
@@ -72,48 +71,9 @@ OrientedImage decodeOriented(
   return OrientedImage(image: oriented, dimensionsMatched: matched);
 }
 
-/// Converts a normalized label into source pixels, clamped to the image bounds.
-///
-/// The result is always inside `0..imageWidth` / `0..imageHeight`, but it can
-/// still be degenerate for a rect drawn at the very edge of the image — check
-/// [isUsableCrop] before cropping.
-math.Rectangle<int> denormalizeRect(
-  NormalizedLabelRect rect,
-  int imageWidth,
-  int imageHeight,
-) {
-  final left = (rect.x * imageWidth).floor().clamp(0, imageWidth);
-  final top = (rect.y * imageHeight).floor().clamp(0, imageHeight);
-  final right = ((rect.x + rect.width) * imageWidth).ceil().clamp(0, imageWidth);
-  final bottom =
-      ((rect.y + rect.height) * imageHeight).ceil().clamp(0, imageHeight);
-
-  return math.Rectangle<int>(left, top, right - left, bottom - top);
-}
-
 /// Whether [rect] is large enough to be worth running the models on.
 bool isUsableCrop(math.Rectangle<int> rect) {
   return rect.width >= kMinCropPixels && rect.height >= kMinCropPixels;
-}
-
-/// Crops [rect] out of [source] and encodes it as JPEG.
-///
-/// [source] is not modified, so the same decoded image can be reused for every
-/// region in a batch — important because a decoded 20 MP drone frame is roughly
-/// 80 MB and decoding it per leaf would be both slow and memory-hungry.
-Uint8List cropLeafJpeg(
-  img.Image source,
-  math.Rectangle<int> rect, {
-  int quality = 90,
-}) {
-  final cropped = img.copyCrop(
-    source,
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height,
-  );
-  return img.encodeJpg(cropped, quality: quality);
 }
 
 /// Clamps [rect] so it lies inside a [width]×[height] image.
@@ -131,6 +91,10 @@ math.Rectangle<int> clampRectToImage(
 
 /// Crops [mask]'s bbox out of [source], blacks out every non-mask pixel, and
 /// encodes the result as JPEG.
+///
+/// [source] is not modified, so the same decoded image can be reused for every
+/// leaf in a batch — important because a decoded 20 MP drone frame is roughly
+/// 80 MB and decoding it per leaf would be both slow and memory-hungry.
 ///
 /// Black background matches the convention of the app's own segmentation
 /// models: the classifiers normalize pixels by /255, so black contributes

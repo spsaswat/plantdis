@@ -30,7 +30,7 @@ class EditableMask {
 ///
 /// Deliberately free of any file-format or drone-flow specifics: constructing
 /// it with `initialMasks: []` gives a from-scratch mask labelling session, which
-/// is how the manual flow can move off rectangles later.
+/// is what the manual drone flow does.
 class MaskEditorController extends ChangeNotifier {
   MaskEditorController({
     required this.imageWidth,
@@ -119,7 +119,10 @@ class MaskEditorController extends ChangeNotifier {
 
   /// Adds an empty mask, selects it, and switches to the paint tool so the next
   /// drag draws into it.
-  int addEmptyMask() {
+  ///
+  /// [recordUndo] is false for the blank mask a from-scratch session opens
+  /// with: there is nothing before it to step back to.
+  int addEmptyMask({bool recordUndo = true}) {
     final mask = EditableMask(
       id: _nextId++,
       mask: LeafMask.emptyAt(imageWidth: imageWidth, imageHeight: imageHeight),
@@ -128,7 +131,7 @@ class MaskEditorController extends ChangeNotifier {
     _masks.add(mask);
     _selectedId = mask.id;
     _tool = MaskTool.paint;
-    _pushUndo(_UndoStep.added(mask.id));
+    if (recordUndo) _pushUndo(_UndoStep.added(mask.id));
     notifyListeners();
     return mask.id;
   }

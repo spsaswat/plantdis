@@ -146,10 +146,20 @@ class _MaskEditorCanvasState extends State<MaskEditorCanvas> {
   }
 
   void _handleTap(Offset local) {
-    final index = widget.controller.hitTest(_toImageSpace(local));
-    widget.controller.select(
-      index == null ? null : widget.controller.masks[index].id,
-    );
+    final point = _toImageSpace(local);
+    final index = widget.controller.hitTest(point);
+    if (index != null) {
+      widget.controller.select(widget.controller.masks[index].id);
+      return;
+    }
+    // With the brush armed, a tap on bare image is a dab, not a request to
+    // deselect: deselecting would leave the brush inert, and painting a mask
+    // from scratch starts with nothing under the cursor to aim at.
+    if (widget.controller.tool != MaskTool.pan) {
+      widget.controller.applyStroke([point]);
+      return;
+    }
+    widget.controller.select(null);
   }
 
   void _endStroke() {

@@ -87,6 +87,8 @@ void main() {
       plantId: 'plant-1',
       imageUrl: 'file:///image.jpg',
       labels: const [label],
+      masks: [_mask()],
+      source: SegmentationSource.manual,
       localImageBytes: Uint8List.fromList([1, 2, 3]),
       imageWidth: 4000,
       imageHeight: 3000,
@@ -100,6 +102,8 @@ void main() {
       'imageUrl': 'file:///image.jpg',
       'imageWidth': 4000,
       'imageHeight': 3000,
+      'segmentationSource': 'manual',
+      'maskCount': 1,
       'labels': [
         {
           'id': 'label_1',
@@ -112,8 +116,11 @@ void main() {
     });
   });
 
-  group('SAM masks', () {
-    BatchSegmentationRequest build({List<LeafMask>? masks}) {
+  group('masks', () {
+    BatchSegmentationRequest build({
+      List<LeafMask> masks = const [],
+      SegmentationSource source = SegmentationSource.manual,
+    }) {
       return BatchSegmentationRequest(
         imageId: 'image-1',
         plantId: 'plant-1',
@@ -124,21 +131,21 @@ void main() {
         localImageBytes: Uint8List.fromList([1, 2, 3]),
         imageWidth: 4000,
         imageHeight: 3000,
+        source: source,
         masks: masks,
       );
     }
 
-    test('a manual request carries no masks', () {
-      final request = build();
+    test('hand-painted masks are recorded as manual', () {
+      final json = build(masks: [_mask()]).toJson();
 
-      expect(request.hasMasks, isFalse);
-      expect(request.masks, isNull);
-      expect(request.toJson().containsKey('segmentationSource'), isFalse);
-      expect(request.toJson().containsKey('maskCount'), isFalse);
+      expect(json['segmentationSource'], 'manual');
+      expect(json['maskCount'], 1);
     });
 
     test('records the source and count without serializing mask data', () {
-      final json = build(masks: [_mask()]).toJson();
+      final json =
+          build(masks: [_mask()], source: SegmentationSource.sam).toJson();
 
       expect(json['segmentationSource'], 'sam');
       expect(json['maskCount'], 1);
@@ -148,7 +155,12 @@ void main() {
     });
 
     test('rejects masks that are not index-aligned with the labels', () {
-      expect(() => build(masks: [_mask(), _mask()]), throwsA(isA<AssertionError>()));
+      expect(
+        () => build(masks: [_mask(), _mask()]),
+        throwsA(isA<AssertionError>()),
+      );
+      // One label, no mask to go with it, is just as misaligned.
+      expect(() => build(), throwsA(isA<AssertionError>()));
     });
   });
 }

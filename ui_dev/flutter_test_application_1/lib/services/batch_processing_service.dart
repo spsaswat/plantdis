@@ -152,9 +152,8 @@ class BatchProcessingRunner {
     }
 
     // Pixel masks are indexed against exact image dimensions, so a mismatch
-    // would silently mask the wrong pixels. Rectangles tolerate it (they are
-    // resolved against whatever was decoded); masks must not.
-    if (request.hasMasks && !oriented.dimensionsMatched) {
+    // would silently mask the wrong pixels.
+    if (!oriented.dimensionsMatched) {
       final message =
           'The masks were made for a ${request.imageWidth}x'
           '${request.imageHeight} image, but the drone image decoded to '
@@ -179,8 +178,6 @@ class BatchProcessingRunner {
       return failedBatch;
     }
 
-    final segModel = await LeafAnalysisPipeline.defaultSegModel();
-
     for (final entry in List<BatchLeafEntry>.of(batch.leaves)) {
       if (_cancelled) break;
 
@@ -201,8 +198,8 @@ class BatchProcessingRunner {
         result = await _processLeaf(
           entry: entry,
           oriented: oriented,
-          segModel: segModel,
-          mask: request.masks?[entry.index],
+          mask: request.masks[entry.index],
+          maskSource: request.source,
         );
       } catch (e, st) {
         // One bad leaf must never sink the batch.
@@ -289,19 +286,17 @@ class BatchProcessingRunner {
     return resp.bodyBytes;
   }
 
-  /// When [mask] is supplied the leaf image is the masked bbox crop and the
-  /// app's own segmentation model is skipped — a SAM mask is already
-  /// segmentation output.
+  /// The leaf image is [mask]'s bbox crop with everything outside the mask
+  /// blacked out, and the app's own segmentation model is skipped — a mask the
+  /// user painted or SAM produced is already segmentation output. [maskSource]
+  /// records which of the two drew it.
   Future<BatchLeafEntry> _processLeaf({
     required BatchLeafEntry entry,
     required OrientedImage oriented,
-    required String segModel,
-    LeafMask? mask,
+    required LeafMask mask,
+    required SegmentationSource maskSource,
   }) async {
-    final rect =
-        mask != null
-            ? clampRectToImage(mask.bbox, oriented.width, oriented.height)
-            : denormalizeRect(entry.region, oriented.width, oriented.height);
+    final rect = clampRectToImage(mask.bbox, oriented.width, oriented.height);
     if (!isUsableCrop(rect)) {
       return entry.copyWith(
         status: LeafStatus.error,
@@ -311,10 +306,7 @@ class BatchProcessingRunner {
       );
     }
 
-    final cropBytes =
-        mask != null
-            ? maskedLeafJpeg(oriented.image, mask)
-            : cropLeafJpeg(oriented.image, rect);
+    final cropBytes = maskedLeafJpeg(oriented.image, mask);
 
     // `.jpg` matters: StorageUtils.isValidImageExtension only accepts jpg/jpeg/png.
     final cropFile = await LeafAnalysisPipeline.writeTempImage(
@@ -344,16 +336,14 @@ class BatchProcessingRunner {
       imageBytes: cropBytes,
       plantId: leafPlantId,
       imageId: leafImageId,
-      segModel: segModel,
-      skipSegmentation: mask != null,
+      skipSegmentation: true,
     );
 
     // The masked crop *is* the segmentation output, so it doubles as the
     // segmentation image rather than being uploaded a second time. Note this
     // deliberately does not touch `images/{imageId}.processedUrls`: the delete
     // path walks that map and would remove the leaf's only stored image.
-    final segmentationUrl =
-        mask != null ? croppedImageUrl : outcome.segmentationUrl;
+    final segmentationUrl = croppedImageUrl;
 
     final detection = outcome.detection;
     if (detection == null) {
@@ -382,14 +372,15 @@ class BatchProcessingRunner {
       'detectedDisease': detection.diseaseName,
       'confidence': detection.confidence,
       'detectionTimestamp': DateTime.now().toIso8601String(),
-      if (segmentationUrl != null) 'segmentationUrl': segmentationUrl,
+      'segmentationUrl': segmentationUrl,
       if (outcome.species != null) 'plantSpecies': outcome.species!.species,
       if (outcome.species?.confidence != null)
         'plantSpeciesConfidence': outcome.species!.confidence,
-      // 'sam' tells SegmentPage this leaf was masked externally, so it must not
-      // offer to re-run the local segmentation models over it.
-      'model': mask != null ? 'sam' : segModel,
-      if (mask != null) 'segmentationSource': 'sam',
+      // A segmentation-source name here, rather than a model name, tells
+      // SegmentPage this leaf arrived already masked, so it must not offer to
+      // re-run the local segmentation models over it.
+      'model': maskSource.wireName,
+      'segmentationSource': maskSource.wireName,
       'manuallyOverridden': false,
       'source': 'batch',
       'analysisStage': 3,

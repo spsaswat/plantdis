@@ -33,7 +33,10 @@ BatchLeafEntry _leaf(
   );
 }
 
-BatchSegmentationRequest _request({int labels = 2}) {
+BatchSegmentationRequest _request({
+  int labels = 2,
+  SegmentationSource source = SegmentationSource.manual,
+}) {
   return BatchSegmentationRequest(
     imageId: 'img_drone',
     plantId: 'plant_drone',
@@ -45,6 +48,17 @@ BatchSegmentationRequest _request({int labels = 2}) {
     localImageBytes: Uint8List(0),
     imageWidth: 4000,
     imageHeight: 3000,
+    source: source,
+    masks: [
+      for (var i = 0; i < labels; i++)
+        LeafMask(
+          left: 0,
+          top: 0,
+          width: 2,
+          height: 2,
+          bytes: Uint8List(4)..fillRange(0, 4, 1),
+        ),
+    ],
   );
 }
 
@@ -71,30 +85,16 @@ void main() {
     });
 
     test('records which flow produced the regions', () {
+      // Both flows hand over pixel masks, so the request's own source — not
+      // the presence of masks — decides how the batch is filed.
       final manual = DroneBatchModel.fromRequest(_request(), userId: 'user_1');
-      expect(manual.segmentationSource, DroneBatchModel.segmentationSourceManual);
+      expect(
+        manual.segmentationSource,
+        DroneBatchModel.segmentationSourceManual,
+      );
 
       final sam = DroneBatchModel.fromRequest(
-        BatchSegmentationRequest(
-          imageId: 'img_drone',
-          plantId: 'plant_drone',
-          imageUrl: 'https://example.test/drone.jpg',
-          labels: const [
-            NormalizedLabelRect(x: 0, y: 0, width: 0.1, height: 0.1),
-          ],
-          localImageBytes: Uint8List(0),
-          imageWidth: 4000,
-          imageHeight: 3000,
-          masks: [
-            LeafMask(
-              left: 0,
-              top: 0,
-              width: 2,
-              height: 2,
-              bytes: Uint8List(4)..fillRange(0, 4, 1),
-            ),
-          ],
-        ),
+        _request(source: SegmentationSource.sam),
         userId: 'user_1',
       );
       expect(sam.segmentationSource, DroneBatchModel.segmentationSourceSam);

@@ -103,8 +103,8 @@ class LeafRegionFrame extends StatelessWidget {
 
 /// The drone image with one numbered box per labelled leaf.
 ///
-/// Uses the same letterbox math as `RectangleLabelCanvas` so the boxes land
-/// exactly where the user drew them.
+/// Letterboxes the image the same way the mask editor does, so each box lands
+/// exactly over the region it was derived from.
 class LeafRegionOverlay extends StatelessWidget {
   const LeafRegionOverlay({
     required this.image,

@@ -277,17 +277,22 @@ class LeafAnalysisPipeline {
   /// the failure for one leaf and carry on.
   ///
   /// Pass [skipSegmentation] when [imageBytes] is already a segmented leaf —
-  /// for example a SAM-masked crop. The masking step is then bypassed entirely
-  /// and the bytes go straight to the classifiers; [LeafAnalysisOutcome
-  /// .segmentationUrl] stays null because the caller owns that image.
+  /// a mask-cropped drone leaf, for example. The masking step is then bypassed
+  /// entirely and the bytes go straight to the classifiers; [LeafAnalysisOutcome
+  /// .segmentationUrl] stays null because the caller owns that image, and
+  /// [segModel] is ignored — it is the only case where it may be omitted.
   static Future<LeafAnalysisOutcome> runFull({
     required Uint8List imageBytes,
     required String plantId,
     required String imageId,
-    required String segModel,
+    String? segModel,
     String? forcedSpecies,
     bool skipSegmentation = false,
   }) async {
+    assert(
+      skipSegmentation || segModel != null,
+      'segModel is required unless segmentation is skipped',
+    );
     String? segmentationUrl;
     SpeciesResult? species;
 
@@ -303,7 +308,7 @@ class LeafAnalysisPipeline {
               );
           segmentedFile = await segment(
             temp,
-            segModel: segModel,
+            segModel: segModel!,
             outputFile: maskTarget,
           );
         } catch (e, st) {
