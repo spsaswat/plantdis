@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -46,9 +47,7 @@ void main() {
                 body: Center(
                   child: FilledButton(
                     onPressed: () async {
-                      mode = await Navigator.of(
-                        context,
-                      ).push<SegmentationMode>(
+                      mode = await Navigator.of(context).push<SegmentationMode>(
                         MaterialPageRoute(
                           builder:
                               (context) => SegmentationModePage(
@@ -119,13 +118,13 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('opens with a blank mask, brush armed and nothing to undo', (
+    testWidgets('opens with a blank mask, pen armed and nothing to undo', (
       tester,
     ) async {
       await pumpEditor(tester);
 
-      expect(find.text('Paint leaf masks'), findsOneWidget);
-      expect(find.byKey(const Key('brush-size-slider')), findsOneWidget);
+      expect(find.text('Draw leaf masks'), findsOneWidget);
+      expect(find.byKey(const Key('pen-width-slider')), findsNothing);
       // The starting mask is not an edit, so there is nothing to step back to.
       expect(
         tester
@@ -135,22 +134,18 @@ void main() {
       );
       expect(
         tester
-            .widget<FilledButton>(
-              find.byKey(const Key('process-masks-button')),
-            )
+            .widget<FilledButton>(find.byKey(const Key('process-masks-button')))
             .onPressed,
         isNull,
         reason: 'nothing painted yet',
       );
     });
 
-    testWidgets('a tap dabs paint, so the brush works without a drag', (
+    testWidgets('a tap leaves nothing behind, since it encloses nothing', (
       tester,
     ) async {
       await pumpEditor(tester);
 
-      // Nothing is under the cursor on a blank canvas, so the tap must reach
-      // the brush rather than being read as a deselect.
       await tester.tapAt(
         tester
             .getRect(find.byKey(const Key('mask-editor-gesture-area')))
@@ -158,33 +153,119 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // The tools are lassos, so a dot is not a smear of paint to undo — it
+      // is nothing at all.
       expect(
         tester
-            .widget<FilledButton>(
-              find.byKey(const Key('process-masks-button')),
-            )
+            .widget<IconButton>(find.byKey(const Key('undo-mask-button')))
             .onPressed,
-        isNotNull,
-        reason: 'the dab is a usable mask',
+        isNull,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('process-masks-button')))
+            .onPressed,
+        isNull,
       );
     });
 
-    testWidgets('painting a leaf produces a hand-painted mask request', (
+    testWidgets('the wheel zooms while the pen is armed', (tester) async {
+      await pumpEditor(tester);
+
+      final viewer = find.byType(InteractiveViewer);
+      final before =
+          tester
+              .widget<InteractiveViewer>(viewer)
+              .transformationController!
+              .value
+              .getMaxScaleOnAxis();
+
+      // Scrolling is how zooming is done on a desktop, and the pen being armed
+      // must not swallow it: zooming in is what makes the pen fine.
+      final centre = tester.getCenter(viewer);
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      tester.binding.handlePointerEvent(pointer.hover(centre));
+      tester.binding.handlePointerEvent(pointer.scroll(const Offset(0, -120)));
+      await tester.pumpAndSettle();
+
+      final after =
+          tester
+              .widget<InteractiveViewer>(viewer)
+              .transformationController!
+              .value
+              .getMaxScaleOnAxis();
+      expect(after, greaterThan(before));
+    });
+
+    testWidgets('the right button drags the image instead of drawing', (
+      tester,
+    ) async {
+      await pumpEditor(tester);
+
+      final viewer = find.byType(InteractiveViewer);
+      final transform =
+          tester.widget<InteractiveViewer>(viewer).transformationController!;
+      final centre = tester.getCenter(viewer);
+
+      // Zoomed right out the image already fills the frame, so there is
+      // nowhere to drag it to.
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      tester.binding.handlePointerEvent(pointer.hover(centre));
+      tester.binding.handlePointerEvent(pointer.scroll(const Offset(0, -240)));
+      await tester.pumpAndSettle();
+      final before = transform.value.getTranslation();
+
+      final drag = await tester.startGesture(
+        centre,
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      await drag.moveBy(const Offset(-40, -30));
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+
+      expect(
+        transform.value.getTranslation(),
+        isNot(before),
+        reason: 'the view moved',
+      );
+      // A drag recognizer only takes the primary button, so nothing was drawn.
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('process-masks-button')))
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('tracing round a leaf produces a hand-painted mask request', (
       tester,
     ) async {
       await pumpEditor(tester);
 
       // A real drag, not dragFrom: the stroke has to clear the drag slop
-      // before the canvas starts painting.
+      // before the canvas starts drawing. It comes back to where it started,
+      // because only a closed line encloses a leaf.
       final rect = tester.getRect(
         find.byKey(const Key('mask-editor-gesture-area')),
       );
       final stroke = await tester.startGesture(rect.center);
       await tester.pump();
-      await stroke.moveBy(const Offset(40, 0));
-      await tester.pump();
-      await stroke.moveBy(const Offset(0, 30));
-      await tester.pump();
+      // One and a half laps of the box. The drag slop swallows the first move
+      // or two, so a single lap would arrive missing a side — and a line that
+      // does not close encloses no leaf.
+      for (final leg in const [
+        Offset(60, 0),
+        Offset(0, 45),
+        Offset(-60, 0),
+        Offset(0, -45),
+        Offset(60, 0),
+        Offset(0, 45),
+      ]) {
+        await stroke.moveBy(leg);
+        await tester.pump();
+      }
       await stroke.up();
       await tester.pumpAndSettle();
 

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -31,6 +32,16 @@ LeafMask block({
   );
 }
 
+/// A closed rectangular lasso path. Both tools take a boundary, never a dab,
+/// so every stroke in these tests goes round something.
+List<Offset> lassoBox(int left, int top, int right, int bottom) => [
+  Offset(left.toDouble(), top.toDouble()),
+  Offset(right.toDouble(), top.toDouble()),
+  Offset(right.toDouble(), bottom.toDouble()),
+  Offset(left.toDouble(), bottom.toDouble()),
+  Offset(left.toDouble(), top.toDouble()),
+];
+
 void main() {
   group('MaskEditorController', () {
     test('paint extends the selected mask outward from its edge', () {
@@ -42,12 +53,185 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.paint);
-      controller.setBrushRadius(3);
 
-      // Centred just past the right edge, so the disc overlaps the block.
-      controller.applyStroke([const Offset(31, 20)]);
+      // A loop overlapping the block's right edge, so the two join up.
+      controller.applyStroke(lassoBox(25, 15, 40, 25));
 
-      expect(controller.masks.first.mask.containsImagePixel(32, 20), isTrue);
+      expect(controller.masks.first.mask.containsImagePixel(35, 20), isTrue);
+      expect(controller.masks.first.mask.containsImagePixel(15, 15), isTrue);
+    });
+
+    test('the fixed trace width is converted at the current zoom', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+
+      // The internal boundary is two screen pixels wide. Fitted 1:1, that is
+      // a half-pixel radius before rasterization rounds it to a disc.
+      controller.setViewScale(1);
+      expect(controller.penRadiusImagePx, 0.5);
+
+      // Zoomed 4x, it bottoms out at a one-image-pixel trace.
+      controller.setViewScale(0.25);
+      expect(controller.penRadiusImagePx, 0);
+    });
+
+    test('the fixed trace is a boundary and adds no width to the mask', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+      controller.applyStroke(lassoBox(20, 20, 60, 60));
+
+      final mask = controller.masks.first.mask;
+      expect(mask.left, closeTo(20, 1));
+      expect(mask.top, closeTo(20, 1));
+      expect(mask.width, closeTo(41, 2));
+      expect(mask.height, closeTo(41, 2));
+    });
+
+    test('a stroke across the leaf does not cut it in two', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+      // A bowtie: the line crosses itself in the middle, the way a scribbled
+      // trace does. That splits what it encloses into two lobes, and the leaf
+      // has to be both of them rather than the larger one.
+      controller.applyStroke(const [
+        Offset(20, 20),
+        Offset(60, 20),
+        Offset(20, 60),
+        Offset(60, 60),
+        Offset(20, 20),
+      ]);
+
+      final mask = controller.masks.first.mask;
+      expect(mask.containsImagePixel(40, 26), isTrue, reason: 'upper lobe');
+      expect(mask.containsImagePixel(40, 54), isTrue, reason: 'lower lobe');
+    });
+
+    test('a loop that stops short of its start still encloses a leaf', () {
+      final controller = MaskEditorController(
+        imageWidth: 400,
+        imageHeight: 400,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+
+      // A circle traced by hand, lifted 12 degrees short of where it began.
+      // Drawing round a leaf looks like this every time.
+      final circle = <Offset>[
+        for (var degrees = 0; degrees <= 348; degrees += 4)
+          Offset(
+            200 + 90 * math.cos(degrees * math.pi / 180),
+            200 + 90 * math.sin(degrees * math.pi / 180),
+          ),
+      ];
+      controller.applyStroke(circle);
+
+      final mask = controller.masks.first.mask;
+      expect(mask.containsImagePixel(200, 200), isTrue, reason: 'enclosed');
+      // The leaf is the circle the pen went round, not a fraction of it.
+      expect(mask.width, closeTo(181, 4));
+      expect(mask.height, closeTo(181, 4));
+    });
+
+    test('an open stroke is closed end to end, the way a lasso is', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+
+      // Three sides of a box: wide open, and nothing like a near miss.
+      controller.applyStroke(const [
+        Offset(70, 20),
+        Offset(20, 20),
+        Offset(20, 60),
+        Offset(70, 60),
+      ]);
+
+      expect(controller.masks.first.mask.containsImagePixel(45, 40), isTrue);
+      // The region runs all the way to the join, not just to the drawn sides.
+      expect(
+        controller.masks.first.mask.containsImagePixel(68, 40),
+        isTrue,
+        reason: 'up to the closing segment',
+      );
+    });
+
+    test('a tail on the end of a stroke is not part of the leaf', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+
+      // A stroke that wanders in from the top left before tracing the box,
+      // which is what starting to draw slightly early looks like.
+      controller.applyStroke(const [
+        Offset(5, 5),
+        Offset(20, 20),
+        Offset(60, 20),
+        Offset(60, 60),
+        Offset(20, 60),
+        Offset(20, 20),
+      ]);
+
+      final mask = controller.masks.first.mask;
+      expect(mask.containsImagePixel(40, 40), isTrue, reason: 'enclosed');
+      // The lead-in encloses nothing, so it is not leaf.
+      expect(mask.containsImagePixel(5, 5), isFalse, reason: 'the tail');
+      expect(mask.containsImagePixel(12, 12), isFalse, reason: 'the tail');
+      // The traced line is the leaf's edge, so the leaf reaches it exactly.
+      expect(mask.left, 20);
+      expect(mask.top, 20);
+    });
+
+    test('an erase lasso takes out what it encloses', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+      controller.applyStroke(lassoBox(20, 20, 60, 60));
+      expect(controller.masks.first.mask.containsImagePixel(50, 40), isTrue);
+
+      // A loop over the right side of the leaf, drawn like any other line.
+      controller.setTool(MaskTool.erase);
+      controller.applyStroke(lassoBox(45, 10, 70, 70));
+
+      final mask = controller.masks.first.mask;
+      expect(mask.containsImagePixel(50, 40), isFalse, reason: 'taken out');
+      expect(mask.containsImagePixel(30, 40), isTrue, reason: 'left alone');
+      expect(mask.left + mask.width, lessThan(50));
+    });
+
+    test('an erase lasso inside a leaf leaves it whole', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+      );
+      controller.addEmptyMask();
+      controller.setViewScale(1);
+      controller.applyStroke(lassoBox(20, 20, 60, 60));
+      final whole = controller.masks.first.mask.pixelCount;
+
+      // A leaf has no holes in it, so a loop drawn well inside seals again.
+      controller.setTool(MaskTool.erase);
+      controller.applyStroke(lassoBox(35, 35, 45, 45));
+
+      expect(controller.masks.first.mask.pixelCount, whole);
+      expect(controller.masks.first.mask.containsImagePixel(40, 40), isTrue);
     });
 
     test('erase removes pixels and tightening shrinks the bbox', () {
@@ -58,13 +242,9 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(30);
 
       // Wipe the right half of the block.
-      controller.applyStroke([
-        const Offset(60, 10),
-        const Offset(60, 50),
-      ]);
+      controller.applyStroke(lassoBox(35, 5, 60, 55));
 
       final finalMask = controller.buildFinalMasks().single;
       expect(finalMask.containsImagePixel(48, 30), isFalse);
@@ -79,13 +259,12 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.paint);
-      controller.setBrushRadius(4);
-      controller.applyStroke([const Offset(31, 20)]);
-      expect(controller.masks.first.mask.containsImagePixel(33, 20), isTrue);
+      controller.applyStroke(lassoBox(25, 15, 40, 25));
+      expect(controller.masks.first.mask.containsImagePixel(35, 20), isTrue);
 
       controller.undo();
 
-      expect(controller.masks.first.mask.containsImagePixel(33, 20), isFalse);
+      expect(controller.masks.first.mask.containsImagePixel(35, 20), isFalse);
     });
 
     test('buildFinalMasks drops a mask that was erased away', () {
@@ -96,8 +275,7 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(20);
-      controller.applyStroke([const Offset(13, 13)]);
+      controller.applyStroke(lassoBox(5, 5, 25, 25));
 
       expect(controller.maskCount, 1);
       expect(controller.buildFinalMasks(), isEmpty);
@@ -131,7 +309,6 @@ void main() {
         initialMasks: const [],
       );
       controller.addEmptyMask();
-      controller.setBrushRadius(2);
 
       // Trace the outline of a square without filling it in.
       controller.applyStroke(const [
@@ -154,16 +331,14 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(5);
 
-      controller.applyStroke([const Offset(30, 30)]);
+      controller.applyStroke(lassoBox(25, 25, 35, 35));
 
       // The gap is enclosed by the surrounding mask, so it is sealed again.
       expect(controller.masks.first.mask.containsImagePixel(30, 30), isTrue);
 
       // Erasing in from an edge still trims, which is what the tool is for.
-      controller.setBrushRadius(12);
-      controller.applyStroke([const Offset(10, 30)]);
+      controller.applyStroke(lassoBox(5, 25, 20, 35));
       expect(controller.masks.first.mask.containsImagePixel(10, 30), isFalse);
     });
 
@@ -191,10 +366,9 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(4);
 
       // Cut the bridge.
-      controller.applyStroke([const Offset(25, 10)]);
+      controller.applyStroke(lassoBox(20, 5, 30, 15));
 
       final mask = controller.masks.first.mask;
       expect(mask.containsImagePixel(45, 10), isTrue, reason: 'larger end');
@@ -202,7 +376,7 @@ void main() {
       expect(controller.buildFinalMasks(), hasLength(1));
     });
 
-    test('a detached dab of paint does not become a second piece', () {
+    test('paint drawn clear of the shape replaces it', () {
       final controller = MaskEditorController(
         imageWidth: kImageWidth,
         imageHeight: kImageHeight,
@@ -210,17 +384,33 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.paint);
-      controller.setBrushRadius(2);
 
-      // Paint well clear of the existing block.
-      controller.applyStroke([const Offset(80, 70)]);
+      // Redrawing the outline somewhere else means the first attempt was
+      // wrong, so the new loop wins even though it is much smaller.
+      controller.applyStroke(lassoBox(70, 60, 90, 75));
 
+      expect(controller.masks.first.mask.containsImagePixel(80, 70), isTrue);
       expect(
-        controller.masks.first.mask.containsImagePixel(80, 70),
+        controller.masks.first.mask.containsImagePixel(20, 20),
         isFalse,
-        reason: 'detached from the leaf, so it is not part of it',
+        reason: 'the shape it replaced is gone',
       );
+    });
+
+    test('undo brings back a shape a detached stroke replaced', () {
+      final controller = MaskEditorController(
+        imageWidth: kImageWidth,
+        imageHeight: kImageHeight,
+        initialMasks: [block(left: 10, top: 10, width: 30, height: 30)],
+      );
+      controller.select(controller.masks.first.id);
+      controller.setTool(MaskTool.paint);
+      controller.applyStroke(lassoBox(70, 60, 90, 75));
+
+      controller.undo();
+
       expect(controller.masks.first.mask.containsImagePixel(20, 20), isTrue);
+      expect(controller.masks.first.mask.containsImagePixel(80, 70), isFalse);
     });
 
     test('paint that bridges back to the leaf is kept', () {
@@ -231,12 +421,12 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.paint);
-      controller.setBrushRadius(3);
 
-      // A stroke starting on the leaf and extending outward stays connected.
-      controller.applyStroke(const [Offset(35, 25), Offset(60, 25)]);
+      // A loop overlapping the leaf and reaching past it stays joined on.
+      controller.applyStroke(lassoBox(35, 20, 60, 30));
 
       expect(controller.masks.first.mask.containsImagePixel(58, 25), isTrue);
+      expect(controller.masks.first.mask.containsImagePixel(15, 15), isTrue);
     });
 
     test('undo steps back over the whole normalized stroke', () {
@@ -247,8 +437,7 @@ void main() {
       );
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(6);
-      controller.applyStroke([const Offset(10, 25)]);
+      controller.applyStroke(lassoBox(5, 20, 18, 30));
       expect(controller.masks.first.mask.containsImagePixel(10, 25), isFalse);
 
       controller.undo();
@@ -267,8 +456,7 @@ void main() {
 
       controller.select(controller.masks.first.id);
       controller.setTool(MaskTool.erase);
-      controller.setBrushRadius(30);
-      controller.applyStroke([const Offset(20, 20)]);
+      controller.applyStroke(lassoBox(5, 5, 35, 35));
 
       expect(captured.containsImagePixel(20, 20), isTrue);
     });
@@ -277,8 +465,9 @@ void main() {
   group('MaskEditorPage', () {
     Future<BatchSegmentationRequest?> pumpPage(
       WidgetTester tester,
-      List<LeafMask> masks,
-    ) async {
+      List<LeafMask> masks, {
+      SegmentationSource source = SegmentationSource.sam,
+    }) async {
       BatchSegmentationRequest? result;
       await tester.pumpWidget(
         MaterialApp(
@@ -301,7 +490,7 @@ void main() {
                                   imageWidth: kImageWidth,
                                   imageHeight: kImageHeight,
                                   initialMasks: masks,
-                                  source: SegmentationSource.sam,
+                                  source: source,
                                 ),
                           ),
                         );
@@ -317,6 +506,72 @@ void main() {
       await tester.pumpAndSettle();
       return result;
     }
+
+    testWidgets('manual drawing opens the illustrated help from the app bar', (
+      tester,
+    ) async {
+      await pumpPage(tester, const [], source: SegmentationSource.manual);
+
+      expect(find.byKey(const Key('mask-drawing-help-button')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('mask-drawing-help-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('mask-drawing-help-dialog')), findsOneWidget);
+      expect(find.text('How to draw leaf masks'), findsOneWidget);
+      expect(find.text('Trace the first leaf'), findsOneWidget);
+      expect(find.text('Add the next leaf'), findsOneWidget);
+      for (var step = 1; step <= 4; step++) {
+        expect(find.byKey(Key('mask-help-step-$step')), findsOneWidget);
+      }
+
+      await tester.tap(find.byKey(const Key('close-mask-drawing-help-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('mask-drawing-help-dialog')), findsNothing);
+      expect(find.byKey(const Key('mask-editor-gesture-area')), findsOneWidget);
+    });
+
+    testWidgets('mask review opens its own illustrated help', (tester) async {
+      await pumpPage(tester, [block(left: 5, top: 5)]);
+
+      expect(find.byKey(const Key('mask-drawing-help-button')), findsNothing);
+      expect(find.byKey(const Key('mask-review-help-button')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('mask-review-help-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('mask-review-help-dialog')), findsOneWidget);
+      expect(find.text('How to review leaf masks'), findsOneWidget);
+      expect(find.text('Select a mask'), findsOneWidget);
+      expect(find.text('Correct the selected mask'), findsOneWidget);
+      expect(find.text('Handle missed or extra leaves'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('close-mask-review-help-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('mask-review-help-dialog')), findsNothing);
+      expect(find.byKey(const Key('mask-editor-gesture-area')), findsOneWidget);
+    });
+
+    testWidgets('opens on the pen, and the selector reaches the erase', (
+      tester,
+    ) async {
+      await pumpPage(tester, [block(left: 5, top: 5)]);
+
+      SegmentedButton<MaskTool> selector() =>
+          tester.widget(find.byKey(const Key('mask-tool-selector')));
+
+      // There is no tool for moving the view any more, so the editor has to
+      // open on one that draws.
+      expect(selector().selected, {MaskTool.paint});
+      expect(selector().segments, hasLength(2));
+
+      await tester.tap(find.text('Erase'));
+      await tester.pumpAndSettle();
+
+      expect(selector().selected, {MaskTool.erase});
+    });
 
     testWidgets('shows how many masks were loaded', (tester) async {
       await pumpPage(tester, [
@@ -360,8 +615,10 @@ void main() {
       final rect = tester.getRect(canvas);
       await tester.tapAt(
         rect.topLeft +
-            Offset(rect.width * 10 / kImageWidth,
-                rect.height * 10 / kImageHeight),
+            Offset(
+              rect.width * 10 / kImageWidth,
+              rect.height * 10 / kImageHeight,
+            ),
       );
       await tester.pumpAndSettle();
 
@@ -439,10 +696,7 @@ void main() {
         find.byKey(const Key('process-masks-button')),
       );
       expect(process.onPressed, isNull);
-      expect(
-        find.textContaining('Add at least one mask'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Add at least one mask'), findsOneWidget);
     });
   });
 }

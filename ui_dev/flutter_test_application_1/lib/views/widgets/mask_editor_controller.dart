@@ -5,24 +5,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/utils/mask_ops.dart';
 
-/// What a drag on the mask canvas does.
+/// What a left drag on the mask canvas does.
+///
+/// Both are lassos, never brushes: the line drawn is a boundary with no width
+/// of its own, and what it encloses is the region added or taken away. There
+/// is no tool for moving the view — the right button drags it and the wheel
+/// zooms it, whichever of these is selected.
 enum MaskTool {
-  /// Pan and zoom the image.
-  pan,
-
-  /// Add pixels to the selected mask.
+  /// Add what the line encloses to the selected mask.
   paint,
 
-  /// Remove pixels from the selected mask.
+  /// Take what the line encloses out of the selected mask.
   erase,
 }
 
 /// A mask in the editor, with a stable identity so selection survives edits.
 class EditableMask {
-  EditableMask({required this.id, required this.mask, required this.colorIndex});
+  EditableMask({
+    required this.id,
+    required this.mask,
+    required this.colorIndex,
+  });
 
   final int id;
+
+  /// The leaf: one solid region, whatever the lassos that built it enclosed.
   LeafMask mask;
+
   final int colorIndex;
 }
 
@@ -39,7 +48,7 @@ class MaskEditorController extends ChangeNotifier {
   }) {
     for (final mask in initialMasks) {
       // Normalize up front, so masks are one solid piece however they were
-      // sourced.
+      // sourced. A supplied region doubles as its own edge.
       _masks.add(
         EditableMask(
           id: _nextId++,
@@ -52,8 +61,16 @@ class MaskEditorController extends ChangeNotifier {
 
   /// Distinct hues so neighbouring leaves stay tellable apart. 0xRRGGBB.
   static const List<int> maskColors = [
-    0xE53935, 0x43A047, 0x1E88E5, 0xFDD835, 0x8E24AA,
-    0x00ACC1, 0xFB8C00, 0x3949AB, 0x00897B, 0xD81B60,
+    0xE53935,
+    0x43A047,
+    0x1E88E5,
+    0xFDD835,
+    0x8E24AA,
+    0x00ACC1,
+    0xFB8C00,
+    0x3949AB,
+    0x00897B,
+    0xD81B60,
   ];
 
   static const int _maxUndoDepth = 10;
@@ -68,8 +85,21 @@ class MaskEditorController extends ChangeNotifier {
   int _nextColorIndex = 0;
 
   int? _selectedId;
-  MaskTool _tool = MaskTool.pan;
-  double _brushRadiusImagePx = 24;
+  MaskTool _tool = MaskTool.paint;
+
+  /// Fixed boundary width in on-screen logical pixels, so the trace remains
+  /// visible but never asks the user to tune a value that does not change the
+  /// final lasso region.
+  ///
+  /// A pen, not a blob: the job is tracing the edge of a leaf, and
+  /// [fillMaskHoles] floods the outline afterwards, so width buys nothing and
+  /// costs precision.
+  static const double _traceWidthScreenPx = 2;
+
+  /// Image pixels covered by one on-screen pixel, pushed in by the canvas as
+  /// the layout and zoom change. 1.0 until a canvas reports otherwise, which
+  /// makes the two radii the same thing in tests.
+  double _imagePxPerScreenPx = 1;
 
   List<EditableMask> get masks => List.unmodifiable(_masks);
   int get maskCount => _masks.length;
@@ -85,7 +115,18 @@ class MaskEditorController extends ChangeNotifier {
   }
 
   MaskTool get tool => _tool;
-  double get brushRadiusImagePx => _brushRadiusImagePx;
+
+  /// The disc radius that draws the fixed-width boundary at the current zoom.
+  ///
+  /// A stamped disc of radius r is 2r+1 pixels across, so the requested width
+  /// converts as (w-1)/2 — halving it instead would draw a line nearly twice
+  /// as thick as the requested width. Zero is the useful floor: it is a
+  /// one-pixel trace, which is what outlining an edge zoomed in needs.
+  double get penRadiusImagePx {
+    final widthImagePx = _traceWidthScreenPx * _imagePxPerScreenPx;
+    return math.max(0.0, (widthImagePx - 1) / 2);
+  }
+
   bool get canUndo => _undoStack.isNotEmpty;
 
   /// Whether there is anything worth processing — the Process button's gate.
@@ -102,19 +143,22 @@ class MaskEditorController extends ChangeNotifier {
 
   void setTool(MaskTool tool) {
     if (_tool == tool) return;
-    // Painting needs a target; fall back to the first mask.
-    if (tool != MaskTool.pan && selected == null && _masks.isNotEmpty) {
+    // Drawing needs a target; fall back to the first mask.
+    if (selected == null && _masks.isNotEmpty) {
       _selectedId = _masks.first.id;
     }
     _tool = tool;
     notifyListeners();
   }
 
-  void setBrushRadius(double radius) {
-    final clamped = radius.clamp(1.0, 400.0);
-    if (_brushRadiusImagePx == clamped) return;
-    _brushRadiusImagePx = clamped;
-    notifyListeners();
+  /// Reports how many image pixels one on-screen pixel now covers.
+  ///
+  /// Deliberately silent: the canvas calls this from its layout pass, and
+  /// notifying there would rebuild mid-build. The canvas repaints itself when
+  /// the view transform changes.
+  void setViewScale(double imagePxPerScreenPx) {
+    if (imagePxPerScreenPx <= 0 || !imagePxPerScreenPx.isFinite) return;
+    _imagePxPerScreenPx = imagePxPerScreenPx;
   }
 
   /// Adds an empty mask, selects it, and switches to the paint tool so the next
@@ -145,29 +189,45 @@ class MaskEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Rasterizes a stroke through [imagePoints] (full-image pixel coordinates)
-  /// into the selected mask.
+  /// Applies a lasso stroke through [imagePoints] (full-image pixel
+  /// coordinates) to the selected mask.
   ///
-  /// The mask is normalized back to a single solid region afterwards, which has
-  /// two consequences worth knowing: erasing into the middle does not punch a
-  /// hole through the leaf (erase trims the outline), and an edit that would
-  /// leave two separate pieces keeps only the larger one. [undo] steps back
-  /// over the whole stroke, normalization included.
+  /// The line is a boundary, not paint: what it encloses is added to the mask,
+  /// or taken out of it when erasing. Its ends are joined if it does not close
+  /// on its own, so a loop drawn by hand around a leaf works, and a stroke
+  /// that encloses nothing even then — a dot, or a straight line — does
+  /// nothing at all rather than leaving a smear behind.
+  ///
+  /// Adding: a region that touches the mask extends it; one drawn clear of it
+  /// *replaces* it, because the loop just drawn is the leaf the user means.
+  /// Taking away: the mask is left one solid piece, so an erase inside a leaf
+  /// changes nothing (the hole seals) and one that severs it keeps the larger
+  /// part. [undo] steps back over the whole stroke.
   void applyStroke(List<Offset> imagePoints) {
     final target = selected;
-    if (target == null || imagePoints.isEmpty || _tool == MaskTool.pan) return;
+    if (target == null || imagePoints.isEmpty) return;
+
+    final points = [
+      for (final p in imagePoints) math.Point<double>(p.dx, p.dy),
+    ];
+    final region = lassoRegion(
+      points,
+      radius: penRadiusImagePx.round(),
+      imageWidth: imageWidth,
+      imageHeight: imageHeight,
+    );
+    if (region.isEmpty) return;
 
     _pushUndo(_UndoStep.edited(target.id, target.mask.deepCopy()));
-    target.mask = solidifyMask(
-      applyStrokeToMask(
-        target.mask,
-        [for (final p in imagePoints) math.Point<double>(p.dx, p.dy)],
-        radius: _brushRadiusImagePx.round(),
-        erase: _tool == MaskTool.erase,
-        imageWidth: imageWidth,
-        imageHeight: imageHeight,
-      ),
-    );
+    if (_tool == MaskTool.erase) {
+      target.mask = solidifyMask(subtractMask(target.mask, region));
+    } else {
+      // Anchored on the new region rather than the path that drew it, so the
+      // piece kept is always the one just added. The region is not empty, so
+      // it always has a pixel to anchor on.
+      final anchor = anyPixelIn(region)!;
+      target.mask = solidifyMaskAt(unionMask(target.mask, region), [anchor]);
+    }
     notifyListeners();
   }
 

@@ -6,6 +6,7 @@ import 'package:flutter_test_application_1/models/batch_segmentation_request.dar
 import 'package:flutter_test_application_1/models/leaf_mask.dart';
 import 'package:flutter_test_application_1/views/widgets/mask_editor_canvas.dart';
 import 'package:flutter_test_application_1/views/widgets/mask_editor_controller.dart';
+import 'package:flutter_test_application_1/views/widgets/mask_editor_help_dialog.dart';
 
 /// Paint, review and edit the leaf masks of a drone image before processing.
 ///
@@ -140,9 +141,24 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget._isManual ? 'Paint leaf masks' : 'Review segmentation masks',
+          widget._isManual ? 'Draw leaf masks' : 'Review segmentation masks',
         ),
         actions: [
+          IconButton(
+            key: Key(
+              widget._isManual
+                  ? 'mask-drawing-help-button'
+                  : 'mask-review-help-button',
+            ),
+            onPressed:
+                () =>
+                    widget._isManual
+                        ? showMaskDrawingHelpDialog(context)
+                        : showMaskReviewHelpDialog(context),
+            icon: const Icon(Icons.help_outline),
+            tooltip:
+                widget._isManual ? 'How to draw masks' : 'How to review masks',
+          ),
           IconButton(
             key: const Key('undo-mask-button'),
             onPressed: _controller.canUndo ? _controller.undo : null,
@@ -199,18 +215,13 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
                       key: const Key('mask-tool-selector'),
                       segments: const [
                         ButtonSegment(
-                          value: MaskTool.pan,
-                          icon: Icon(Icons.pan_tool_outlined),
-                          label: Text('Pan'),
-                        ),
-                        ButtonSegment(
                           value: MaskTool.paint,
-                          icon: Icon(Icons.brush),
-                          label: Text('Paint'),
+                          icon: Icon(Icons.edit_outlined),
+                          label: Text('Pen'),
                         ),
                         ButtonSegment(
                           value: MaskTool.erase,
-                          icon: Icon(Icons.auto_fix_normal),
+                          icon: Icon(Icons.edit_off_outlined),
                           label: Text('Erase'),
                         ),
                       ],
@@ -219,22 +230,7 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
                           (selection) => _controller.setTool(selection.first),
                     ),
                   ),
-                  Row(
-                    children: [
-                      const Icon(Icons.circle, size: 12),
-                      Expanded(
-                        child: Slider(
-                          key: const Key('brush-size-slider'),
-                          min: 2,
-                          max: 200,
-                          value: _controller.brushRadiusImagePx.clamp(2, 200),
-                          label: '${_controller.brushRadiusImagePx.round()} px',
-                          onChanged: _controller.setBrushRadius,
-                        ),
-                      ),
-                      const Icon(Icons.circle, size: 24),
-                    ],
-                  ),
+                  const SizedBox(height: 12),
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 12,
@@ -254,8 +250,7 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
                       ),
                       FilledButton.icon(
                         key: const Key('process-masks-button'),
-                        onPressed:
-                            _controller.hasUsableMasks ? _process : null,
+                        onPressed: _controller.hasUsableMasks ? _process : null,
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Process'),
                       ),
@@ -274,7 +269,8 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
   String _statusLine(bool hasSelection) {
     if (!_controller.hasUsableMasks) {
       return widget._isManual
-          ? 'Paint over a leaf to mask it, then add a mask for the next one.'
+          ? 'Draw a line round a leaf to mask it — the loop is closed and '
+              'filled for you. Right-drag moves the image, the wheel zooms it.'
           : 'Add at least one mask before processing.';
     }
     final dropped = widget.droppedEmptyCount;
@@ -285,9 +281,10 @@ class _MaskEditorPageState extends State<MaskEditorPage> {
             ? ' (1 empty mask in the file was ignored)'
             : ' ($dropped empty masks in the file were ignored)';
     if (!hasSelection) {
-      return 'Tap a mask to select it, then paint or erase to adjust it.'
-          '$droppedNote';
+      return 'Tap a mask to select it, then draw round what to add or take '
+          'away. Right-drag moves the image, the wheel zooms it.$droppedNote';
     }
-    return 'Each mask becomes one leaf.$droppedNote';
+    return 'Draw round what to add to this mask or take out of it. Right-drag '
+        'moves the image, the wheel zooms it.$droppedNote';
   }
 }

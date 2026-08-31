@@ -42,7 +42,7 @@ class SegmentationModePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Paint over each leaf yourself, or load a SAM mask file (.npy) generated for this image.',
+                    'Trace each leaf yourself, or load a SAM mask file (.npy) generated for this image.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -54,7 +54,7 @@ class SegmentationModePage extends StatelessWidget {
                     onPressed:
                         () =>
                             Navigator.of(context).pop(SegmentationMode.manual),
-                    icon: const Icon(Icons.brush),
+                    icon: const Icon(Icons.edit_outlined),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 14),
                       child: Text('Manual segmentation'),

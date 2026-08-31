@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_test_application_1/utils/mask_ops.dart';
@@ -44,18 +45,56 @@ class _MaskEditorCanvasState extends State<MaskEditorCanvas> {
   List<Offset> _strokePoints = const [];
   Size _canvasSize = Size.zero;
 
+  /// Owned rather than left to [InteractiveViewer] so the zoom level can be
+  /// read back: the pen is sized in screen pixels, so it needs the scale.
+  final TransformationController _viewTransform = TransformationController();
+
+  /// Fingers currently down, and whether this gesture ever had two of them.
+  ///
+  /// The latch matters: lifting one finger of a pinch must not let the other
+  /// carry on as a stroke, so it only clears once every finger is up.
+  int _pointers = 0;
+  bool _pinching = false;
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
+    _viewTransform.addListener(_onViewChanged);
     _regenerateOverlay();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
+    _viewTransform.removeListener(_onViewChanged);
+    _viewTransform.dispose();
     _overlay?.dispose();
     super.dispose();
+  }
+
+  /// Zooming changes how many image pixels the pen covers, so the controller
+  /// is told the new scale straight away — a stroke started after this must
+  /// use it.
+  ///
+  /// Repainting is another matter: the only thing on screen that reads the
+  /// scale is the stroke preview, so a wheel notch or a pinch frame rebuilds
+  /// nothing unless a stroke is actually in progress.
+  void _onViewChanged() {
+    if (!mounted) return;
+    if (_canvasSize.width > 0) {
+      widget.controller.setViewScale(
+        _imagePxPerScreenPx(_canvasSize.width / widget.imageWidth),
+      );
+    }
+    if (_strokePoints.isNotEmpty) setState(() {});
+  }
+
+  /// Image pixels spanned by one on-screen pixel at the current zoom.
+  double _imagePxPerScreenPx(double displayScale) {
+    final zoom = _viewTransform.value.getMaxScaleOnAxis();
+    if (displayScale <= 0 || zoom <= 0) return 1;
+    return 1 / (displayScale * zoom);
   }
 
   void _onControllerChanged() {
@@ -146,20 +185,18 @@ class _MaskEditorCanvasState extends State<MaskEditorCanvas> {
   }
 
   void _handleTap(Offset local) {
-    final point = _toImageSpace(local);
-    final index = widget.controller.hitTest(point);
-    if (index != null) {
-      widget.controller.select(widget.controller.masks[index].id);
-      return;
-    }
-    // With the brush armed, a tap on bare image is a dab, not a request to
-    // deselect: deselecting would leave the brush inert, and painting a mask
-    // from scratch starts with nothing under the cursor to aim at.
-    if (widget.controller.tool != MaskTool.pan) {
-      widget.controller.applyStroke([point]);
-      return;
-    }
-    widget.controller.select(null);
+    final index = widget.controller.hitTest(_toImageSpace(local));
+    // A tap on bare image is left alone: it encloses nothing, so there is no
+    // lasso in it, and dropping the selection would leave the pen with nothing
+    // to draw into. Tapping the selected mask again is how it is let go.
+    if (index == null) return;
+    final id = widget.controller.masks[index].id;
+    widget.controller.select(id == widget.controller.selectedId ? null : id);
+  }
+
+  void _releasePointer() {
+    _pointers = math.max(0, _pointers - 1);
+    if (_pointers == 0) _pinching = false;
   }
 
   void _endStroke() {
@@ -172,7 +209,6 @@ class _MaskEditorCanvasState extends State<MaskEditorCanvas> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final drawing = controller.tool != MaskTool.pan;
     final aspectRatio = widget.imageWidth / widget.imageHeight;
     final selected = controller.selected;
 
@@ -186,84 +222,115 @@ class _MaskEditorCanvasState extends State<MaskEditorCanvas> {
         }
         _canvasSize = Size(width, height);
         final displayScale = width / widget.imageWidth;
+        // Silent by contract, so this layout pass does not trigger a rebuild.
+        controller.setViewScale(_imagePxPerScreenPx(displayScale));
 
         return Center(
           child: SizedBox(
             width: width,
             height: height,
             child: InteractiveViewer(
+              transformationController: _viewTransform,
               maxScale: 8,
-              // Panning the view and painting into a mask are the same gesture,
-              // so only one of them can be live at a time.
-              panEnabled: !drawing,
-              scaleEnabled: !drawing,
-              child: GestureDetector(
-                key: const Key('mask-editor-gesture-area'),
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (details) => _handleTap(details.localPosition),
-                onPanStart:
-                    drawing
-                        ? (details) => setState(() {
-                          _strokePoints = [
-                            _toImageSpace(details.localPosition),
-                          ];
-                        })
-                        : null,
-                onPanUpdate:
-                    drawing
-                        ? (details) => setState(() {
-                          _strokePoints = [
-                            ..._strokePoints,
-                            _toImageSpace(details.localPosition),
-                          ];
-                        })
-                        : null,
-                onPanEnd: drawing ? (_) => _endStroke() : null,
-                onPanCancel:
-                    drawing
-                        ? () => setState(() => _strokePoints = const [])
-                        : null,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.memory(
-                      widget.imageBytes,
-                      fit: BoxFit.fill,
-                      gaplessPlayback: true,
-                      semanticLabel: 'Drone image with segmentation masks',
-                    ),
-                    if (_overlay case final overlay?)
+              // Left drags are strokes and never reach here: a drag
+              // recognizer only accepts the primary button, so the right
+              // button is what moves the view. The wheel zooms it. A stroke
+              // claims one pointer only, so a second finger reaches this and
+              // drags the view instead. Neither can be confused with drawing,
+              // so there is no mode to switch to.
+              child: Listener(
+                behavior: HitTestBehavior.deferToChild,
+                onPointerDown: (_) {
+                  _pointers++;
+                  // A second finger means a pinch. Drop whatever the first one
+                  // had started so the zoom does not leave a stroke behind.
+                  if (_pointers > 1) {
+                    _pinching = true;
+                    if (_strokePoints.isNotEmpty) {
+                      setState(() => _strokePoints = const []);
+                    }
+                  }
+                },
+                onPointerUp: (_) => _releasePointer(),
+                onPointerCancel: (_) => _releasePointer(),
+                child: RawGestureDetector(
+                  key: const Key('mask-editor-gesture-area'),
+                  behavior: HitTestBehavior.opaque,
+                  gestures: <Type, GestureRecognizerFactory>{
+                    TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      TapGestureRecognizer
+                    >(TapGestureRecognizer.new, (recognizer) {
+                      recognizer.onTapUp =
+                          (details) => _handleTap(details.localPosition);
+                    }),
+                    _StrokeRecognizer: GestureRecognizerFactoryWithHandlers<
+                      _StrokeRecognizer
+                    >(_StrokeRecognizer.new, (recognizer) {
+                      recognizer
+                        ..onStart = (details) {
+                          if (_pinching) return;
+                          setState(() {
+                            _strokePoints = [
+                              _toImageSpace(details.localPosition),
+                            ];
+                          });
+                        }
+                        ..onUpdate = (details) {
+                          if (_pinching) return;
+                          setState(() {
+                            _strokePoints = [
+                              ..._strokePoints,
+                              _toImageSpace(details.localPosition),
+                            ];
+                          });
+                        }
+                        ..onEnd = ((_) => _endStroke())
+                        ..onCancel =
+                            (() => setState(() => _strokePoints = const []));
+                    }),
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.memory(
+                        widget.imageBytes,
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                        semanticLabel: 'Drone image with segmentation masks',
+                      ),
+                      if (_overlay case final overlay?)
+                        IgnorePointer(
+                          child: CustomPaint(
+                            painter: _MaskOverlayPainter(overlay: overlay),
+                          ),
+                        ),
                       IgnorePointer(
                         child: CustomPaint(
-                          painter: _MaskOverlayPainter(overlay: overlay),
+                          painter: _StrokePainter(
+                            points: _strokePoints,
+                            displayScale: displayScale,
+                            penRadius: controller.penRadiusImagePx,
+                            erasing: controller.tool == MaskTool.erase,
+                            color:
+                                selected == null
+                                    ? Theme.of(context).colorScheme.tertiary
+                                    : Color(
+                                      0xFF000000 | controller.colorOf(selected),
+                                    ),
+                            selectedBounds:
+                                selected == null || selected.mask.isEmpty
+                                    ? null
+                                    : Rect.fromLTWH(
+                                      selected.mask.left * displayScale,
+                                      selected.mask.top * displayScale,
+                                      selected.mask.width * displayScale,
+                                      selected.mask.height * displayScale,
+                                    ),
+                          ),
                         ),
                       ),
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: _StrokePainter(
-                          points: _strokePoints,
-                          displayScale: displayScale,
-                          brushRadius: controller.brushRadiusImagePx,
-                          erasing: controller.tool == MaskTool.erase,
-                          color:
-                              selected == null
-                                  ? Theme.of(context).colorScheme.tertiary
-                                  : Color(
-                                    0xFF000000 | controller.colorOf(selected),
-                                  ),
-                          selectedBounds:
-                              selected == null || selected.mask.isEmpty
-                                  ? null
-                                  : Rect.fromLTWH(
-                                    selected.mask.left * displayScale,
-                                    selected.mask.top * displayScale,
-                                    selected.mask.width * displayScale,
-                                    selected.mask.height * displayScale,
-                                  ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -283,12 +350,7 @@ class _MaskOverlayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawImageRect(
       overlay,
-      Rect.fromLTWH(
-        0,
-        0,
-        overlay.width.toDouble(),
-        overlay.height.toDouble(),
-      ),
+      Rect.fromLTWH(0, 0, overlay.width.toDouble(), overlay.height.toDouble()),
       Offset.zero & size,
       Paint()..filterQuality = FilterQuality.low,
     );
@@ -303,7 +365,7 @@ class _StrokePainter extends CustomPainter {
   const _StrokePainter({
     required this.points,
     required this.displayScale,
-    required this.brushRadius,
+    required this.penRadius,
     required this.erasing,
     required this.color,
     required this.selectedBounds,
@@ -311,7 +373,7 @@ class _StrokePainter extends CustomPainter {
 
   final List<Offset> points;
   final double displayScale;
-  final double brushRadius;
+  final double penRadius;
   final bool erasing;
   final Color color;
   final Rect? selectedBounds;
@@ -333,35 +395,93 @@ class _StrokePainter extends CustomPainter {
         Paint()
           ..color = erasing ? Colors.white.withValues(alpha: 0.8) : color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = brushRadius * 2 * displayScale
+          // 2r+1 image pixels wide, and never thinner than a hairline, so a
+          // one-pixel nib still previews where the line will land.
+          ..strokeWidth = math.max(1.0, (penRadius * 2 + 1) * displayScale)
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
 
-    final path = Path()
-      ..moveTo(points.first.dx * displayScale, points.first.dy * displayScale);
+    final path =
+        Path()..moveTo(
+          points.first.dx * displayScale,
+          points.first.dy * displayScale,
+        );
     for (final p in points.skip(1)) {
       path.lineTo(p.dx * displayScale, p.dy * displayScale);
     }
     if (points.length == 1) {
       canvas.drawCircle(
-        Offset(
-          points.first.dx * displayScale,
-          points.first.dy * displayScale,
-        ),
-        brushRadius * displayScale,
+        Offset(points.first.dx * displayScale, points.first.dy * displayScale),
+        math.max(0.5, (penRadius + 0.5) * displayScale),
         paint..style = PaintingStyle.fill,
       );
       return;
     }
     canvas.drawPath(path, paint);
+
+    // The stroke is closed for the user on release, and where that join lands
+    // decides what ends up enclosed. Dashed, so it reads as the part they have
+    // not drawn.
+    if (points.length > 2) {
+      _dash(
+        canvas,
+        Offset(points.last.dx * displayScale, points.last.dy * displayScale),
+        Offset(points.first.dx * displayScale, points.first.dy * displayScale),
+        paint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.0, paint.strokeWidth / 2),
+      );
+    }
+  }
+
+  /// A dashed line from [from] to [to], 6 on 6 off.
+  void _dash(Canvas canvas, Offset from, Offset to, Paint paint) {
+    final span = to - from;
+    final length = span.distance;
+    if (length == 0) return;
+    final step = span / length;
+    for (var at = 0.0; at < length; at += 12) {
+      canvas.drawLine(
+        from + step * at,
+        from + step * math.min(at + 6, length),
+        paint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _StrokePainter oldDelegate) {
     return oldDelegate.points != points ||
         oldDelegate.selectedBounds != selectedBounds ||
-        oldDelegate.brushRadius != brushRadius ||
+        oldDelegate.penRadius != penRadius ||
         oldDelegate.erasing != erasing ||
         oldDelegate.color != color;
+  }
+}
+
+/// A drag recognizer for one stroke, which claims a single pointer.
+///
+/// [PanGestureRecognizer] would win the arena for every pointer on the canvas,
+/// including the second finger of a pinch, leaving [InteractiveViewer] nothing
+/// to work with. Refusing the extra pointer lets the viewer have it, so two
+/// fingers move the image on a touch screen the way the right button does with
+/// a mouse.
+class _StrokeRecognizer extends PanGestureRecognizer {
+  int? _claimed;
+
+  @override
+  bool isPointerAllowed(PointerEvent event) =>
+      _claimed == null && super.isPointerAllowed(event);
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _claimed = event.pointer;
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _claimed = null;
+    super.didStopTrackingLastPointer(pointer);
   }
 }

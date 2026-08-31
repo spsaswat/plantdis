@@ -173,13 +173,7 @@ void main() {
       for (final i in [1, 3, 5, 7]) {
         bytes[i] = 1;
       }
-      final mask = LeafMask(
-        left: 0,
-        top: 0,
-        width: 3,
-        height: 3,
-        bytes: bytes,
-      );
+      final mask = LeafMask(left: 0, top: 0, width: 3, height: 3, bytes: bytes);
 
       final filled = fillMaskHoles(mask);
 
@@ -287,13 +281,7 @@ void main() {
       for (final i in [0, 1, 4, 5, 10, 11, 14, 15]) {
         bytes[i] = 1;
       }
-      final mask = LeafMask(
-        left: 0,
-        top: 0,
-        width: 4,
-        height: 4,
-        bytes: bytes,
-      );
+      final mask = LeafMask(left: 0, top: 0, width: 4, height: 4, bytes: bytes);
 
       expect(keepLargestRegion(mask).pixelCount, 8);
     });
@@ -308,6 +296,250 @@ void main() {
       );
 
       expect(keepLargestRegion(empty).isEmpty, isTrue);
+    });
+  });
+
+  group('lassoRegion', () {
+    List<math.Point<double>> boxPath(double l, double t, double r, double b) =>
+        [
+          math.Point(l, t),
+          math.Point(r, t),
+          math.Point(r, b),
+          math.Point(l, b),
+          math.Point(l, t),
+        ];
+
+    test('encloses the box the path went round, whatever the nib', () {
+      for (final radius in const [0, 4]) {
+        final region = lassoRegion(
+          boxPath(20, 20, 60, 60),
+          radius: radius,
+          imageWidth: 100,
+          imageHeight: 100,
+        );
+
+        expect(region.containsImagePixel(40, 40), isTrue);
+        expect(region.left, closeTo(20, 1), reason: 'radius $radius');
+        expect(region.width, closeTo(41, 2), reason: 'radius $radius');
+      }
+    });
+
+    test('joins the ends of a path that does not close', () {
+      // Three sides of a box.
+      final region = lassoRegion(
+        const [
+          math.Point(60.0, 20.0),
+          math.Point(20.0, 20.0),
+          math.Point(20.0, 60.0),
+          math.Point(60.0, 60.0),
+        ],
+        radius: 0,
+        imageWidth: 100,
+        imageHeight: 100,
+      );
+
+      expect(region.containsImagePixel(40, 40), isTrue);
+      expect(region.containsImagePixel(58, 40), isTrue, reason: 'to the join');
+    });
+
+    test('a dot and a straight line enclose nothing', () {
+      expect(
+        lassoRegion(
+          const [math.Point(50.0, 50.0)],
+          radius: 0,
+          imageWidth: 100,
+          imageHeight: 100,
+        ).isEmpty,
+        isTrue,
+      );
+      expect(
+        lassoRegion(
+          const [math.Point(20.0, 50.0), math.Point(80.0, 50.0)],
+          radius: 0,
+          imageWidth: 100,
+          imageHeight: 100,
+        ).isEmpty,
+        isTrue,
+      );
+    });
+
+    test('a hairline path is continuous, so the loop seals', () {
+      // Radius 0 has no disc to stamp, only the pixel under the nib, and the
+      // samples along a fast drag are far apart.
+      final region = lassoRegion(
+        boxPath(10, 10, 90, 90),
+        radius: 0,
+        imageWidth: 100,
+        imageHeight: 100,
+      );
+
+      expect(region.containsImagePixel(50, 50), isTrue, reason: 'no leaks');
+    });
+  });
+
+  group('growWithin', () {
+    /// A 7x3 bar of two 3x3 blocks with a single column between them.
+    LeafMask bar() {
+      final bytes = Uint8List(7 * 3)..fillRange(0, 21, 1);
+      return LeafMask(left: 0, top: 0, width: 7, height: 3, bytes: bytes);
+    }
+
+    test('grows the seed outward through the mask', () {
+      final seed = filled(left: 0, top: 0, width: 1, height: 3);
+
+      final grown = growWithin(seed, bar(), 2);
+
+      expect(grown.containsImagePixel(2, 1), isTrue, reason: 'two steps out');
+      expect(
+        grown.containsImagePixel(3, 1),
+        isFalse,
+        reason: 'three is too far',
+      );
+    });
+
+    test('stops at the edge of the mask it grows through', () {
+      // Two blocks with a gap: nothing bridges it, however many steps.
+      final bytes = Uint8List(7 * 3);
+      for (var y = 0; y < 3; y++) {
+        for (final x in const [0, 1, 2, 4, 5, 6]) {
+          bytes[y * 7 + x] = 1;
+        }
+      }
+      final split = LeafMask(
+        left: 0,
+        top: 0,
+        width: 7,
+        height: 3,
+        bytes: bytes,
+      );
+      final seed = filled(left: 0, top: 0, width: 1, height: 3);
+
+      final grown = growWithin(seed, split, 6);
+
+      expect(grown.containsImagePixel(2, 1), isTrue, reason: 'its own block');
+      expect(grown.containsImagePixel(3, 1), isFalse, reason: 'the gap');
+      expect(grown.containsImagePixel(5, 1), isFalse, reason: 'across it');
+    });
+
+    test('clips the seed to the mask at zero steps', () {
+      final seed = filled(left: 0, top: 0, width: 9, height: 3);
+
+      final clipped = growWithin(seed, bar(), 0);
+
+      expect(clipped.width, 7);
+      expect(clipped.pixelCount, 21);
+    });
+
+    test('copes with an empty mask to grow through', () {
+      final empty = LeafMask.emptyAt(imageWidth: 8, imageHeight: 8);
+
+      expect(
+        growWithin(
+          filled(left: 0, top: 0, width: 2, height: 2),
+          empty.tightened(),
+          3,
+        ).isEmpty,
+        isTrue,
+      );
+    });
+  });
+
+  group('keepRegionAt', () {
+    /// A 4-wide block at x 0..3 and an 8-wide block at x 9..16, both 6 tall.
+    LeafMask twoBlocks() {
+      const height = 6;
+      const gap = 5;
+      const width = 4 + gap + 8;
+      final bytes = Uint8List(width * height);
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < 4; x++) {
+          bytes[y * width + x] = 1;
+        }
+        for (var x = 4 + gap; x < width; x++) {
+          bytes[y * width + x] = 1;
+        }
+      }
+      return LeafMask(
+        left: 0,
+        top: 0,
+        width: width,
+        height: height,
+        bytes: bytes,
+      );
+    }
+
+    test('keeps the seeded region even when it is the smaller one', () {
+      final kept = keepRegionAt(twoBlocks(), const [math.Point(1, 3)]);
+
+      expect(kept.left, 0);
+      expect(kept.width, 4);
+      expect(kept.containsImagePixel(1, 3), isTrue);
+      expect(kept.containsImagePixel(12, 3), isFalse);
+    });
+
+    test('keeps the region the seeds cover most when they straddle two', () {
+      final kept = keepRegionAt(twoBlocks(), const [
+        math.Point(1, 3),
+        math.Point(11, 3),
+        math.Point(13, 3),
+      ]);
+
+      expect(kept.left, 9);
+      expect(kept.width, 8);
+    });
+
+    test('falls back to the largest region when no seed lands on the mask', () {
+      // Seeds in the gap belong to no region at all.
+      final kept = keepRegionAt(twoBlocks(), const [math.Point(6, 3)]);
+
+      expect(kept.left, 9);
+      expect(kept.width, 8);
+    });
+
+    test('copes with an empty mask', () {
+      final kept = keepRegionAt(
+        LeafMask.emptyAt(imageWidth: 20, imageHeight: 20),
+        const [math.Point(5, 5)],
+      );
+
+      expect(kept.isEmpty, isTrue);
+    });
+  });
+
+  group('solidifyMaskAt', () {
+    test('an outline drawn clear of the old shape fills and replaces it', () {
+      // An existing solid leaf, plus a ring drawn well away from it.
+      var mask = filled(left: 0, top: 0, width: 60, height: 60);
+      mask = mask.expandedToInclude(
+        const math.Rectangle<int>(0, 0, 200, 200),
+        imageWidth: 200,
+        imageHeight: 200,
+      );
+      final ring = <math.Point<double>>[];
+      for (var angle = 0; angle < 360; angle += 5) {
+        final radians = angle * math.pi / 180;
+        ring.add(
+          math.Point<double>(
+            140 + 25 * math.cos(radians),
+            140 + 25 * math.sin(radians),
+          ),
+        );
+      }
+      final painted = applyStrokeToMask(
+        mask,
+        ring,
+        radius: 2,
+        erase: false,
+        imageWidth: 200,
+        imageHeight: 200,
+      );
+
+      final solid = solidifyMaskAt(painted, ring);
+
+      // The ring became a filled disc...
+      expect(solid.containsImagePixel(140, 140), isTrue);
+      // ...and the leaf it was drawn to replace is gone, despite being bigger.
+      expect(solid.containsImagePixel(30, 30), isFalse);
     });
   });
 
@@ -332,13 +564,7 @@ void main() {
       }
 
       final solid = solidifyMask(
-        LeafMask(
-          left: 0,
-          top: 0,
-          width: size,
-          height: size,
-          bytes: bytes,
-        ),
+        LeafMask(left: 0, top: 0, width: size, height: size, bytes: bytes),
       );
 
       expect(solid.pixelCount, size * size);
@@ -359,13 +585,7 @@ void main() {
       bytes[3 * width + 17] = 1;
 
       final solid = solidifyMask(
-        LeafMask(
-          left: 0,
-          top: 0,
-          width: width,
-          height: height,
-          bytes: bytes,
-        ),
+        LeafMask(left: 0, top: 0, width: width, height: height, bytes: bytes),
       );
 
       expect(solid.width, 10);
