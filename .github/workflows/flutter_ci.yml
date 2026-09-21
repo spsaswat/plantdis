@@ -36,3 +36,66 @@ jobs:
 
       - name: Build Android APK
         run: flutter build apk --debug
+
+  build-platforms:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: iOS
+            os: macos-latest
+            command: flutter build ios --debug --no-codesign
+          - platform: Windows
+            os: windows-latest
+            command: flutter build windows --debug
+          - platform: macOS
+            os: macos-latest
+            command: flutter build macos --debug
+          - platform: Linux
+            os: ubuntu-latest
+            command: flutter build linux --debug
+    defaults:
+      run:
+        working-directory: ui_dev/flutter_test_application_1
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.7'
+          cache: true
+
+      - name: Enable desktop platform
+        if: matrix.platform != 'iOS'
+        run: |
+          case '${{ matrix.platform }}' in
+            Windows) flutter config --enable-windows-desktop ;;
+            macOS) flutter config --enable-macos-desktop ;;
+            Linux) flutter config --enable-linux-desktop ;;
+          esac
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Desktop CMake installs this file beside the executable.
+      - name: Prepare desktop build configuration
+        if: matrix.platform == 'Windows' || matrix.platform == 'Linux'
+        run: cp assets/secrets/api_config.json api_config.json
+
+      - name: Build ${{ matrix.platform }}
+        # Forward Xcode build settings through Flutter, without a signing certificate.
+        env:
+          FLUTTER_XCODE_CODE_SIGNING_ALLOWED: 'NO'
+          FLUTTER_XCODE_CODE_SIGNING_REQUIRED: 'NO'
+        run: ${{ matrix.command }}
