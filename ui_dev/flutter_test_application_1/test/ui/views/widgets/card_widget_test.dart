@@ -1,268 +1,222 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:cloud_firestore_platform_interface/cloud_firestore_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import 'package:flutter_test_application_1/models/image_model.dart';
-import 'package:flutter_test_application_1/services/plant_service.dart';
+import 'package:flutter_test_application_1/services/local_guest_service.dart';
 import 'package:flutter_test_application_1/views/widgets/card_widget.dart';
 import 'package:flutter_test_application_1/views/pages/segment_page.dart';
+import '../../../helpers/test_helpers.dart';
+import '../../../helpers/card_test_helpers.dart';
 
-// Mock Dependencies
-class MockPlantService extends Mock implements PlantService {}
+class _Routes extends NavigatorObserver {
+  final pushed = <Route<dynamic>>[];
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      pushed.add(route);
+}
 
 void main() {
-  late MockPlantService mockPlantService;
-
+  final store = CardTestFirestore();
+  setUpAll(() async {
+    await TestHelpers.setupFirebaseMocks();
+    FirebaseFirestorePlatform.instance = store;
+  });
   setUp(() {
-    mockPlantService = MockPlantService();
+    store.reset();
+    TestHelpers.auth.reset();
+    TestHelpers.auth.user = CardTestUser(TestHelpers.auth);
+    LocalGuestService().setLocalGuestMode(false);
   });
 
-  // Helper: Wrap widget with Material context
-  Widget wrapWithMaterial({required CardWidget child}) {
-    return MaterialApp(home: Scaffold(body: child));
+  Map<String, dynamic> imageData() =>
+      ImageModel(
+        imageId: 'img_001',
+        plantId: 'plant_001',
+        userId: 'test-user',
+        originalUrl: 'https://test.invalid/image.png',
+        processedUrls: {},
+        uploadTime: DateTime(2025),
+      ).toMap();
+
+  Future<void> pumpCard(
+    WidgetTester tester, {
+    bool completed = true,
+    String? imageId,
+    VoidCallback? onDelete,
+    _Routes? routes,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorObservers: [if (routes != null) routes],
+        home: Scaffold(
+          body: CardWidget(
+            title: 'Test Plant',
+            description: 'Test description',
+            completed: completed,
+            plantId: 'plant_001',
+            imageId: imageId,
+            onDelete: onDelete,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
   }
 
-  group('CardWidget Display Tests', () {
-    testWidgets(
-      'Shows title, description, and default error icon when no imageId',
-      (WidgetTester tester) async {
-        final card = CardWidget(
-          title: 'Test Plant',
-          description: 'Test Description for Plant Disease',
-          completed: true,
-          plantId: 'plant_001',
-        );
+  Future<void> confirmDelete(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pump();
+  }
 
-        await tester.pumpWidget(wrapWithMaterial(child: card));
-        await tester.pumpAndSettle();
-
-        // Verify core text display
-        expect(find.text('Test Plant'), findsOneWidget);
-        expect(find.text('Test Description for Plant Disease'), findsOneWidget);
-        // Verify error icon (no imageId → error asset)
-        expect(
-          find.byAssetImage('assets/images/error_icon.png'),
-          findsOneWidget,
-        );
-        // Verify delete button
-        expect(find.byIcon(Icons.delete_outline), findsOneWidget);
-      },
-    );
-
-    testWidgets('Loads network image successfully when imageId is provided', (
-      WidgetTester tester,
-    ) async {
-      // Mock image data response
-      final mockImages = [
-        ImageModel(
-          imageId: 'img_001',
-          plantId: 'plant_001',
-          userId: 'user_001',
-          originalUrl: 'https://test-url.com/image.jpg',
-          processedUrls: {'thumbnail': 'https://test-url.com/thumb.jpg'},
-          uploadTime: DateTime.now(),
-        ),
-      ];
-      when(
-        mockPlantService.getPlantImages('plant_001'),
-      ).thenAnswer((_) async => mockImages);
-
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: true,
-        imageId: 'img_001',
-        plantId: 'plant_001',
-      );
-
-      await tester.pumpWidget(wrapWithMaterial(child: card));
-      await tester.pumpAndSettle(); // Wait for FutureBuilder
-
-      // Verify no error icon
-      expect(find.byAssetImage('assets/images/error_icon.png'), findsNothing);
-    });
-
-    testWidgets('Shows error icon when image fetch fails', (
-      WidgetTester tester,
-    ) async {
-      // Mock failed image fetch
-      when(
-        mockPlantService.getPlantImages('plant_001'),
-      ).thenThrow(Exception('Fetch Failed'));
-
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: true,
-        imageId: 'img_001',
-        plantId: 'plant_001',
-      );
-
-      await tester.pumpWidget(wrapWithMaterial(child: card));
-      await tester.pumpAndSettle();
-
-      // Verify error icon fallback
-      expect(find.byAssetImage('assets/images/error_icon.png'), findsOneWidget);
-    });
-
-    testWidgets('Applies opacity to image when not completed', (
-      WidgetTester tester,
-    ) async {
-      final mockImages = [
-        ImageModel(
-          imageId: 'img_001',
-          plantId: 'plant_001',
-          userId: 'user_001',
-          originalUrl: 'https://test-url.com/image.jpg',
-          processedUrls: {},
-          uploadTime: DateTime.now(),
-        ),
-      ];
-      when(
-        mockPlantService.getPlantImages('plant_001'),
-      ).thenAnswer((_) async => mockImages);
-
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: false, // Not completed → opacity 0.75
-        imageId: 'img_001',
-        plantId: 'plant_001',
-      );
-
-      await tester.pumpWidget(wrapWithMaterial(child: card));
-      await tester.pumpAndSettle();
-
-      // Verify Opacity widget exists
-      final opacityWidget = tester.widget<Opacity>(find.byType(Opacity));
-      expect(opacityWidget.opacity, 0.75);
-    });
+  testWidgets('Missing image shows fallback icon and plant text', (
+    tester,
+  ) async {
+    await pumpCard(tester);
+    expect(find.text('Test Plant'), findsOneWidget);
+    expect(find.text('Test description'), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+    expect(store.queried, isEmpty);
   });
 
-  group('CardWidget Interaction Tests', () {
+  testWidgets(
+    'Fetched image URL is displayed and pending card dims thumbnail',
+    (tester) async {
+      store.images = [imageData()];
+      await HttpOverrides.runZoned(() async {
+        await pumpCard(tester, imageId: 'img_001', completed: false);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+        });
+        await tester.pump();
+        expect(store.queried, ['images']);
+        final image = tester.widget<Image>(find.byType(Image));
+        expect(
+          (image.image as NetworkImage).url,
+          'https://test.invalid/image.png',
+        );
+        final opacity = tester.widget<Opacity>(
+          find
+              .ancestor(of: find.byType(Image), matching: find.byType(Opacity))
+              .first,
+        );
+        expect(opacity.opacity, 0.75);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, createHttpClient: ImageHttpOverrides().createHttpClient);
+    },
+  );
+
+  for (final queryFails in [false, true]) {
     testWidgets(
-      'Navigates to SegmentPage when tapped (completed & image exists)',
-      (WidgetTester tester) async {
-        final mockImages = [
-          ImageModel(
-            imageId: 'img_001',
-            plantId: 'plant_001',
-            userId: 'user_001',
-            originalUrl: 'https://test-url.com/image.jpg',
-            processedUrls: {},
-            uploadTime: DateTime.now(),
-          ),
-        ];
-        when(
-          mockPlantService.getPlantImages('plant_001'),
-        ).thenAnswer((_) async => mockImages);
-
-        final card = CardWidget(
-          title: 'Test Plant',
-          description: 'Test Description',
-          completed: true,
-          imageId: 'img_001',
-          plantId: 'plant_001',
-        );
-
-        await tester.pumpWidget(wrapWithMaterial(child: card));
-        await tester.pumpAndSettle();
-
-        // Tap the card
-        await tester.tap(find.byType(CardWidget));
-        await tester.pumpAndSettle();
-
-        // Verify navigation to SegmentPage
-        expect(find.byType(SegmentPage), findsOneWidget);
-        // Verify SegmentPage receives correct arguments
-        final segmentPage = tester.widget<SegmentPage>(
-          find.byType(SegmentPage),
-        );
-        expect(segmentPage.imgSrc, 'https://test-url.com/image.jpg');
-        expect(segmentPage.plantId, 'plant_001');
+      'Shows fallback when image ${queryFails ? "lookup fails" : "is missing"}',
+      (tester) async {
+        if (queryFails) {
+          store.queryError = StateError('simulated lookup failure');
+        }
+        await pumpCard(tester, imageId: 'img_001');
+        expect(store.queried, ['images']);
+        expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
       },
     );
+  }
 
-    testWidgets('Does NOT navigate when tapped (not completed)', (
-      WidgetTester tester,
-    ) async {
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: false, // Not completed → tap disabled
-        plantId: 'plant_001',
+  testWidgets(
+    'Completed card creates detail route with fetched image and plant ID',
+    (tester) async {
+      store.images = [imageData()];
+      final routes = _Routes();
+      await HttpOverrides.runZoned(() async {
+        await pumpCard(tester, imageId: 'img_001', routes: routes);
+        await tester.tap(find.text('Test Plant'));
+        await tester.idle();
+        expect(routes.pushed, hasLength(2));
+        // Inspect the destination before mounting its unrelated model pipeline.
+        final route = routes.pushed.last as MaterialPageRoute;
+        final destination =
+            route.builder(tester.element(find.byType(CardWidget)))
+                as SegmentPage;
+        expect(destination.imgSrc, 'https://test.invalid/image.png');
+        expect(destination.plantId, 'plant_001');
+        expect(destination.id, 'img_001');
+        await tester.pumpWidget(const SizedBox.shrink());
+      }, createHttpClient: ImageHttpOverrides().createHttpClient);
+    },
+  );
+
+  testWidgets('Incomplete cloud card does not navigate even with an image', (
+    tester,
+  ) async {
+    store.images = [imageData()];
+    final routes = _Routes();
+    await HttpOverrides.runZoned(() async {
+      await pumpCard(
+        tester,
+        imageId: 'img_001',
+        completed: false,
+        routes: routes,
       );
+      await tester.tap(find.text('Test Plant'));
+      await tester.idle();
+      expect(routes.pushed, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, createHttpClient: ImageHttpOverrides().createHttpClient);
+  });
 
-      await tester.pumpWidget(wrapWithMaterial(child: card));
-      await tester.pumpAndSettle();
+  testWidgets('Cancelling deletion leaves storage and callback untouched', (
+    tester,
+  ) async {
+    var callbacks = 0;
+    await pumpCard(tester, onDelete: () => callbacks++);
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(store.deleted, isEmpty);
+    expect(callbacks, 0);
+  });
 
-      // Tap the card (should have no effect)
-      await tester.tap(find.byType(CardWidget));
-      await tester.pumpAndSettle();
-
-      // Verify no navigation
-      expect(find.byType(SegmentPage), findsNothing);
-    });
-
-    testWidgets('Triggers onDelete when delete is confirmed', (
-      WidgetTester tester,
-    ) async {
-      bool deleteCalled = false;
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: true,
-        plantId: 'plant_001',
-        onDelete: () => deleteCalled = true,
+  testWidgets(
+    'Confirmed deletion disables repeat action and calls callback only after storage completes',
+    (tester) async {
+      final pending = Completer<void>();
+      store.deletion = pending.future;
+      var callbacks = 0;
+      await pumpCard(tester, onDelete: () => callbacks++);
+      await confirmDelete(tester);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(store.deleted, ['plants/plant_001']);
+      expect(callbacks, 0);
+      final button = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.delete_outline),
       );
-
-      await tester.pumpWidget(wrapWithMaterial(child: card));
+      expect(button.onPressed, isNull);
+      pending.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(store.updated, ['users/test-user']);
+      expect(callbacks, 1);
+      await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
+    },
+  );
 
-      // Tap delete button
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle(); // Wait for confirmation dialog
-
-      // Confirm deletion in dialog
-      await tester.tap(find.text('Delete'));
-      await tester.pumpAndSettle();
-
-      // Verify confirmation dialog triggers onDelete
-      expect(deleteCalled, isTrue);
-    });
-
-    testWidgets('Disables delete button during deletion', (
-      WidgetTester tester,
-    ) async {
-      bool deleteCalled = false;
-      final card = CardWidget(
-        title: 'Test Plant',
-        description: 'Test Description',
-        completed: true,
-        plantId: 'plant_001',
-        onDelete: () {
-          deleteCalled = true;
-          Future.delayed(
-            const Duration(seconds: 1),
-          ); // Simulate background delay
-        },
-      );
-
-      await tester.pumpWidget(wrapWithMaterial(child: card));
-      await tester.pumpAndSettle();
-
-      // Tap delete button (triggers deletion state)
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle(); // Wait for confirmation dialog
-      await tester.tap(find.text('Delete'));
-      await tester.pump(const Duration(milliseconds: 100)); // Update state
-
-      // Verify delete button is disabled (grey color)
-      final deleteIcon = tester.widget<Icon>(find.byIcon(Icons.delete_outline));
-      expect(deleteIcon.color, Colors.grey);
-      // Verify re-tap has no effect
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle();
-      expect(deleteCalled, isTrue); // Only called once
-    });
+  testWidgets('Failed deletion reports error without success callback', (
+    tester,
+  ) async {
+    store.queryError = StateError('simulated deletion failure');
+    var callbacks = 0;
+    await pumpCard(tester, onDelete: () => callbacks++);
+    await confirmDelete(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(callbacks, 0);
+    expect(store.deleted, isEmpty);
+    expect(find.textContaining('Could not delete:'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
   });
 }

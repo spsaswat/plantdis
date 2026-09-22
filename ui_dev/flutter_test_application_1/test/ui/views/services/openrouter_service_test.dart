@@ -1,474 +1,211 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_test_application_1/config/api_runtime_secrets.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test_application_1/views/services/openrouter_service.dart';
+import '../../../helpers/api_test_helpers.dart';
 
 void main() {
-  group('OpenRouterService', () {
-    late OpenRouterService openRouterService;
-
-    setUpAll(() async {
-      TestWidgetsFlutterBinding.ensureInitialized();
-      await ApiRuntimeSecrets.init();
-    });
-
-    setUp(() {
-      openRouterService = OpenRouterService();
-    });
-
-    group('Singleton Pattern Tests', () {
-      test('OpenRouterService should return same instance', () {
-        final instance1 = OpenRouterService();
-        final instance2 = OpenRouterService();
-
-        expect(identical(instance1, instance2), true);
-      });
-
-      test('OpenRouterService should be initialized properly', () {
-        expect(openRouterService, isNotNull);
-        expect(openRouterService, isA<OpenRouterService>());
-      });
-    });
-
-    group('Real API Tests', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'getAnswer returns response for plant disease question',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "What causes brown spots on tomato leaves?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-          expect(result.length, lessThan(1000)); // Should be concise
-
-          // Response should not contain markdown formatting as per system prompt
-          expect(result.contains('**'), false);
-          expect(result.contains('##'), false);
-          expect(result.contains('```'), false);
-
-          print('Plant disease question result: $result');
+  setUpAll(setupApiTestKeys);
+  final service = OpenRouterService();
+  http.Response answer(String text) => http.Response(
+    jsonEncode({
+      'choices': [
+        {
+          'message': {'content': text},
         },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'getAnswer returns response for pest identification question',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "How to identify aphids on plants?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Pest identification result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'getAnswer returns response for nutrient deficiency question',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "What are signs of nitrogen deficiency in plants?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Nutrient deficiency result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'getAnswer handles treatment recommendation question',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "Best organic treatment for powdery mildew?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Treatment recommendation result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'getAnswer refuses non-plant related questions',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "What is the weather today?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          // Should contain refusal message about expertise limitation
-          final lowerResult = result.toLowerCase();
-          final containsRefusal =
-              lowerResult.contains('expertise') ||
-              lowerResult.contains('plant health') ||
-              lowerResult.contains('cannot provide') ||
-              lowerResult.contains('limited to');
-
-          expect(containsRefusal, true);
-
-          print('Non-plant question refusal result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'getAnswer with different model parameter',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "How to prevent fungal infections in roses?",
-            model: "qwen/qwen3-30b-a3b:free",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Different model result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-    });
-
-    group('Edge Cases Tests', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'getAnswer handles empty question',
-        () async {
-          final result = await openRouterService.getAnswer("");
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Empty question result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test(
-        'getAnswer handles very short question',
-        () async {
-          final result = await openRouterService.getAnswer("Help");
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Short question result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test(
-        'getAnswer handles special characters',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "Plant disease with special symbols?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Special characters result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test(
-        'getAnswer handles unicode characters',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "Plant disease symptoms question",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Unicode characters result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test(
-        'getAnswer handles very long question',
-        () async {
-          final longQuestion =
-              "What are the symptoms and treatment for " * 10 +
-              "plant diseases?";
-
-          final result = await openRouterService.getAnswer(longQuestion);
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          print('Long question result length: ${result.length}');
-        },
-        timeout: const Timeout(Duration(seconds: 60)),
-      );
-    });
-
-    group('Response Quality Tests', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'response should be properly trimmed',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "How to identify plant diseases?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          // Should not start or end with whitespace
-          expect(result, equals(result.trim()));
-
-          print('Trim test result: "$result"');
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test(
-        'response should be concise as per system prompt',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "Guide to tomato diseases and treatments?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          // Check word count - should be under 200 words as per system prompt
-          final wordCount = result.split(RegExp(r'\s+')).length;
-          print('Response word count: $wordCount');
-          print('Response: $result');
-
-          // Allow some flexibility but expect reasonable length
-          expect(wordCount, lessThan(300)); // Allow buffer over 200 word limit
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'response should not contain formatting as per system prompt',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "Common plant diseases and their symptoms?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          // Should not contain markdown or special formatting
-          expect(result.contains('**'), false); // No bold
-          expect(result.contains('##'), false); // No headers
-          expect(result.contains('```'), false); // No code blocks
-          expect(result.contains('_'), false); // No underscores
-          expect(result.contains('- '), false); // No bullet points
-          expect(result.contains('* '), false); // No asterisk bullets
-          expect(result.contains('1. '), false); // No numbered lists
-
-          print('Formatting test result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-    });
-
-    group('Error Handling Tests', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'getAnswer handles API errors gracefully',
-        () async {
-          try {
-            // Test with potentially problematic input
-            final result = await openRouterService.getAnswer(
-              "Test question for error handling",
-            );
-
-            // If successful, should return valid response
-            expect(result, isA<String>());
-            expect(result.isNotEmpty, true);
-
-            print('Error handling test result: $result');
-          } catch (e) {
-            // If it throws an exception, verify it's properly formatted
-            expect(e, isA<Exception>());
-            expect(e.toString(), contains('Failed to fetch answer'));
-
-            print('Expected error caught: $e');
-          }
-        },
-        timeout: const Timeout(Duration(seconds: 30)),
-      );
-
-      test('service maintains singleton state', () async {
-        final service1 = OpenRouterService();
-        final service2 = OpenRouterService();
-
-        expect(identical(service1, service2), true);
-      });
-    });
-
-    group('System Prompt Compliance Tests', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'AI should stay within plant health scope',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "What do you specialize in?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          final lowerResult = result.toLowerCase();
-          final containsPlantFocus =
-              lowerResult.contains('plant') ||
-              lowerResult.contains('disease') ||
-              lowerResult.contains('agricultural') ||
-              lowerResult.contains('phytopathology') ||
-              lowerResult.contains('pest');
-
-          expect(containsPlantFocus, true);
-
-          print('Specialization result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'AI should refuse human health questions',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "What medicine should I take for fever?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          final lowerResult = result.toLowerCase();
-          final containsRefusal =
-              lowerResult.contains('cannot') ||
-              lowerResult.contains('expertise') ||
-              lowerResult.contains('plant health') ||
-              lowerResult.contains('limited to');
-
-          expect(containsRefusal, true);
-
-          print('Human health refusal result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-
-      test(
-        'AI should refuse general conversation',
-        () async {
-          final result = await openRouterService.getAnswer(
-            "How was your day today?",
-          );
-
-          expect(result, isA<String>());
-          expect(result.isNotEmpty, true);
-
-          final lowerResult = result.toLowerCase();
-          final containsRefusal =
-              lowerResult.contains('cannot') ||
-              lowerResult.contains('expertise') ||
-              lowerResult.contains('plant health') ||
-              lowerResult.contains('limited to');
-
-          expect(containsRefusal, true);
-
-          print('General conversation refusal result: $result');
-        },
-        timeout: const Timeout(Duration(seconds: 45)),
-      );
-    });
-
-    group('Multiple Calls Test', () {
-      setUp(() {
-        expect(
-          ApiRuntimeSecrets.openrouterApiKey,
-          isNotEmpty,
-          reason:
-              'Set openrouterApiKey in api_config.json (see api_config.json.example) or use --dart-define.',
-        );
-      });
-
-      test(
-        'multiple consecutive calls should work',
-        () async {
-          final questions = [
-            "What causes leaf yellowing?",
-            "How to prevent root rot?",
-            "Signs of pest damage on leaves?",
-          ];
-
-          for (int i = 0; i < questions.length; i++) {
-            final question = questions[i];
-            final result = await openRouterService.getAnswer(question);
-
-            expect(result, isA<String>());
-            expect(result.isNotEmpty, true);
-
-            print('Question ${i + 1}: $question');
-            print('Answer ${i + 1}: $result\n');
-
-            // Add delay between requests to respect API limits
-            if (i < questions.length - 1) {
-              await Future.delayed(Duration(seconds: 2));
-            }
-          }
-        },
-        timeout: const Timeout(Duration(seconds: 150)),
-      );
-    });
+      ],
+    }),
+    200,
+  );
+
+  test('Service is a singleton', () {
+    expect(identical(service, OpenRouterService()), isTrue);
   });
+
+  test(
+    'Sends authenticated question and plant scope instructions; trims response',
+    () async {
+      final requests = <http.Request>[];
+      final client = MockClient((request) async {
+        requests.add(request);
+        return answer('  Inspect the leaves.  ');
+      });
+      final result = await http.runWithClient(
+        () => service.getAnswer('Why are leaves yellow?', model: 'test/model'),
+        () => client,
+      );
+      expect(result, 'Inspect the leaves.');
+      expect(requests, hasLength(1));
+      final request = requests.single;
+      expect(request.method, 'POST');
+      expect(
+        request.url.toString(),
+        'https://openrouter.ai/api/v1/chat/completions',
+      );
+      expect(request.headers['authorization'], 'Bearer test-openrouter-key');
+      final body = jsonDecode(request.body);
+      expect(body['model'], 'test/model');
+      expect(body['messages'][0]['role'], 'system');
+      expect(body['messages'][0]['content'], contains('plant diseases'));
+      expect(body['messages'][0]['content'], contains('human health'));
+      expect(body['messages'][0]['content'], contains('plain text ONLY'));
+      expect(body['messages'][1], {
+        'role': 'user',
+        'content': 'Why are leaves yellow?',
+      });
+    },
+  );
+
+  for (final question in [
+    '',
+    'Help',
+    '叶片为什么变黄？',
+    'leaf & root <test>',
+    'Symptoms ' * 200,
+  ]) {
+    test(
+      'Serializes question of length ${question.length} without altering it',
+      () async {
+        final client = MockClient((request) async {
+          expect(jsonDecode(request.body)['messages'][1]['content'], question);
+          return answer('Recorded response');
+        });
+        expect(
+          await http.runWithClient(
+            () => service.getAnswer(question),
+            () => client,
+          ),
+          'Recorded response',
+        );
+      },
+    );
+  }
+
+  test('Gemma instructions are included in the user message', () async {
+    final client = MockClient((request) async {
+      final messages = jsonDecode(request.body)['messages'] as List;
+      expect(messages, hasLength(1));
+      expect(messages.single['role'], 'user');
+      expect(
+        messages.single['content'],
+        contains('User question:\nTreat rust?'),
+      );
+      expect(messages.single['content'], contains('plant health'));
+      return answer('Remove infected leaves.');
+    });
+    await http.runWithClient(
+      () =>
+          service.getAnswer('Treat rust?', model: 'google/gemma-3-27b-it:free'),
+      () => client,
+    );
+  });
+
+  test('API errors throw and never masquerade as an answer', () async {
+    var count = 0;
+    final client = MockClient((_) async {
+      count++;
+      return http.Response('{"error":{"message":"invalid credentials"}}', 401);
+    });
+    await expectLater(
+      http.runWithClient(
+        () => service.getAnswer('Treat rust?', allowFallback: true),
+        () => client,
+      ),
+      throwsA(
+        isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('401'),
+        ),
+      ),
+    );
+    expect(count, 1);
+  });
+
+  for (final status in [429, 400]) {
+    test(
+      'Explicit fallback handles ${status == 429 ? "rate limit" : "provider instruction rejection"} and records model',
+      () async {
+        final models = <String>[];
+        final client = MockClient((request) async {
+          models.add(jsonDecode(request.body)['model'] as String);
+          if (models.length == 1) {
+            return http.Response(
+              jsonEncode({
+                'error': {
+                  'message':
+                      status == 429
+                          ? 'rate limit'
+                          : 'developer instruction is not enabled',
+                },
+              }),
+              status,
+            );
+          }
+          return answer('Fallback answer');
+        });
+        final result = await http.runWithClient(
+          () => service.getAnswerWithMeta(
+            'Question',
+            model: 'test/primary',
+            allowFallback: true,
+          ),
+          () => client,
+        );
+        expect(models, ['test/primary', 'qwen/qwen3-30b-a3b:free']);
+        expect(result.content, 'Fallback answer');
+        expect(result.requestedModel, 'test/primary');
+        expect(result.usedModel, models.last);
+        expect(result.usedFallback, isTrue);
+      },
+    );
+  }
+
+  test('Fallback stays disabled unless requested', () async {
+    var count = 0;
+    await expectLater(
+      http.runWithClient(
+        () => service.getAnswer('Question'),
+        () => MockClient((_) async {
+          count++;
+          return http.Response('rate limit', 429);
+        }),
+      ),
+      throwsA(isA<Exception>()),
+    );
+    expect(count, 1);
+  });
+
+  test('Missing model endpoint reports a useful error', () async {
+    await expectLater(
+      http.runWithClient(
+        () => service.getAnswer('Question', model: 'test/missing'),
+        () => MockClient(
+          (_) async =>
+              http.Response('{"error":{"message":"No endpoints found"}}', 404),
+        ),
+      ),
+      throwsA(
+        isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('test/missing'),
+        ),
+      ),
+    );
+  });
+
+  test(
+    'Malformed successful response fails instead of returning an error as an answer',
+    () async {
+      await expectLater(
+        http.runWithClient(
+          () => service.getAnswer('Question'),
+          () => MockClient((_) async => http.Response('', 200)),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
 }

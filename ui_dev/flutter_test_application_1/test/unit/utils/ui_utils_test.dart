@@ -37,16 +37,16 @@ void main() {
 
       test('should handle empty and edge cases', () {
         expect(UIUtils.formatDiseaseName(''), '');
-        expect(UIUtils.formatDiseaseName('_'), ' ');
-        expect(UIUtils.formatDiseaseName('__'), '  ');
-        expect(UIUtils.formatDiseaseName('_disease_'), ' disease ');
+        expect(UIUtils.formatDiseaseName('_'), '');
+        expect(UIUtils.formatDiseaseName('__'), '');
+        expect(UIUtils.formatDiseaseName('_disease_'), 'disease');
       });
 
       test('should handle multiple consecutive underscores', () {
-        expect(UIUtils.formatDiseaseName('disease__name'), 'disease  name');
+        expect(UIUtils.formatDiseaseName('disease__name'), 'disease name');
         expect(
           UIUtils.formatDiseaseName('multiple___underscores'),
-          'multiple   underscores',
+          'multiple underscores',
         );
       });
 

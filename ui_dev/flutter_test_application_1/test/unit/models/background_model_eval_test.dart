@@ -6,8 +6,18 @@ import 'package:image/image.dart' as img;
 import 'package:flutter_litert/flutter_litert.dart';
 
 /// ---- Project paths ----
-const String kModelPath = 'models/background_detector_quant.tflite';
-const String kTestRoot = 'final_test_data'; // contains has_plant/ and no_plant/
+const String kModelPath = String.fromEnvironment(
+  'BACKGROUND_EVAL_MODEL',
+  defaultValue: 'models/background_detector_quant.tflite',
+);
+const String kTestRoot = String.fromEnvironment(
+  'BACKGROUND_EVAL_DATA',
+  defaultValue: 'final_test_data',
+);
+// Requires an external model, native LiteRT runtime, and a dataset containing
+// has_plant/ and no_plant/. Enable with --dart-define=RUN_MODEL_EVAL=true;
+// set BACKGROUND_EVAL_MODEL and BACKGROUND_EVAL_DATA to their paths via dart-define.
+const bool kRunModelEval = bool.fromEnvironment('RUN_MODEL_EVAL');
 const List<String> kClassNames = ['has_plant', 'no_plant'];
 
 /// ---- Evaluation knobs ----
@@ -16,94 +26,107 @@ const double kMinAccuracyAtDefaultThreshold = 0.85; // quality gate
 const (int, int) kInputSize = (224, 224);
 
 void main() {
-  group('TFLite model (pure Dart) evaluation', () {
-    late Interpreter interpreter;
-    late List<int> inputShape;
-    late List<int> outputShape;
+  group(
+    'TFLite model (pure Dart) evaluation',
+    () {
+      Interpreter? loadedInterpreter;
+      late Interpreter interpreter;
+      late List<int> inputShape;
+      late List<int> outputShape;
 
-    setUpAll(() async {
-      // Sanity checks
-      expect(
-        File(kModelPath).existsSync(),
-        true,
-        reason: 'Model file not found at $kModelPath',
-      );
-      expect(
-        Directory(kTestRoot).existsSync(),
-        true,
-        reason: 'Test data directory not found at $kTestRoot',
-      );
+      setUpAll(() async {
+        // Sanity checks
+        expect(
+          File(kModelPath).existsSync(),
+          true,
+          reason: 'Model file not found at $kModelPath',
+        );
+        expect(
+          Directory(kTestRoot).existsSync(),
+          true,
+          reason: 'Test data directory not found at $kTestRoot',
+        );
 
-      // Load interpreter
-      interpreter = Interpreter.fromFile(File(kModelPath));
-      inputShape = interpreter.getInputTensor(0).shape;
-      outputShape = interpreter.getOutputTensor(0).shape;
+        // Load interpreter
+        interpreter = Interpreter.fromFile(File(kModelPath));
+        loadedInterpreter = interpreter;
+        inputShape = interpreter.getInputTensor(0).shape;
+        outputShape = interpreter.getOutputTensor(0).shape;
 
-      // Expect NHWC input and single sigmoid output
-      expect(inputShape.length, anyOf([4, 3]));
-      expect(
-        outputShape.reduce((a, b) => a * b),
-        1,
-        reason: 'Model output is expected to be a single sigmoid value.',
-      );
-    });
+        // Expect NHWC input and single sigmoid output
+        expect(inputShape.length, anyOf([4, 3]));
+        expect(
+          outputShape.reduce((a, b) => a * b),
+          1,
+          reason: 'Model output is expected to be a single sigmoid value.',
+        );
+      });
 
-    tearDownAll(() {
-      interpreter.close();
-    });
+      tearDownAll(() {
+        loadedInterpreter?.close();
+      });
 
-    test('multi-threshold metrics and quality gate', () async {
-      final samples = await _loadDataset(kTestRoot);
-      expect(samples.isNotEmpty, true, reason: 'No images found to evaluate.');
+      test('multi-threshold metrics and quality gate', () async {
+        final samples = await _loadDataset(kTestRoot);
+        expect(
+          samples.isNotEmpty,
+          true,
+          reason: 'No images found to evaluate.',
+        );
 
-      final stopwatch = Stopwatch()..start();
-      final probs = <double>[];
-      final labels = <int>[];
+        final stopwatch = Stopwatch()..start();
+        final probs = <double>[];
+        final labels = <int>[];
 
-      for (final s in samples) {
-        final tensor = _preprocessToInput(s.imagePath);
-        final prob = _infer(interpreter, tensor);
-        probs.add(prob); // probability of class "no_plant"
-        labels.add(s.labelIndex); // 0=has_plant, 1=no_plant
-      }
-      final totalMs = stopwatch.elapsedMilliseconds;
+        for (final s in samples) {
+          final tensor = _preprocessToInput(s.imagePath);
+          final prob = _infer(interpreter, tensor);
+          probs.add(prob); // probability of class "no_plant"
+          labels.add(s.labelIndex); // 0=has_plant, 1=no_plant
+        }
+        final totalMs = stopwatch.elapsedMilliseconds;
 
-      // Evaluate for multiple thresholds
-      for (final th in kThresholds) {
-        final preds = probs.map((p) => p > th ? 1 : 0).toList();
-        final metrics = _computeMetrics(labels, preds, numClasses: 2);
+        // Evaluate for multiple thresholds
+        for (final th in kThresholds) {
+          final preds = probs.map((p) => p > th ? 1 : 0).toList();
+          final metrics = _computeMetrics(labels, preds, numClasses: 2);
 
-        // Print human-readable summary in test logs
-        // (Helpful during local dev; CI can parse if needed)
+          // Print human-readable summary in test logs
+          // (Helpful during local dev; CI can parse if needed)
+          // ignore: avoid_print
+          print('--- Threshold=$th ---');
+          // ignore: avoid_print
+          print('Accuracy: ${(metrics.accuracy * 100).toStringAsFixed(2)}%');
+          // ignore: avoid_print
+          print('Confusion Matrix: ${_formatCM(metrics.cm, kClassNames)}');
+        }
+
+        // Default threshold quality gate
+        const defaultTh = 0.5;
+        final defaultPreds = probs.map((p) => p > defaultTh ? 1 : 0).toList();
+        final defaultMetrics = _computeMetrics(
+          labels,
+          defaultPreds,
+          numClasses: 2,
+        );
+
+        final avgMs = totalMs / samples.length;
         // ignore: avoid_print
-        print('--- Threshold=$th ---');
-        // ignore: avoid_print
-        print('Accuracy: ${(metrics.accuracy * 100).toStringAsFixed(2)}%');
-        // ignore: avoid_print
-        print('Confusion Matrix: ${_formatCM(metrics.cm, kClassNames)}');
-      }
+        print('Avg inference time: ${avgMs.toStringAsFixed(2)} ms');
 
-      // Default threshold quality gate
-      final defaultTh = 0.5;
-      final defaultPreds = probs.map((p) => p > defaultTh ? 1 : 0).toList();
-      final defaultMetrics = _computeMetrics(
-        labels,
-        defaultPreds,
-        numClasses: 2,
-      );
-
-      final avgMs = totalMs / samples.length;
-      // ignore: avoid_print
-      print('Avg inference time: ${avgMs.toStringAsFixed(2)} ms');
-
-      expect(
-        defaultMetrics.accuracy,
-        greaterThanOrEqualTo(kMinAccuracyAtDefaultThreshold),
-        reason:
-            'Accuracy at threshold $defaultTh is too low: ${defaultMetrics.accuracy.toStringAsFixed(4)}',
-      );
-    });
-  });
+        expect(
+          defaultMetrics.accuracy,
+          greaterThanOrEqualTo(kMinAccuracyAtDefaultThreshold),
+          reason:
+              'Accuracy at threshold $defaultTh is too low: ${defaultMetrics.accuracy.toStringAsFixed(4)}',
+        );
+      });
+    },
+    skip:
+        kRunModelEval
+            ? false
+            : 'Requires external model and dataset; enable with --dart-define=RUN_MODEL_EVAL=true.',
+  );
 }
 
 /// Represents one sample in the dataset.
@@ -156,9 +179,9 @@ List<List<List<List<double>>>> _preprocessToInput(String imagePath) {
       h,
       (y) => List.generate(w, (x) {
         final pixel = resized.getPixel(x, y);
-        final r = img.getRed(pixel) / 255.0;
-        final g = img.getGreen(pixel) / 255.0;
-        final b = img.getBlue(pixel) / 255.0;
+        final r = pixel.r / 255.0;
+        final g = pixel.g / 255.0;
+        final b = pixel.b / 255.0;
         return <double>[r, g, b];
       }),
     ),
@@ -211,7 +234,7 @@ String _formatCM(List<List<int>> cm, List<String> labels) {
   final maxLabel = labels.fold<int>(0, (m, s) => math.max(m, s.length));
   String pad(String s) => s.padRight(maxLabel);
   buf.writeln();
-  buf.writeln('      ' + labels.map(pad).join(' | '));
+  buf.writeln('      ${labels.map(pad).join(' | ')}');
   for (var i = 0; i < cm.length; i++) {
     buf.writeln(
       '${pad(labels[i])} : ${cm[i].map((v) => v.toString().padLeft(3)).join(' | ')}',

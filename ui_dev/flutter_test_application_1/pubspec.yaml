@@ -72,6 +72,10 @@ dependencies:
   flutter_litert: ^2.1.0
 
 dev_dependencies:
+  cloud_firestore_platform_interface: ^7.0.0
+  firebase_core_platform_interface: ^6.0.0
+  firebase_auth_platform_interface: ^8.1.0
+  google_sign_in_platform_interface: ^3.0.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0

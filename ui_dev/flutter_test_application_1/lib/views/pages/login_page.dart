@@ -58,6 +58,11 @@ class _LoginPageState extends State<LoginPage> {
 
                         TextField(
                           controller: controllerEmail,
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
                           decoration: InputDecoration(
                             hintText: "Username / Email",
                             border: OutlineInputBorder(
@@ -71,6 +76,11 @@ class _LoginPageState extends State<LoginPage> {
 
                         TextField(
                           controller: controllerPwd,
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
                           decoration: InputDecoration(
                             hintText: "Password",
                             border: OutlineInputBorder(

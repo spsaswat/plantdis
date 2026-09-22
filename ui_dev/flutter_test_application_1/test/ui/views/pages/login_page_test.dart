@@ -1,296 +1,155 @@
+import 'dart:async';
+import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_test_application_1/views/pages/login_page.dart';
 import '../../../helpers/test_helpers.dart';
-import 'package:flutter/material.dart';
 
 void main() {
-  setUpAll(() async {
-    await TestHelpers.setupFirebaseMocks();
+  setUpAll(TestHelpers.setupFirebaseMocks);
+  setUp(TestHelpers.auth.reset);
+
+  Future<void> submit(WidgetTester tester) async {
+    await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
+    await tester.enterText(find.byType(TextField).at(1), 'password123');
+    await tester.ensureVisible(find.text('Get Started'));
+    await tester.tap(find.text('Get Started'));
+    await tester.pump();
+  }
+
+  testWidgets('Login renders fields, actions and password obscuring', (
+    tester,
+  ) async {
+    await TestHelpers.pumpWithSetup(tester, const LoginPage());
+    expect(find.text('Login'), findsOneWidget);
+    expect(find.text('Username / Email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Get Started'), findsOneWidget);
+    expect(find.text('OR'), findsOneWidget);
+    expect(find.byType(TextField), findsNWidgets(2));
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(0)).obscureText,
+      isFalse,
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).obscureText,
+      isTrue,
+    );
   });
 
-  group('LoginPage UI Tests', () {
-    testWidgets('LoginPage renders all elements correctly', (tester) async {
+  for (final missing in ['both', 'email', 'password']) {
+    testWidgets('Rejects missing $missing before contacting authentication', (
+      tester,
+    ) async {
+      var called = false;
+      TestHelpers.auth.onSignIn = (_, _) {
+        called = true;
+        throw StateError('Authentication must not run for invalid input');
+      };
       await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      expect(find.text('Login'), findsOneWidget);
-      
-      expect(find.byType(TextField), findsNWidgets(2));
-      expect(find.text('Username / Email'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      
-      expect(find.text('Get Started'), findsOneWidget);
-      expect(find.text('OR'), findsOneWidget);
-    });
-
-    testWidgets('Password field is obscured', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      final passwordField = tester.widget<TextField>(
-        find.byType(TextField).at(1)
-      );
-      
-      expect(passwordField.obscureText, isTrue);
-    });
-
-    testWidgets('Email field is not obscured', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      final emailField = tester.widget<TextField>(
-        find.byType(TextField).at(0)
-      );
-      
-      expect(emailField.obscureText, isFalse);
-    });
-  });
-
-  group('LoginPage Validation Tests', () {
-    testWidgets('Shows error when both fields are empty', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
+      if (missing == 'email') {
+        await tester.enterText(find.byType(TextField).at(1), 'password123');
+      } else if (missing == 'password') {
+        await tester.enterText(
+          find.byType(TextField).at(0),
+          'test@example.com',
+        );
+      }
+      await tester.ensureVisible(find.text('Get Started'));
       await tester.tap(find.text('Get Started'));
       await tester.pump();
-      
       expect(find.text('Please enter both email and password'), findsOneWidget);
+      expect(called, isFalse);
     });
+  }
 
-    testWidgets('Shows error when email is empty', (tester) async {
+  for (final field in [0, 1]) {
+    testWidgets('Editing field $field immediately clears the previous error', (
+      tester,
+    ) async {
       await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(1), 'password123');
-      
+      await tester.ensureVisible(find.text('Get Started'));
       await tester.tap(find.text('Get Started'));
       await tester.pump();
-      
       expect(find.text('Please enter both email and password'), findsOneWidget);
-    });
-
-    testWidgets('Shows error when password is empty', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      
-      await tester.tap(find.text('Get Started'));
+      await tester.enterText(find.byType(TextField).at(field), 'updated');
       await tester.pump();
-      
-      expect(find.text('Please enter both email and password'), findsOneWidget);
-    });
-
-    testWidgets('Error message clears when user starts typing', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      
-      expect(find.text('Please enter both email and password'), findsOneWidget);
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-      
       expect(find.text('Please enter both email and password'), findsNothing);
     });
-  });
+  }
 
-  group('LoginPage Loading State Tests', () {
-    testWidgets('Shows loading indicator when logging in', (tester) async {
+  testWidgets(
+    'Pending login disables button; controlled failure restores form and preserves input',
+    (tester) async {
+      final pending = Completer<UserCredentialPlatform>();
+      final started = Completer<void>();
+      TestHelpers.auth.onSignIn = (email, password) {
+        expect(email, 'test@example.com');
+        expect(password, 'password123');
+        started.complete();
+        return pending.future;
+      };
       await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'password123');
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-
-    testWidgets('Button is disabled during loading', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'password123');
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      
-      final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '').first,
+      await submit(tester);
+      // The service first looks up the IP; the test binding blocks that HTTP call.
+      for (var i = 0; i < 10 && !started.isCompleted; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(started.isCompleted, isTrue);
+      final button = find.byType(FilledButton);
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      expect(
+        find.descendant(
+          of: button,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
       );
-      
-      expect(button.onPressed, isNull);
-    });
-
-    testWidgets('Loading indicator disappears after error', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'wrongpassword');
-      
-      await tester.tap(find.text('Get Started'));
+      pending.completeError(FirebaseAuthException(code: 'wrong-password'));
       await tester.pump();
-      
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      
-      await tester.pumpAndSettle();
-      
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Get Started'), findsOneWidget);
-    });
-  });
-
-  group('LoginPage Authentication Tests', () {
-    testWidgets('Shows error snackbar on login failure', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'wrongpassword');
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      
-      await tester.pumpAndSettle();
-      
+      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
+      expect(find.text('Exception: Wrong password.'), findsOneWidget);
+      expect(
+        find.text('Login Failed: Exception: Wrong password.'),
+        findsOneWidget,
+      );
       expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.textContaining('Login Failed'), findsOneWidget);
-    });
-
-    testWidgets('Error message is displayed on screen', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'wrongpassword');
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      
-      await tester.pumpAndSettle();
-      
-      expect(find.byWidgetPredicate(
-        (widget) => widget is Text && 
-                    widget.data != null && 
-                    widget.data!.contains('PlatformException'),
-      ), findsOneWidget);
-    });
-  });
-
-  group('LoginPage Text Input Tests', () {
-    testWidgets('Can enter email address', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(
-        find.byType(TextField).at(0), 
-        'user@example.com'
-      );
-      
-      expect(find.text('user@example.com'), findsOneWidget);
-    });
-
-    testWidgets('Can enter password', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(
-        find.byType(TextField).at(1), 
-        'password123'
-      );
-      
-      expect(find.text('password123'), findsOneWidget);
-    });
-
-    testWidgets('Can enter both email and password', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(
-        find.byType(TextField).at(0), 
-        'user@example.com'
-      );
-      await tester.enterText(
-        find.byType(TextField).at(1), 
-        'securePassword123'
-      );
-      
-      expect(find.text('user@example.com'), findsOneWidget);
-      expect(find.text('securePassword123'), findsOneWidget);
-    });
-
-    testWidgets('Text fields maintain state after error', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      const testEmail = 'test@example.com';
-      const testPassword = 'testpass';
-      
-      await tester.enterText(find.byType(TextField).at(0), testEmail);
-      await tester.enterText(find.byType(TextField).at(1), testPassword);
-      
-      await tester.tap(find.text('Get Started'));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      
-      expect(find.text(testEmail), findsOneWidget);
-      expect(find.text(testPassword), findsOneWidget);
-    });
-  });
-
-  group('LoginPage Layout Tests', () {
-    testWidgets('Layout adjusts for narrow screens', (tester) async {
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-      
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      await tester.pumpAndSettle();
-      
-      expect(find.byType(FractionallySizedBox), findsOneWidget);
-      
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-    });
-
-    testWidgets('Layout adjusts for wide screens', (tester) async {
-      tester.view.physicalSize = const Size(1200, 800);
-      tester.view.devicePixelRatio = 1.0;
-      
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      await tester.pumpAndSettle();
-      
-      expect(find.byType(FractionallySizedBox), findsOneWidget);
-      
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-    });
-
-    testWidgets('Content is scrollable', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
-    });
-
-    testWidgets('Has SafeArea wrapper', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      expect(find.byType(SafeArea), findsOneWidget);
-    });
-  });
-
-  group('LoginPage Navigation Tests', () {
-    testWidgets('Has app bar with back button', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      expect(find.byType(AppBar), findsOneWidget);
-    });
-  });
-
-  group('LoginPage Controller Tests', () {
-    testWidgets('Controllers are properly disposed', (tester) async {
-      await TestHelpers.pumpWithSetup(tester, const LoginPage());
-      
-      await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
-      await tester.enterText(find.byType(TextField).at(1), 'password');
-      
       expect(find.text('test@example.com'), findsOneWidget);
-      expect(find.text('password'), findsOneWidget);
+      expect(find.text('password123'), findsOneWidget);
+    },
+  );
+
+  for (final width in [400.0, 1200.0]) {
+    testWidgets('Login layout at width $width', (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await TestHelpers.pumpWithSetup(tester, const LoginPage());
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(
+        tester
+            .widget<FractionallySizedBox>(find.byType(FractionallySizedBox))
+            .widthFactor,
+        width > 600 ? 0.5 : 1.0,
+      );
+      expect(tester.takeException(), isNull);
     });
+  }
+
+  testWidgets('Disposing page disposes both text controllers', (tester) async {
+    await TestHelpers.pumpWithSetup(tester, const LoginPage());
+    final controllers =
+        tester
+            .widgetList<TextField>(find.byType(TextField))
+            .map((field) => field.controller!)
+            .toList();
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (final controller in controllers) {
+      expect(() => controller.addListener(() {}), throwsFlutterError);
+    }
   });
 }
