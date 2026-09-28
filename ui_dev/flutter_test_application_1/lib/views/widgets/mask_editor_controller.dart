@@ -40,6 +40,10 @@ class EditableMask {
 /// Deliberately free of any file-format or drone-flow specifics: constructing
 /// it with `initialMasks: []` gives a from-scratch mask labelling session, which
 /// is what the manual drone flow does.
+///
+/// [initialMasks] must already be solid, one region without holes, as
+/// [solidifyMask] leaves them. `NpyMaskReader` does that off the UI isolate;
+/// repeating it here would stall the UI for hundreds of masks.
 class MaskEditorController extends ChangeNotifier {
   MaskEditorController({
     required this.imageWidth,
@@ -47,14 +51,8 @@ class MaskEditorController extends ChangeNotifier {
     List<LeafMask> initialMasks = const [],
   }) {
     for (final mask in initialMasks) {
-      // Normalize up front, so masks are one solid piece however they were
-      // sourced. A supplied region doubles as its own edge.
       _masks.add(
-        EditableMask(
-          id: _nextId++,
-          mask: solidifyMask(mask),
-          colorIndex: _nextColorIndex++,
-        ),
+        EditableMask(id: _nextId++, mask: mask, colorIndex: _nextColorIndex++),
       );
     }
   }

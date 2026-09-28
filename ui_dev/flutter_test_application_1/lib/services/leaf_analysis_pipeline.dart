@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, Platform;
+import 'dart:typed_data' show ByteBuffer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +18,7 @@ import 'package:flutter_test_application_1/services/segmentation_service.dart'
 import 'package:flutter_test_application_1/services/segmentation_service_onnx.dart'
     as seg_onnx;
 import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
+import 'package:flutter_test_application_1/utils/analysis_utils.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 
 /// Output of the plant-species classifier.
@@ -135,7 +137,7 @@ class LeafAnalysisPipeline {
   }
 
   /// Builds the `[1, 224, 224, 3]` float input both classifiers expect.
-  static List<Object> _classifierInput(Uint8List bytes) {
+  static ByteBuffer _classifierInput(Uint8List bytes) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) {
       throw const FormatException('Failed to decode leaf image');
@@ -145,15 +147,7 @@ class LeafAnalysisPipeline {
       width: _classifierInputSize,
       height: _classifierInputSize,
     );
-    return [
-      List.generate(
-        _classifierInputSize,
-        (y) => List.generate(_classifierInputSize, (x) {
-          final p = resized.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        }),
-      ),
-    ];
+    return normalizedRgbTensor(resized).buffer;
   }
 
   static ({int index, double value}) _argmax(List<double> probs) {

@@ -60,18 +60,6 @@ class DroneBatchService {
     await _batches.doc(next.batchId).set(next.toMap(), SetOptions(merge: true));
   }
 
-  /// Writes [entry] back into the batch and returns the updated record.
-  Future<DroneBatchModel?> upsertLeafEntry(
-    String batchId,
-    BatchLeafEntry entry,
-  ) async {
-    final current = await getBatch(batchId);
-    if (current == null) return null;
-    final next = current.withLeaf(entry);
-    await save(next);
-    return next;
-  }
-
   Future<DroneBatchModel> finalizeBatch(
     DroneBatchModel batch, {
     required String status,

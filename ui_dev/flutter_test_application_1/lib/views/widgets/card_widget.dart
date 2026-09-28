@@ -234,10 +234,8 @@ class _CardWidgetState extends State<CardWidget> {
                         }
 
                         final imageUrl = snapshot.data!;
-                        logger.d('Image URL: $imageUrl');
                         final bool isLocalFile =
                             isLocalFilesystemPath(imageUrl);
-                        logger.d('Is Local File: $isLocalFile');
                         final imageWidget = isLocalFile
                             ? Image.file(
                                 File(toLocalFilePath(imageUrl)),

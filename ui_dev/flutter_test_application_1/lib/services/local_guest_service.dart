@@ -33,6 +33,17 @@ class LocalGuestService {
   final StreamController<List<DroneBatchModel>> _batchesController =
       StreamController<List<DroneBatchModel>>.broadcast();
 
+  /// Set between [beginDeferredWrites] and [endDeferredWrites]. The in-memory
+  /// lists are then authoritative, and writing them to disk and notifying
+  /// listeners wait for [flushDeferredWrites].
+  bool _deferring = false;
+  bool _plantsDirty = false;
+  bool _batchesDirty = false;
+  bool _analysisDirty = false;
+
+  /// The analysis map while deferring, loaded on first use.
+  Map<String, dynamic>? _deferredAnalysis;
+
   static bool get isMacOS => !kIsWeb && io.Platform.isMacOS;
   static bool get isLinux => !kIsWeb && io.Platform.isLinux;
   static bool get isDesktopApp => io.Platform.isMacOS || io.Platform.isWindows || io.Platform.isLinux;
@@ -53,6 +64,53 @@ class LocalGuestService {
 
   void setLocalGuestMode(bool enabled) {
     localGuestMode = enabled;
+  }
+
+  /// Holds writes in memory until [flushDeferredWrites] or
+  /// [endDeferredWrites].
+  ///
+  /// Every write here re-encodes a whole store, and SharedPreferences then
+  /// rewrites its entire file, so a drone batch saving each leaf as it goes
+  /// costs more per leaf the further it gets. The batch runner defers instead
+  /// and flushes every few seconds. Anything not yet flushed is lost if the
+  /// app dies first.
+  Future<void> beginDeferredWrites() async {
+    if (_deferring) return;
+    await _reloadPlants();
+    await _reloadBatches();
+    _deferring = true;
+  }
+
+  /// Writes and announces whatever changed since the last flush.
+  Future<void> flushDeferredWrites() async {
+    if (!_deferring) return;
+    if (_plantsDirty) {
+      _plantsDirty = false;
+      final plants = _plantsNotifier.value;
+      _plantsController.add(plants);
+      await _persistPlants(plants);
+    }
+    if (_batchesDirty) {
+      _batchesDirty = false;
+      final batches = _batchesNotifier.value;
+      _batchesController.add(batches);
+      await _persistBatches(batches);
+    }
+    if (_analysisDirty) {
+      _analysisDirty = false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_analysisKey, jsonEncode(_deferredAnalysis));
+    }
+  }
+
+  Future<void> endDeferredWrites() async {
+    if (!_deferring) return;
+    // A write can land while a flush awaits the disk; loop until none has.
+    do {
+      await flushDeferredWrites();
+    } while (_plantsDirty || _batchesDirty || _analysisDirty);
+    _deferring = false;
+    _deferredAnalysis = null;
   }
 
   /// One plant, or `null` if missing — mirrors a single Firestore plant doc stream.
@@ -239,9 +297,7 @@ class LocalGuestService {
         next.add(p);
       }
     }
-    _plantsNotifier.value = next;
-    _plantsController.add(next);
-    await _persistPlants(next);
+    await _commitPlants(next);
   }
 
   Future<void> saveImageAnalysisResult({
@@ -249,29 +305,45 @@ class LocalGuestService {
     required String imageId,
     required Map<String, dynamic> analysis,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_analysisKey);
-    final map = raw == null
-        ? <String, dynamic>{}
-        : (jsonDecode(raw) as Map<String, dynamic>);
+    final map = await _readAnalysis();
     map['$plantId::$imageId'] = <String, dynamic>{
       ...analysis,
       'updatedAt': DateTime.now().toIso8601String(),
     };
-    await prefs.setString(_analysisKey, jsonEncode(map));
+    await _writeAnalysis(map);
   }
 
   Future<Map<String, dynamic>?> getLatestImageAnalysisResult({
     required String plantId,
     required String imageId,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_analysisKey);
-    if (raw == null) return null;
-    final map = jsonDecode(raw) as Map<String, dynamic>;
+    final map = await _readAnalysis();
     final data = map['$plantId::$imageId'];
     if (data is Map<String, dynamic>) return data;
     return null;
+  }
+
+  Future<Map<String, dynamic>> _readAnalysis() async {
+    final deferred = _deferredAnalysis;
+    if (deferred != null) return deferred;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_analysisKey);
+    final map =
+        raw == null || raw.isEmpty
+            ? <String, dynamic>{}
+            : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    if (_deferring) _deferredAnalysis = map;
+    return map;
+  }
+
+  Future<void> _writeAnalysis(Map<String, dynamic> map) async {
+    if (_deferring) {
+      _deferredAnalysis = map;
+      _analysisDirty = true;
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_analysisKey, jsonEncode(map));
   }
 
   Future<void> deletePlant(String plantId) async {
@@ -286,22 +358,17 @@ class LocalGuestService {
     final next = _plantsNotifier.value
         .where((p) => p.plantId != plantId)
         .toList(growable: false);
-    _plantsNotifier.value = next;
-    _plantsController.add(next);
-    await _persistPlants(next);
+    await _commitPlants(next);
 
     if (removed != null) {
       await _deleteGuestOriginalImage(removed);
       await _deleteLocalStorageMirrorForPlant(removed.userId, plantId);
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_analysisKey);
-    if (raw != null && raw.isNotEmpty) {
-      final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      map.removeWhere((k, _) => k.startsWith('$plantId::'));
-      await prefs.setString(_analysisKey, jsonEncode(map));
-    }
+    final map = await _readAnalysis();
+    final before = map.length;
+    map.removeWhere((k, _) => k.startsWith('$plantId::'));
+    if (map.length != before) await _writeAnalysis(map);
   }
 
   Future<void> clearAllLocalData() async {
@@ -309,6 +376,8 @@ class LocalGuestService {
     await prefs.remove(_plantsKey);
     await prefs.remove(_analysisKey);
     await prefs.remove(_batchesKey);
+    _plantsDirty = _batchesDirty = _analysisDirty = false;
+    if (_deferring) _deferredAnalysis = <String, dynamic>{};
     _plantsNotifier.value = <PlantModel>[];
     _plantsController.add(const <PlantModel>[]);
     _batchesNotifier.value = <DroneBatchModel>[];
@@ -359,9 +428,7 @@ class LocalGuestService {
     } else {
       next[at] = batch;
     }
-    _batchesNotifier.value = next;
-    _batchesController.add(next);
-    await _persistBatches(next);
+    await _commitBatches(next);
   }
 
   Future<void> deleteBatch(String batchId) async {
@@ -370,12 +437,22 @@ class LocalGuestService {
         _batchesNotifier.value
             .where((b) => b.batchId != batchId)
             .toList(growable: false);
-    _batchesNotifier.value = next;
-    _batchesController.add(next);
-    await _persistBatches(next);
+    await _commitBatches(next);
+  }
+
+  Future<void> _commitBatches(List<DroneBatchModel> batches) async {
+    _batchesNotifier.value = batches;
+    if (_deferring) {
+      _batchesDirty = true;
+      return;
+    }
+    _batchesController.add(batches);
+    await _persistBatches(batches);
   }
 
   Future<void> _reloadBatches() async {
+    // While deferring, memory holds writes not yet on disk.
+    if (_deferring) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_batchesKey);
     if (raw == null || raw.isEmpty) {
@@ -413,13 +490,22 @@ class LocalGuestService {
 
   Future<void> _savePlant(PlantModel plant) async {
     await _reloadPlants();
-    final next = <PlantModel>[plant, ..._plantsNotifier.value];
-    _plantsNotifier.value = next;
-    _plantsController.add(next);
-    await _persistPlants(next);
+    await _commitPlants(<PlantModel>[plant, ..._plantsNotifier.value]);
+  }
+
+  Future<void> _commitPlants(List<PlantModel> plants) async {
+    _plantsNotifier.value = plants;
+    if (_deferring) {
+      _plantsDirty = true;
+      return;
+    }
+    _plantsController.add(plants);
+    await _persistPlants(plants);
   }
 
   Future<void> _reloadPlants() async {
+    // While deferring, memory holds writes not yet on disk.
+    if (_deferring) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_plantsKey);
     if (raw == null || raw.isEmpty) {

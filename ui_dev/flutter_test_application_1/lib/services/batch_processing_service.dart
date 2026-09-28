@@ -77,6 +77,10 @@ class BatchProcessingRunner {
   final StreamController<BatchProgress> _progressController =
       StreamController<BatchProgress>.broadcast();
 
+  /// How often the batch record is saved while leaves are being processed.
+  /// The finished batch is always saved, whatever the interval.
+  static const Duration _saveInterval = Duration(seconds: 5);
+
   bool _cancelled = false;
   bool _disposed = false;
 
@@ -102,7 +106,7 @@ class BatchProcessingRunner {
 
   /// Processes every label in [request] and returns the finished batch.
   Future<DroneBatchModel> run(BatchSegmentationRequest request) async {
-    var batch = await _batchService.createFromRequest(request);
+    final batch = await _batchService.createFromRequest(request);
     _currentBatchId = batch.batchId;
     _currentParentPlantId = batch.parentPlantId;
 
@@ -122,6 +126,28 @@ class BatchProcessingRunner {
       ),
     );
 
+    // In guest mode every save rewrites the whole local store, so saving leaf
+    // by leaf gets slower as the batch grows. Hold the writes in memory and
+    // let [_saveProgress] flush them every [_saveInterval] instead.
+    if (_isGuest) await _localGuestService.beginDeferredWrites();
+    final BatchProgress last;
+    try {
+      last = await _processLeaves(request, batch);
+    } finally {
+      if (_isGuest) await _localGuestService.endDeferredWrites();
+    }
+    // Only once everything is written: the result page reads the batch back.
+    _emit(last);
+    return last.batch!;
+  }
+
+  /// Runs every leaf and finalizes [initial], returning the closing progress
+  /// event for [run] to emit.
+  Future<BatchProgress> _processLeaves(
+    BatchSegmentationRequest request,
+    DroneBatchModel initial,
+  ) async {
+    var batch = initial;
     OrientedImage oriented;
     try {
       final bytes = await _originalImageBytes(request);
@@ -137,18 +163,15 @@ class BatchProcessingRunner {
         status: BatchStatus.error,
         errorMessage: 'Could not read the drone image: $e',
       );
-      _emit(
-        BatchProgress(
-          batchId: batch.batchId,
-          total: batch.totalCount,
-          completed: 0,
-          failed: 0,
-          done: true,
-          batch: failedBatch,
-          error: e,
-        ),
+      return BatchProgress(
+        batchId: batch.batchId,
+        total: batch.totalCount,
+        completed: 0,
+        failed: 0,
+        done: true,
+        batch: failedBatch,
+        error: e,
       );
-      return failedBatch;
     }
 
     // Pixel masks are indexed against exact image dimensions, so a mismatch
@@ -164,20 +187,18 @@ class BatchProcessingRunner {
         status: BatchStatus.error,
         errorMessage: message,
       );
-      _emit(
-        BatchProgress(
-          batchId: batch.batchId,
-          total: batch.totalCount,
-          completed: 0,
-          failed: 0,
-          done: true,
-          batch: failedBatch,
-          error: message,
-        ),
+      return BatchProgress(
+        batchId: batch.batchId,
+        total: batch.totalCount,
+        completed: 0,
+        failed: 0,
+        done: true,
+        batch: failedBatch,
+        error: message,
       );
-      return failedBatch;
     }
 
+    final sinceSave = Stopwatch()..start();
     for (final entry in List<BatchLeafEntry>.of(batch.leaves)) {
       if (_cancelled) break;
 
@@ -212,8 +233,13 @@ class BatchProcessingRunner {
         );
       }
 
-      batch = (await _batchService.upsertLeafEntry(batch.batchId, result)) ??
-          batch.withLeaf(result);
+      // The runner is the batch record's only writer, so it keeps the record
+      // in memory and saves it now and then rather than after every leaf.
+      batch = batch.withLeaf(result);
+      if (sinceSave.elapsed >= _saveInterval) {
+        await _saveProgress(batch);
+        sinceSave.reset();
+      }
 
       _emit(
         BatchProgress(
@@ -250,20 +276,21 @@ class BatchProcessingRunner {
 
     await _markParentPlant(batch);
 
-    _emit(
-      BatchProgress(
-        batchId: batch.batchId,
-        total: batch.totalCount,
-        completed: batch.completedCount,
-        failed: batch.failedCount,
-        done: true,
-        cancelled: _cancelled,
-        stageMessage: 'Done',
-        batch: batch,
-      ),
+    return BatchProgress(
+      batchId: batch.batchId,
+      total: batch.totalCount,
+      completed: batch.completedCount,
+      failed: batch.failedCount,
+      done: true,
+      cancelled: _cancelled,
+      stageMessage: 'Done',
+      batch: batch,
     );
+  }
 
-    return batch;
+  Future<void> _saveProgress(DroneBatchModel batch) async {
+    await _batchService.save(batch);
+    if (_isGuest) await _localGuestService.flushDeferredWrites();
   }
 
   /// The request carries the picked bytes, so the happy path needs no I/O.

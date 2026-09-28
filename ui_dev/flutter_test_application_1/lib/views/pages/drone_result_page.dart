@@ -104,7 +104,22 @@ class _DroneResultPageState extends State<DroneResultPage> {
   }
 
   Widget _buildBody(DroneBatchModel batch) {
-    return CenteredPageBody(
+    // Built lazily, like the processing page: a SAM batch can hold hundreds
+    // of leaves.
+    return CenteredPageBody.builder(
+      itemCount: batch.leaves.length,
+      itemBuilder: (context, index) => _buildLeafTile(batch.leaves[index]),
+      footer: [
+        const SizedBox(height: 24),
+        TextButton.icon(
+          onPressed: () => _confirmDelete(batch),
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          label: const Text(
+            'Delete Result',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
       children: [
         const Text('Drone Image Result', style: KTextStyle.titleTealText),
         const SizedBox(height: 4),
@@ -134,16 +149,6 @@ class _DroneResultPageState extends State<DroneResultPage> {
           ),
         ),
         const Divider(),
-        ...batch.leaves.map(_buildLeafTile),
-        const SizedBox(height: 24),
-        TextButton.icon(
-          onPressed: () => _confirmDelete(batch),
-          icon: const Icon(Icons.delete_outline, color: Colors.red),
-          label: const Text(
-            'Delete Result',
-            style: TextStyle(color: Colors.red),
-          ),
-        ),
       ],
     );
   }

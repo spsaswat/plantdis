@@ -49,9 +49,6 @@ class InferenceService {
         0.9,
         "Finalizing results...",
       );
-      await Future.delayed(
-        const Duration(milliseconds: 100), // Short delay for UI feedback
-      );
 
       if (results.isEmpty) {
         _updateProgress(

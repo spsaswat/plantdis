@@ -105,7 +105,12 @@ class _BatchProcessingPageState extends State<BatchProcessingPage> {
       child: Scaffold(
         appBar: const AppbarWidget(),
         body: SafeArea(
-          child: CenteredPageBody(
+          // Built lazily: a SAM file can hold hundreds of leaves, and laying
+          // out every row on each progress update stalls the batch, which
+          // shares the UI isolate.
+          child: CenteredPageBody.builder(
+            itemCount: entries.length,
+            itemBuilder: (context, index) => _buildLeafTile(entries[index]),
             children: [
               _buildOverlay(entries, progress),
               const SizedBox(height: 20),
@@ -137,7 +142,6 @@ class _BatchProcessingPageState extends State<BatchProcessingPage> {
                 ),
               const SizedBox(height: 20),
               const Divider(),
-              ...entries.map(_buildLeafTile),
             ],
           ),
         ),

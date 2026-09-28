@@ -209,18 +209,11 @@ class PlantService {
         status: runAnalysis ? 'processing' : 'pending',
         images: [imageId],
       );
-      await _plants.doc(plantId).set(plantModel.toMap());
-      await _plants.doc(plantId).update({
+      await _plants.doc(plantId).set({
+        ...plantModel.toMap(),
         'lastAnalyzedImageId': imageId,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      await _plants.doc(plantId).update({'lastAnalyzedImageId': imageId});
-      await _users
-          .doc(user.uid)
-          .update({
-            'plants': FieldValue.arrayUnion([plantId]),
-          })
-          .catchError((e) => logger.e("Error updating user's plant list: $e"));
       if (kDebugMode) {
         logger.i('[PlantService] New PlantModel created for $plantId');
       }
@@ -624,9 +617,6 @@ class PlantService {
     try {
       List<ImageModel> images = await getPlantImages(plantId);
       await _plants.doc(plantId).delete(); // Delete plant doc first
-      await _users.doc(user.uid).update({
-        'plants': FieldValue.arrayRemove([plantId]),
-      });
 
       for (var image in images) {
         try {

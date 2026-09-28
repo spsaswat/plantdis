@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test_application_1/models/analysis_progress.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter_test_application_1/utils/analysis_utils.dart';
 import 'package:flutter_test_application_1/utils/logger.dart';
 import 'package:flutter_test_application_1/services/tflite_interop/tflite_wrapper.dart';
 
@@ -100,15 +101,8 @@ class DetectionServiceImpl implements DetectionService {
       height: inputHeight,
     );
 
-    // Build nested 4D input [1, H, W, 3] in [0,1]
-    final inputNested = [
-      List.generate(inputHeight, (y) {
-        return List.generate(inputWidth, (x) {
-          final p = resizedImage.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        });
-      }),
-    ];
+    // [1, H, W, 3] in [0,1]
+    final input = normalizedRgbTensor(resizedImage).buffer;
 
     // Prepare output buffer as nested list matching [1, numClasses]
     final outputTensor = _interpreter!.getOutputTensor(0);
@@ -121,7 +115,7 @@ class DetectionServiceImpl implements DetectionService {
     );
 
     // Run inference
-    _interpreter!.run(inputNested, outputNested);
+    _interpreter!.run(input, outputNested);
 
     // Extract probabilities from [1, N]
     final List<double> probabilities =

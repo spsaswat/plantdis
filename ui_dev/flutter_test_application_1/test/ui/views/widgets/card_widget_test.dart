@@ -198,7 +198,8 @@ void main() {
       pending.complete();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(store.updated, ['users/test-user']);
+      // Deleting a plant leaves the user document alone.
+      expect(store.updated, isEmpty);
       expect(callbacks, 1);
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();

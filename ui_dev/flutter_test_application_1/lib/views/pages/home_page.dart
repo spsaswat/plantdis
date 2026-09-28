@@ -115,30 +115,30 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
-  int _compareByNewest(
-    PlantModel a,
-    PlantModel b, {
-    bool preferDetectionTs = true,
+  /// [plants] newest first, by detection time where [preferDetectionTs] and a
+  /// plant has one, otherwise by creation time.
+  ///
+  /// Each timestamp is parsed once up front: parsing inside the comparator
+  /// repeats it O(n log n) times, on every rebuild of a list that grows by one
+  /// plant per leaf of a drone batch.
+  List<PlantModel> _sortedNewestFirst(
+    List<PlantModel> plants, {
+    required bool preferDetectionTs,
   }) {
-    DateTime timeA;
-    DateTime timeB;
-    if (preferDetectionTs) {
-      timeA = _parseDetectionTimestamp(a.analysisResults);
-      timeB = _parseDetectionTimestamp(b.analysisResults);
-      if (timeA.millisecondsSinceEpoch == 0 &&
-          timeB.millisecondsSinceEpoch == 0) {
-        timeA = a.createdAt;
-        timeB = b.createdAt;
-      } else {
-        if (timeA.millisecondsSinceEpoch == 0) timeA = a.createdAt;
-        if (timeB.millisecondsSinceEpoch == 0) timeB = b.createdAt;
-      }
-    } else {
-      timeA = a.createdAt;
-      timeB = b.createdAt;
-    }
-    // Newest first
-    return timeB.compareTo(timeA);
+    final keyed = [
+      for (final plant in plants)
+        (
+          plant: plant,
+          time: preferDetectionTs ? _sortTime(plant) : plant.createdAt,
+        ),
+    ];
+    keyed.sort((a, b) => b.time.compareTo(a.time));
+    return [for (final k in keyed) k.plant];
+  }
+
+  DateTime _sortTime(PlantModel plant) {
+    final detected = _parseDetectionTimestamp(plant.analysisResults);
+    return detected.millisecondsSinceEpoch == 0 ? plant.createdAt : detected;
   }
 
   List<CardWidget> _buildCardsFromPlants(List<PlantModel> plants) {
@@ -244,13 +244,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
         final allPlants = snapshot.data!;
         final plantLists = _getPlantLists(allPlants);
-        final completedPlants =
-            plantLists['completed']!
-              ..sort((a, b) => _compareByNewest(a, b, preferDetectionTs: true));
-        final pendingPlants =
-            plantLists['pending']!..sort(
-              (a, b) => _compareByNewest(a, b, preferDetectionTs: false),
-            );
+        final completedPlants = _sortedNewestFirst(
+          plantLists['completed']!,
+          preferDetectionTs: true,
+        );
+        final pendingPlants = _sortedNewestFirst(
+          plantLists['pending']!,
+          preferDetectionTs: false,
+        );
 
         final completedCards = <Widget>[
           ..._buildBatchCards(batches, true),

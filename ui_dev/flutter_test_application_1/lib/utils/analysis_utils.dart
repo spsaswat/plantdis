@@ -89,6 +89,23 @@ math.Rectangle<int> clampRectToImage(
   return math.Rectangle<int>(left, top, right - left, bottom - top);
 }
 
+/// [image]'s pixels as a `[1, height, width, 3]` float32 tensor scaled to 0–1,
+/// the input layout every classifier in the app expects.
+///
+/// Pass `.buffer` to the interpreter: raw bytes are copied straight into the
+/// tensor, whereas the nested-list form is converted one element at a time.
+Float32List normalizedRgbTensor(img.Image image) {
+  final out = Float32List(image.width * image.height * 3);
+  var i = 0;
+  // Iterates row by row, left to right — the HWC order the tensor uses.
+  for (final p in image) {
+    out[i++] = p.r / 255.0;
+    out[i++] = p.g / 255.0;
+    out[i++] = p.b / 255.0;
+  }
+  return out;
+}
+
 /// Crops [mask]'s bbox out of [source], blacks out every non-mask pixel, and
 /// encodes the result as JPEG.
 ///

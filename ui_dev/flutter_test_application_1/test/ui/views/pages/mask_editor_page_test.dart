@@ -282,26 +282,6 @@ void main() {
       expect(controller.hasUsableMasks, isFalse);
     });
 
-    test('seals holes in the masks it is constructed with', () {
-      // A ring: solid border, hollow middle.
-      final bytes = Uint8List(20 * 20);
-      for (var y = 0; y < 20; y++) {
-        for (var x = 0; x < 20; x++) {
-          if (x < 3 || y < 3 || x >= 17 || y >= 17) bytes[y * 20 + x] = 1;
-        }
-      }
-      final controller = MaskEditorController(
-        imageWidth: kImageWidth,
-        imageHeight: kImageHeight,
-        initialMasks: [
-          LeafMask(left: 10, top: 10, width: 20, height: 20, bytes: bytes),
-        ],
-      );
-
-      expect(controller.masks.first.mask.containsImagePixel(20, 20), isTrue);
-      expect(controller.buildFinalMasks().single.pixelCount, 20 * 20);
-    });
-
     test('a stroke that loops back on itself leaves no gap inside', () {
       final controller = MaskEditorController(
         imageWidth: kImageWidth,

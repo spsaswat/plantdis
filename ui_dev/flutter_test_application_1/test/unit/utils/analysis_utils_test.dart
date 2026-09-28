@@ -145,4 +145,24 @@ void main() {
       expect(decoded.height, 4);
     });
   });
+
+  group('normalizedRgbTensor', () {
+    test('lays pixels out row by row as RGB scaled to 0-1', () {
+      final image = img.Image(width: 2, height: 2)
+        ..setPixelRgb(0, 0, 255, 0, 0)
+        ..setPixelRgb(1, 0, 0, 255, 0)
+        ..setPixelRgb(0, 1, 0, 0, 255)
+        ..setPixelRgb(1, 1, 51, 102, 204);
+
+      final tensor = normalizedRgbTensor(image);
+
+      expect(tensor, hasLength(2 * 2 * 3));
+      expect(tensor.sublist(0, 3), [1, 0, 0]);
+      expect(tensor.sublist(3, 6), [0, 1, 0]);
+      expect(tensor.sublist(6, 9), [0, 0, 1]);
+      expect(tensor[9], closeTo(0.2, 1e-6));
+      expect(tensor[10], closeTo(0.4, 1e-6));
+      expect(tensor[11], closeTo(0.8, 1e-6));
+    });
+  });
 }

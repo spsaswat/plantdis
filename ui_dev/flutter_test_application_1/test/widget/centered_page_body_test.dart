@@ -91,4 +91,65 @@ void main() {
       expect(after, lessThan(before));
     });
   });
+
+  group('CenteredPageBody.builder', () {
+    Widget body({int itemCount = 3}) {
+      return CenteredPageBody.builder(
+        itemCount: itemCount,
+        itemBuilder:
+            (context, index) => SizedBox(key: Key('item $index'), height: 50),
+        footer: const [SizedBox(key: Key('footer'), height: 30)],
+        children: const [SizedBox(key: Key('header'), height: 40)],
+      );
+    }
+
+    testWidgets('puts the footer after the items', (tester) async {
+      await _pumpAtWidth(tester, 800, body(itemCount: 2));
+
+      final lastItem = tester.getRect(find.byKey(const Key('item 1')));
+      final footer = tester.getRect(find.byKey(const Key('footer')));
+
+      expect(footer.top, closeTo(lastItem.bottom, 0.5));
+    });
+
+    testWidgets('centres and caps the content like the default body', (
+      tester,
+    ) async {
+      await _pumpAtWidth(tester, 2000, body());
+
+      final host = tester.getRect(find.byType(CenteredPageBody));
+      final header = tester.getRect(find.byKey(const Key('header')));
+      final item = tester.getRect(find.byKey(const Key('item 0')));
+
+      expect(header.width, closeTo(900, 0.5));
+      expect(item.width, closeTo(900, 0.5));
+      expect(header.center.dx, closeTo(host.center.dx, 1.0));
+      expect(item.top, closeTo(header.bottom, 0.5));
+    });
+
+    testWidgets('uses the full width below the breakpoint', (tester) async {
+      await _pumpAtWidth(tester, 400, body());
+
+      expect(
+        tester.getSize(find.byKey(const Key('header'))).width,
+        closeTo(360, 0.5),
+      );
+    });
+
+    testWidgets('builds only the items on screen', (tester) async {
+      await _pumpAtWidth(tester, 800, body(itemCount: 1000));
+
+      expect(find.byKey(const Key('item 0')), findsOneWidget);
+      expect(find.byKey(const Key('item 999')), findsNothing);
+
+      await tester.dragUntilVisible(
+        find.byKey(const Key('item 999')),
+        find.byType(Scrollable),
+        const Offset(0, -5000),
+      );
+
+      expect(find.byKey(const Key('item 999')), findsOneWidget);
+      expect(find.byKey(const Key('item 0')), findsNothing);
+    });
+  });
 }
