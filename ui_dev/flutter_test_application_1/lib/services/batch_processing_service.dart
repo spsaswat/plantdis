@@ -558,8 +558,9 @@ class BatchProcessingRunner {
       final answer = await GeminiService()
           .getAnswer(
             prompt,
-            preferredModel: 'gemma-3-27b-it',
+            preferredModel: 'gemini-flash-latest',
             isPlantRelated: true,
+            allowFallback: true,
           )
           .timeout(const Duration(seconds: 30));
 

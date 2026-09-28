@@ -21,14 +21,14 @@ class ChatPageState extends State<ChatPage> {
   final ChatService _chatService = ChatService();
 
   final List<String> _models = [
-    "gemma-3-27b-it",
-    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
     "openrouter-Llama4-Scout",
     "openrouter-Qwen3--30b",
   ];
   final Map<String, String> _modelLabels = {
-    "gemma-3-27b-it": "Gemma",
-    "gemini-2.0-flash": "Gemini",
+    "gemini-flash-latest": "Gemini Flash",
+    "gemini-flash-lite-latest": "Gemini Flash Lite",
     "openrouter-Llama4-Scout": "Llama 4 Scout",
     "openrouter-Qwen3--30b": "Qwen3 30B",
   };

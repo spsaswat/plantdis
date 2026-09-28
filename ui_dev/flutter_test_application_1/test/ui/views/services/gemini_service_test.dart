@@ -123,7 +123,7 @@ void main() {
       );
       expect(result, 'Recovered answer');
       expect(paths, hasLength(2));
-      expect(paths.last, contains('gemma-3-27b-it'));
+      expect(paths.last, contains('gemini-flash-latest'));
     },
   );
 
@@ -136,10 +136,9 @@ void main() {
         return http.Response('', 400);
       }),
     );
-    expect(paths, hasLength(3));
-    expect(paths[0], contains('gemma-3-27b-it'));
-    expect(paths[1], contains('gemini-2.0-flash'));
-    expect(paths[2], contains('gemini-1.5-flash'));
+    expect(paths, hasLength(2));
+    expect(paths[0], contains('gemini-flash-latest'));
+    expect(paths[1], contains('gemini-flash-lite-latest'));
     expect(result, startsWith('Error: Could not connect'));
   });
 

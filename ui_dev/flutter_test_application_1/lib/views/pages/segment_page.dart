@@ -2434,8 +2434,9 @@ class _SegmentPageState extends State<SegmentPage> {
     try {
       final response = await GeminiService().getAnswer(
         prompt,
-        preferredModel: 'gemma-3-27b-it',
+        preferredModel: 'gemini-flash-latest',
         isPlantRelated: true,
+        allowFallback: true,
       );
 
       // Basic cleanup if needed

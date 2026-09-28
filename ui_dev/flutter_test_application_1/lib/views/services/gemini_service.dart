@@ -7,11 +7,12 @@ class GeminiService {
   static final GeminiService _instance = GeminiService._internal();
   GenerativeModel? _model;
 
-  // List of model names to try
+  // List of model names to try. Use the rolling `-latest` aliases so Google
+  // retiring a pinned version doesn't break the app. Gemma 4 is avoided: it
+  // always returns thought parts, which this SDK merges into `response.text`.
   final List<String> _modelNames = [
-    'gemma-3-27b-it',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
   ];
 
   factory GeminiService() {
@@ -122,7 +123,7 @@ Important formatting requirements:
 
     // Standardize bullet points to simple dashes
     cleaned = cleaned.replaceAll(
-      RegExp(r'^\s*[\*\-]\s+', multiLine: true),
+      RegExp(r'^\s*[*\-]\s+', multiLine: true),
       '- ',
     );
 
@@ -130,7 +131,7 @@ Important formatting requirements:
     cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
 
     // Remove markdown emphasis (bold, italic)
-    cleaned = cleaned.replaceAll(RegExp(r'[\_\*\`]'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'[_*`]'), '');
 
     // Fix spacing - remove excessive newlines
     cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
