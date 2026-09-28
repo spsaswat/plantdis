@@ -247,6 +247,21 @@ void main() {
       );
     });
 
+    test('reads every mask of a file with hundreds of instances', () async {
+      // SAM's automatic generator gave 702 masks for one real drone frame.
+      const count = 702;
+      final path = await writeNpy(
+        buildNpy(
+          descr: '|b1',
+          fortranOrder: false,
+          shape: [count, 1, 1, 1],
+          data: List<int>.filled(count, 1),
+        ),
+      );
+
+      expect((await NpyMaskReader.readSamMasks(path)).masks, hasLength(count));
+    });
+
     test('rejects a truncated payload', () async {
       final full = buildNpy(
         descr: '|b1',

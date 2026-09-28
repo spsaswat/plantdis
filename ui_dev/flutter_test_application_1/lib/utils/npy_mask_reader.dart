@@ -57,8 +57,6 @@ class SamMaskParseResult {
 /// Supported layouts: `(N, 1, H, W)` (SAM's `predict_torch` output), `(N, H, W)`
 /// and a single `(H, W)` mask; dtype bool (`|b1`) or uint8 (`|u1`), C order.
 abstract final class NpyMaskReader {
-  static const int kMaxMasks = 512;
-
   static const List<int> _magic = [0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59]; // \x93NUMPY
 
   /// Parses the npy preamble from the first bytes of a file. Pure so tests can
@@ -170,11 +168,6 @@ abstract final class NpyMaskReader {
 
       if (count <= 0 || height <= 0 || width <= 0) {
         throw const NpyFormatException('The mask array is empty.');
-      }
-      if (count > kMaxMasks) {
-        throw NpyFormatException(
-          'The file contains $count masks; the maximum supported is $kMaxMasks.',
-        );
       }
       final frameSize = height * width;
       if (raf.lengthSync() != header.dataOffset + count * frameSize) {
