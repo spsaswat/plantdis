@@ -35,7 +35,8 @@ class AutoSegmentationCancelled implements Exception {
 class LeafAutoSegmentationService {
   LeafAutoSegmentationService._();
 
-  static const String modelAssetPath = 'assets/models/leaf_mask_rcnn_v3.onnx';
+  static const String modelAssetPath =
+      'assets/models/desktop/leaf_mask_rcnn_v3.onnx';
 
   /// Training-time tiling; changing these degrades results.
   static const int tileSize = 1024;
