@@ -15,6 +15,7 @@ import 'package:flutter_test_application_1/utils/npy_mask_reader.dart';
 import 'package:flutter_test_application_1/views/drone_path_check_web.dart'
     if (dart.library.io) 'package:flutter_test_application_1/utils/drone_image_detector.dart';
 
+import 'package:flutter_test_application_1/views/pages/auto_segmentation_progress_page.dart';
 import 'package:flutter_test_application_1/views/pages/batch_processing_page.dart';
 import 'package:flutter_test_application_1/views/pages/chat_page.dart';
 import 'package:flutter_test_application_1/views/pages/mask_editor_page.dart';
@@ -255,36 +256,30 @@ class _WidgetTreeState extends State<WidgetTree> {
     XFile pickedFile,
     Uint8List localBytes,
   ) async {
-    // Message, and whether Cancel is offered — it is withdrawn once the
-    // upload starts, which cannot be undone half-way.
-    final status = ValueNotifier(('Loading the leaf model…', true));
+    final status = ValueNotifier(
+      const AutoSegmentationStatus('Loading the leaf model…'),
+    );
     final cancel = Completer<void>();
-    var dialogVisible = true;
-    void closeDialog() {
-      if (dialogVisible) {
+    var progressVisible = true;
+    void closeProgress() {
+      if (progressVisible) {
         Navigator.of(context).pop();
-        dialogVisible = false;
+        progressVisible = false;
       }
     }
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => ValueListenableBuilder(
-            valueListenable: status,
-            builder:
-                (context, value, _) => ProgressDialog(
-                  message: value.$1,
-                  onCancel:
-                      value.$2
-                          ? () {
-                            if (!cancel.isCompleted) cancel.complete();
-                            closeDialog();
-                          }
-                          : null,
-                ),
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (context) => AutoSegmentationProgressPage(
+              imageBytes: localBytes,
+              status: status,
+              onCancel: () {
+                if (!cancel.isCompleted) cancel.complete();
+                closeProgress();
+              },
+            ),
+      ),
     );
 
     try {
@@ -298,12 +293,15 @@ class _WidgetTreeState extends State<WidgetTree> {
         imageHeight: imageHeight,
         cancel: cancel.future,
         onProgress: (done, total) {
-          status.value = ('Finding leaves… ${done * 100 ~/ total}%', true);
+          status.value = AutoSegmentationStatus(
+            'Finding leaves… ${done * 100 ~/ total}%',
+            progress: done / total,
+          );
         },
       );
       if (!mounted) return;
       if (masks.isEmpty) {
-        closeDialog();
+        closeProgress();
         _showErrorDialog(
           'No leaves were found in this image.\n\nTry manual segmentation '
           'instead.',
@@ -311,17 +309,21 @@ class _WidgetTreeState extends State<WidgetTree> {
         return;
       }
 
-      status.value = ('Uploading image…', false);
+      status.value = const AutoSegmentationStatus(
+        'Uploading image…',
+        cancellable: false,
+      );
       final result = await _plantService.uploadImageForManualLabelling(
         image: pickedFile,
         notes: 'Uploaded drone image for automatic segmentation',
       );
       if (!mounted) return;
-      closeDialog();
 
+      // Replace the progress page so the home screen does not flash between.
+      progressVisible = false;
       final request = await Navigator.of(
         context,
-      ).push<BatchSegmentationRequest>(
+      ).pushReplacement<BatchSegmentationRequest, void>(
         MaterialPageRoute(
           builder:
               (context) => MaskEditorPage(
@@ -339,14 +341,14 @@ class _WidgetTreeState extends State<WidgetTree> {
       if (!mounted || request == null) return;
       await _handleBatchProcessingRequest(request);
     } on AutoSegmentationCancelled {
-      // The Cancel button already closed the dialog.
+      // The Cancel button already closed the progress page.
     } on AutoSegmentationException catch (e) {
       if (!mounted) return;
-      closeDialog();
+      closeProgress();
       _showErrorDialog(e.message);
     } catch (e) {
       if (!mounted) return;
-      closeDialog();
+      closeProgress();
       _showErrorDialog(
         'Automatic segmentation failed: ${e.toString()}\n\nPlease try again.',
       );

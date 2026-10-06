@@ -6,12 +6,9 @@ import 'package:flutter/material.dart';
 /// route has no [Material] ancestor of its own, and text without one falls back
 /// to Flutter's red-on-yellow debug style instead of the app's theme.
 class ProgressDialog extends StatelessWidget {
-  const ProgressDialog({required this.message, this.onCancel, super.key});
+  const ProgressDialog({required this.message, super.key});
 
   final String message;
-
-  /// Shows a Cancel button when set. The callback must pop the dialog itself.
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +40,6 @@ class ProgressDialog extends StatelessWidget {
                   ),
                 ),
               ),
-              if (onCancel != null) ...[
-                const SizedBox(width: 20),
-                TextButton(onPressed: onCancel, child: const Text('Cancel')),
-              ],
             ],
           ),
         ),
