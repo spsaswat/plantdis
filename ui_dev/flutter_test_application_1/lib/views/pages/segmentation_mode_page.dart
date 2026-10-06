@@ -2,7 +2,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-enum SegmentationMode { manual, automatic }
+enum SegmentationMode {
+  /// Paint every leaf by hand.
+  manual,
+
+  /// Find leaves with the in-app leaf model.
+  automatic,
+
+  /// Load SAM masks from a `.npy` file generated outside the app.
+  importMasks,
+}
 
 class SegmentationModePage extends StatelessWidget {
   const SegmentationModePage({required this.imageBytes, super.key});
@@ -42,7 +51,7 @@ class SegmentationModePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Trace each leaf yourself, or load a SAM mask file (.npy) generated for this image.',
+                    'Trace each leaf yourself, let the leaf model find them, or load a SAM mask file (.npy) generated for this image.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -70,7 +79,20 @@ class SegmentationModePage extends StatelessWidget {
                     icon: const Icon(Icons.auto_awesome),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text('Automatic segmentation (from SAM masks)'),
+                      child: Text('Automatic segmentation'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const Key('import-masks-button'),
+                    onPressed:
+                        () => Navigator.of(
+                          context,
+                        ).pop(SegmentationMode.importMasks),
+                    icon: const Icon(Icons.upload_file_outlined),
+                    label: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('Import SAM masks (.npy)'),
                     ),
                   ),
                 ],

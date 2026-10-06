@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_test_application_1/services/leaf_auto_segmentation_service.dart';
 import 'package:flutter_test_application_1/services/plant_service.dart';
 import 'package:flutter_test_application_1/models/batch_segmentation_request.dart';
 import 'package:flutter_test_application_1/utils/npy_mask_reader.dart';
@@ -170,10 +172,13 @@ class _WidgetTreeState extends State<WidgetTree> {
       );
       if (!mounted || mode == null) return;
 
-      if (mode == SegmentationMode.manual) {
-        await _openManualSegmentation(pickedFile, localBytes);
-      } else {
-        await _openAutomaticSegmentation(pickedFile, localBytes);
+      switch (mode) {
+        case SegmentationMode.manual:
+          await _openManualSegmentation(pickedFile, localBytes);
+        case SegmentationMode.automatic:
+          await _openAutomaticSegmentation(pickedFile, localBytes);
+        case SegmentationMode.importMasks:
+          await _openImportedMasks(pickedFile, localBytes);
       }
     } catch (e) {
       if (!mounted) return;
@@ -186,8 +191,8 @@ class _WidgetTreeState extends State<WidgetTree> {
   /// Opens the mask editor on an empty mask so the user can paint each leaf by
   /// hand.
   ///
-  /// Same editor, and same pixel-mask hand-off, as the automatic flow — only
-  /// the masks' origin differs.
+  /// Same editor, and same pixel-mask hand-off, as the automatic and import
+  /// flows — only the masks' origin differs.
   Future<void> _openManualSegmentation(
     XFile pickedFile,
     Uint8List localBytes,
@@ -241,12 +246,121 @@ class _WidgetTreeState extends State<WidgetTree> {
     }
   }
 
+  /// Finds the leaves with the in-app leaf model and opens the mask editor on
+  /// them for review.
+  ///
+  /// Segmentation runs *before* the drone image is uploaded, so a failed or
+  /// cancelled run leaves nothing behind in storage.
+  Future<void> _openAutomaticSegmentation(
+    XFile pickedFile,
+    Uint8List localBytes,
+  ) async {
+    // Message, and whether Cancel is offered — it is withdrawn once the
+    // upload starts, which cannot be undone half-way.
+    final status = ValueNotifier(('Loading the leaf model…', true));
+    final cancel = Completer<void>();
+    var dialogVisible = true;
+    void closeDialog() {
+      if (dialogVisible) {
+        Navigator.of(context).pop();
+        dialogVisible = false;
+      }
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => ValueListenableBuilder(
+            valueListenable: status,
+            builder:
+                (context, value, _) => ProgressDialog(
+                  message: value.$1,
+                  onCancel:
+                      value.$2
+                          ? () {
+                            if (!cancel.isCompleted) cancel.complete();
+                            closeDialog();
+                          }
+                          : null,
+                ),
+          ),
+    );
+
+    try {
+      // Masks are indexed against the EXIF-oriented size the editor shows.
+      final imageSize = await _decodeImageSize(localBytes);
+      final imageWidth = imageSize.width.round();
+      final imageHeight = imageSize.height.round();
+      final masks = await LeafAutoSegmentationService.segment(
+        localBytes,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+        cancel: cancel.future,
+        onProgress: (done, total) {
+          status.value = ('Finding leaves… ${done * 100 ~/ total}%', true);
+        },
+      );
+      if (!mounted) return;
+      if (masks.isEmpty) {
+        closeDialog();
+        _showErrorDialog(
+          'No leaves were found in this image.\n\nTry manual segmentation '
+          'instead.',
+        );
+        return;
+      }
+
+      status.value = ('Uploading image…', false);
+      final result = await _plantService.uploadImageForManualLabelling(
+        image: pickedFile,
+        notes: 'Uploaded drone image for automatic segmentation',
+      );
+      if (!mounted) return;
+      closeDialog();
+
+      final request = await Navigator.of(
+        context,
+      ).push<BatchSegmentationRequest>(
+        MaterialPageRoute(
+          builder:
+              (context) => MaskEditorPage(
+                imageId: result['imageId'] as String,
+                plantId: result['plantId'] as String,
+                imageUrl: result['downloadUrl'] as String,
+                imageBytes: localBytes,
+                imageWidth: imageWidth,
+                imageHeight: imageHeight,
+                initialMasks: masks,
+                source: SegmentationSource.auto,
+              ),
+        ),
+      );
+      if (!mounted || request == null) return;
+      await _handleBatchProcessingRequest(request);
+    } on AutoSegmentationCancelled {
+      // The Cancel button already closed the dialog.
+    } on AutoSegmentationException catch (e) {
+      if (!mounted) return;
+      closeDialog();
+      _showErrorDialog(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      closeDialog();
+      _showErrorDialog(
+        'Automatic segmentation failed: ${e.toString()}\n\nPlease try again.',
+      );
+    } finally {
+      status.dispose();
+    }
+  }
+
   /// Loads SAM masks from a `.npy` file the user picked and opens the mask
   /// editor on them.
   ///
   /// The file is parsed and validated *before* the drone image is uploaded, so
   /// an unusable mask file leaves nothing behind in storage.
-  Future<void> _openAutomaticSegmentation(
+  Future<void> _openImportedMasks(
     XFile pickedFile,
     Uint8List localBytes,
   ) async {
@@ -289,8 +403,8 @@ class _WidgetTreeState extends State<WidgetTree> {
           'The mask file is ${parsed.maskWidth} x ${parsed.maskHeight} but the '
           'selected image is $imageWidth x $imageHeight.'
           '${transposed ? '\n\nThe dimensions are swapped — the masks were '
-              'likely generated from a differently rotated copy of this '
-              'image.' : ''}'
+                  'likely generated from a differently rotated copy of this '
+                  'image.' : ''}'
           '\n\nGenerate the masks from this exact image and try again.',
         );
         return;

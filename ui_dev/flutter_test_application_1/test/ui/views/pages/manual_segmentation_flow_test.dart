@@ -21,7 +21,7 @@ Uint8List _blankPng() => Uint8List.fromList(
 );
 
 void main() {
-  testWidgets('mode page offers both manual and automatic', (tester) async {
+  testWidgets('mode page offers manual, automatic and import', (tester) async {
     await tester.pumpWidget(
       MaterialApp(home: SegmentationModePage(imageBytes: _bannerPng())),
     );
@@ -32,47 +32,58 @@ void main() {
     final automatic = tester.widget<OutlinedButton>(
       find.byKey(const Key('automatic-segmentation-button')),
     );
+    final import = tester.widget<OutlinedButton>(
+      find.byKey(const Key('import-masks-button')),
+    );
     expect(manual.onPressed, isNotNull);
     expect(automatic.onPressed, isNotNull);
+    expect(import.onPressed, isNotNull);
     expect(find.textContaining('Coming soon'), findsNothing);
   });
 
-  testWidgets('picking automatic returns the automatic mode', (tester) async {
-    SegmentationMode? mode;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder:
-              (context) => Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () async {
-                      mode = await Navigator.of(context).push<SegmentationMode>(
-                        MaterialPageRoute(
-                          builder:
-                              (context) => SegmentationModePage(
-                                imageBytes: _bannerPng(),
-                              ),
-                        ),
-                      );
-                    },
-                    child: const Text('Choose mode'),
+  for (final (key, expected) in [
+    ('automatic-segmentation-button', SegmentationMode.automatic),
+    ('import-masks-button', SegmentationMode.importMasks),
+  ]) {
+    testWidgets('picking $key returns ${expected.name}', (tester) async {
+      SegmentationMode? mode;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder:
+                (context) => Scaffold(
+                  body: Center(
+                    child: FilledButton(
+                      onPressed: () async {
+                        mode = await Navigator.of(
+                          context,
+                        ).push<SegmentationMode>(
+                          MaterialPageRoute(
+                            builder:
+                                (context) => SegmentationModePage(
+                                  imageBytes: _bannerPng(),
+                                ),
+                          ),
+                        );
+                      },
+                      child: const Text('Choose mode'),
+                    ),
                   ),
                 ),
-              ),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Choose mode'));
-    await tester.pumpAndSettle();
-    final automatic = find.byKey(const Key('automatic-segmentation-button'));
-    await tester.ensureVisible(automatic);
-    await tester.tap(automatic);
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose mode'));
+      await tester.pumpAndSettle();
+      final button = find.byKey(Key(key));
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
 
-    expect(mode, SegmentationMode.automatic);
-  });
+      expect(mode, expected);
+    });
+  }
 
   group('manual mask flow', () {
     // Holds whatever the editor pops, so a test can assert on the request the

@@ -345,6 +345,10 @@ class DroneBatchModel {
   /// Mirrors `SegmentationSource.sam.wireName`.
   static const String segmentationSourceSam = 'sam';
 
+  /// Regions found in the app by the leaf Mask R-CNN.
+  /// Mirrors `SegmentationSource.auto.wireName`.
+  static const String segmentationSourceAuto = 'auto';
+
   final String batchId;
   final String userId;
   final String parentPlantId;
@@ -363,8 +367,8 @@ class DroneBatchModel {
   final BatchSummary? summary;
   final String? errorMessage;
 
-  /// Which flow produced the regions: [segmentationSourceManual] or
-  /// [segmentationSourceSam].
+  /// Which flow produced the regions: [segmentationSourceManual],
+  /// [segmentationSourceSam] or [segmentationSourceAuto].
   final String segmentationSource;
 
   int get totalCount => leaves.length;

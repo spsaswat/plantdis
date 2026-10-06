@@ -80,7 +80,10 @@ enum SegmentationSource {
   manual('manual'),
 
   /// Masks read from a SAM `.npy` file generated outside the app.
-  sam('sam');
+  sam('sam'),
+
+  /// Masks found in the app by the leaf Mask R-CNN.
+  auto('auto');
 
   const SegmentationSource(this.wireName);
 
@@ -115,8 +118,9 @@ class BatchSegmentationRequest {
   final int imageWidth;
   final int imageHeight;
 
-  /// Which flow produced the regions — painted by hand or read from a SAM
-  /// file. Both produce [masks]; only the bookkeeping differs.
+  /// Which flow produced the regions — painted by hand, read from a SAM file,
+  /// or found by the leaf model. All produce [masks]; only the bookkeeping
+  /// differs.
   final SegmentationSource source;
 
   /// Pixel-accurate masks, one per leaf and index-aligned with [labels] (each
