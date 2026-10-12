@@ -34,9 +34,41 @@ The current application lives in [`ui_dev/flutter_test_application_1`](ui_dev/fl
 
 ## Demos
 
+### Desktop drone workflow (2026)
+
+Screenshots from the Windows release build, taken from the [pitch video](https://youtu.be/DSwiBgOhnF4). The automatic mode found 384 leaves in this greenhouse image.
+
+<table>
+  <tr>
+    <td width="50%"><img src="op_m_readme/2026/drone-segmentation-mode.jpg" alt="Choose segmentation mode"></td>
+    <td width="50%"><img src="op_m_readme/2026/drone-auto-segmentation-progress.jpg" alt="Automatic segmentation progress"></td>
+  </tr>
+  <tr>
+    <td align="center">1. Choose manual, automatic, or SAM import</td>
+    <td align="center">2. The local leaf model finds the leaves</td>
+  </tr>
+  <tr>
+    <td><img src="op_m_readme/2026/drone-review-masks.jpg" alt="Review segmentation masks"></td>
+    <td><img src="op_m_readme/2026/drone-batch-processing.jpg" alt="Batch processing progress"></td>
+  </tr>
+  <tr>
+    <td align="center">3. Review and correct every mask</td>
+    <td align="center">4. Each leaf runs through the leaf pipeline</td>
+  </tr>
+  <tr>
+    <td><img src="op_m_readme/2026/drone-result.jpg" alt="Drone Image Result page"></td>
+    <td><img src="op_m_readme/2026/drone-home-card.jpg" alt="Drone image card on the home page"></td>
+  </tr>
+  <tr>
+    <td align="center">5. Batch summary; tap a box to open a leaf</td>
+    <td align="center">6. The batch is saved as one card</td>
+  </tr>
+</table>
+
+### Earlier versions
+
 | Demo | Link |
 | --- | --- |
-| Desktop drone workflow (2026) | [Pitch video on YouTube](https://youtu.be/DSwiBgOhnF4) |
 | Flutter mobile app (2025) | [`op_m_readme/PlantDis_demo.gif`](op_m_readme/PlantDis_demo.gif) |
 | Legacy Linux desktop client with the MLHub backend (2022) | [`op_m_readme/desk_demo.gif`](op_m_readme/desk_demo.gif) |
 
