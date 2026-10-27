@@ -2,7 +2,6 @@
 
 PlantDis is a Flutter application for analysing plant leaf images with local deep-learning models. It can classify a plant species, predict a disease class, segment a leaf from its background, and process every leaf in a drone image as one batch.
 
-The repository also contains the training notebooks and earlier PlantDis clients that preceded the current Flutter application. PlantDis was first developed for the ANU course COMP4560 under the supervision of Prof. [Graham Williams](https://cecs.anu.edu.au/people/graham-williams).
 
 - User manual: [PlantDis Application User Manual](https://github.com/spsaswat/plantdis/wiki/PlantDis-Application-User-Manual)
 - 2026 pitch video (2–3 min demo of the desktop drone workflow): <https://youtu.be/DSwiBgOhnF4>
@@ -476,6 +475,9 @@ GitHub's [contributors page](https://github.com/spsaswat/plantdis/graphs/contrib
 
 Project lead: Saswat Panda<br>
 Co-lead (2025): Ming-dao Chia
+<br>
+Co-lead (2026): Dr. Supriyo Shafkat Ahmed
+
 
 For questions, bug reports, or feature requests, contact a project team member or open a [GitHub issue](https://github.com/spsaswat/plantdis/issues).
 
@@ -492,6 +494,8 @@ If you use PlantDis in research, cite the repository and record the commit or re
 }
 ```
 
+The repository also contains the training notebooks and earlier PlantDis clients that preceded the current Flutter application. PlantDis was first developed for the ANU course COMP4560 under the supervision of Prof. [Graham Williams](https://cecs.anu.edu.au/people/graham-williams).
+
 ## Data and references
 
 - PlantVillage dataset: <https://data.mendeley.com/datasets/tywbtsjrjv/1>
@@ -507,6 +511,7 @@ The repository should add exact references for its nested transfer-learning meth
 ## Funding
 
 Since 11 June 2024, PlantDis has received support from the [Australian Plant Phenomics Network](https://www.plantphenomics.org.au/).
+Drone2Leaf SIF project (2026) ANU in collaboration with WSU (Western Sydney University). Project Lead: Saswat Panda.
 
 ## Licence
 
