@@ -4,7 +4,8 @@ PlantDis is a Flutter application for analysing plant leaf images with local dee
 
 
 - User manual: [PlantDis Application User Manual](https://github.com/spsaswat/plantdis/wiki/PlantDis-Application-User-Manual)
-- 2026 pitch video (2–3 min demo of the desktop drone workflow): <https://youtu.be/DSwiBgOhnF4>
+- 2026 pitch video (2–3 min demo of the desktop drone workflow): <https://youtu.be/DSwiBgOhnF4>          
+Some data in the pitch video is collected at our partner node in WSU.
 
 > [!IMPORTANT]
 > PlantDis is a research and teaching project. Its predictions are not a substitute for diagnosis by a plant pathologist or agronomist. Do not use the output alone to make treatment, chemical application, quarantine, or biosecurity decisions.
