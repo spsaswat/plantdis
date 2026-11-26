@@ -8,7 +8,7 @@ PlantDis is a Flutter application for analysing plant leaf images with local dee
 Some data in the pitch video is collected at our partner node in WSU.
 
 > [!IMPORTANT]
-> PlantDis is a research and teaching project. Its predictions are not a substitute for diagnosis by a plant pathologist or agronomist. Do not use the output alone to make treatment, chemical application, quarantine, or biosecurity decisions.
+> PlantDis is a research and teaching project. Its predictions are not a substitute for diagnosis by a plant pathologist or agronomist. Do not use the output alone to make treatment, chemical application, quarantine, or biosecurity decisions. To the extent permitted by law, the Australian Plant Phenomics Network (APPN), participating institutions, project team members, developers, and contributors disclaim liability for any loss, damage, or adverse consequences arising from the use of, or reliance on, this software or its outputs.
 
 ## Keywords
 
